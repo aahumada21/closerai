@@ -1,0 +1,202 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:10:04.526Z",
+    "createdAt":  "2026-05-01T15:00:14.851Z",
+    "id":  "mOPltxExvmw9Qsvf",
+    "name":  "6.17 send_service_menu",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"send_service_menu\\\",\\\"service_interest\\\":null,\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustín\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"new_lead\\\",\\\"missing_fields\\\":[\\\"service_interest\\\"],\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Cuáles ofrecen?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"send_service_menu\\\",\\\"state_update\\\":{}}}\"\n  }"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "6.17 send_service_menu",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in send_service_menu\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in send_service_menu\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"send_service_menu\",\n\n  service_interest: firstValue(ctx.service_interest, state.service_interest),\n  vehicle_type: firstValue(ctx.vehicle_type, state.vehicle_type),\n  district: firstValue(ctx.district, state.district)\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "c281eb84-d2c0-4d35-bffd-bd36a4e08ee1",
+                      "name":  "normalize_service_menu_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\n\nconst missingFields = [];\n\nif (!vehicleType) missingFields.push(\"vehicle_type\");\nif (!district) missingFields.push(\"district\");\n\nconst message =\n  \"Estos son los servicios disponibles en Ahumada Detailing:\\n\\n\" +\n  \"1. Lavado básico\\n\" +\n  \"Ideal para mantener tu vehículo limpio y cuidado en el día a día. Incluye una limpieza interior y exterior general.\\n\\n\" +\n  \"2. Lavado premium\\n\" +\n  \"Nuestra opción más completa. Recomendado si buscas una limpieza más detallada por dentro y por fuera, con una terminación más cuidada.\\n\\n\" +\n  \"3. Encerado full\\n\" +\n  \"Servicio enfocado en proteger la pintura y realzar el brillo del vehículo. Ideal para darle una mejor terminación y mayor protección exterior.\\n\\n\" +\n  \"Para darte el valor exacto, dime qué tipo de vehículo tienes y en qué comuna sería el servicio.\";\n\nreturn [{\n  ...data,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: \"service_discovery\",\n    intent_last: \"service_menu_request\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"send_service_menu\",\n\n    service_interest: ctx.service_interest || state.service_interest || null,\n    vehicle_type: vehicleType || null,\n    district: district || null,\n\n    missing_fields: missingFields\n  },\n\n  execution_context: {\n    ...ctx,\n    action: \"send_service_menu\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\"]\n  },\n\n  notes: [\"service_menu_sent\"]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "d46c07bd-4624-4c0b-8fa2-69d75f143834",
+                      "name":  "build_service_menu_result"
+                  }
+              ],
+    "connections":  {
+                        "6.17 send_service_menu":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "normalize_service_menu_input",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "normalize_service_menu_input":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "build_service_menu_result",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "220623cc-418b-4666-b537-36d8c57c845b",
+    "activeVersionId":  "220623cc-418b-4666-b537-36d8c57c845b",
+    "versionCounter":  24,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-01T15:00:14.884Z",
+                       "createdAt":  "2026-05-01T15:00:14.884Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "mOPltxExvmw9Qsvf",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T18:53:53.000Z",
+                          "createdAt":  "2026-05-03T18:53:52.453Z",
+                          "versionId":  "220623cc-418b-4666-b537-36d8c57c845b",
+                          "workflowId":  "mOPltxExvmw9Qsvf",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"send_service_menu\\\",\\\"service_interest\\\":null,\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustín\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"new_lead\\\",\\\"missing_fields\\\":[\\\"service_interest\\\"],\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Cuáles ofrecen?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"send_service_menu\\\",\\\"state_update\\\":{}}}\"\n  }"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "6.17 send_service_menu",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in send_service_menu\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in send_service_menu\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"send_service_menu\",\n\n  service_interest: firstValue(ctx.service_interest, state.service_interest),\n  vehicle_type: firstValue(ctx.vehicle_type, state.vehicle_type),\n  district: firstValue(ctx.district, state.district)\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "c281eb84-d2c0-4d35-bffd-bd36a4e08ee1",
+                                            "name":  "normalize_service_menu_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\n\nconst missingFields = [];\n\nif (!vehicleType) missingFields.push(\"vehicle_type\");\nif (!district) missingFields.push(\"district\");\n\nconst message =\n  \"Estos son los servicios disponibles en Ahumada Detailing:\\n\\n\" +\n  \"1. Lavado básico\\n\" +\n  \"Ideal para mantener tu vehículo limpio y cuidado en el día a día. Incluye una limpieza interior y exterior general.\\n\\n\" +\n  \"2. Lavado premium\\n\" +\n  \"Nuestra opción más completa. Recomendado si buscas una limpieza más detallada por dentro y por fuera, con una terminación más cuidada.\\n\\n\" +\n  \"3. Encerado full\\n\" +\n  \"Servicio enfocado en proteger la pintura y realzar el brillo del vehículo. Ideal para darle una mejor terminación y mayor protección exterior.\\n\\n\" +\n  \"Para darte el valor exacto, dime qué tipo de vehículo tienes y en qué comuna sería el servicio.\";\n\nreturn [{\n  ...data,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: \"service_discovery\",\n    intent_last: \"service_menu_request\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"send_service_menu\",\n\n    service_interest: ctx.service_interest || state.service_interest || null,\n    vehicle_type: vehicleType || null,\n    district: district || null,\n\n    missing_fields: missingFields\n  },\n\n  execution_context: {\n    ...ctx,\n    action: \"send_service_menu\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\"]\n  },\n\n  notes: [\"service_menu_sent\"]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "d46c07bd-4624-4c0b-8fa2-69d75f143834",
+                                            "name":  "build_service_menu_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.17 send_service_menu":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "normalize_service_menu_input",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "normalize_service_menu_input":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "build_service_menu_result",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 220623cc",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T18:53:53.765Z",
+                                                             "id":  396,
+                                                             "workflowId":  "mOPltxExvmw9Qsvf",
+                                                             "versionId":  "220623cc-418b-4666-b537-36d8c57c845b",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

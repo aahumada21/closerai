@@ -1,0 +1,393 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:07:49.083Z",
+    "createdAt":  "2026-05-03T21:48:26.976Z",
+    "id":  "wHsOCBM5CtkaQdfK",
+    "name":  "9.0 qa_whatsapp_normalized_router",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "qa-whatsapp-normalized",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "id":  "bf1f5744-f0bd-4c8b-b4de-340fa0f75ffa",
+                      "name":  "Webhook",
+                      "webhookId":  "f3c11849-cdf6-4b0f-acea-e5caf6f53b19"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const body = $json.body || $json;\n\nconst phone = String(\n  body.lead?.phone ||\n  body.lead?.external_id ||\n  body.lead_id ||\n  \"\"\n).trim();\n\nif (!phone) {\n  throw new Error(\"QA payload missing lead.phone\");\n}\n\nconst text = String(body.text || \"\").trim();\n\nif (!text) {\n  throw new Error(\"QA payload missing text\");\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      event: {\n        channel: body.channel || \"whatsapp\",\n        message_id: body.message_id || `qa_${Date.now()}`,\n        timestamp: body.timestamp || now,\n        text,\n        message_type: body.message_type || \"text\",\n        attachments: Array.isArray(body.attachments) ? body.attachments : [],\n        source_metadata: {\n          ...(body.source_metadata || {}),\n          test_mode: true,\n          raw_type: \"qa_normalized\"\n        }\n      },\n      lead: {\n        name: body.lead?.name || \"Cliente QA\",\n        phone,\n        external_id: phone,\n        channel: body.lead?.channel || body.channel || \"whatsapp\"\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       208,
+                                       0
+                                   ],
+                      "id":  "08986389-310b-443e-8d23-8e25198ab4ba",
+                      "name":  "normalize_qa_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH target_lead AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = \u0027{{ ($json.lead.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n    AND external_id = \u0027{{ ($json.lead.external_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n  LIMIT 1\n),\ncreated_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  SELECT\n    \u0027{{ ($json.lead.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.external_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.name || \"Cliente QA\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM target_lead)\n  RETURNING id\n),\nfinal_lead AS (\n  SELECT id FROM target_lead\n  UNION ALL\n  SELECT id FROM created_lead\n  LIMIT 1\n),\ncreated_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    \u0027new_lead\u0027,\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    \u0027[]\u0027::jsonb,\n    NULL,\n    \u0027qualify_lead\u0027,\n    false,\n    NOW()\n  FROM final_lead\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM public.lead_state s\n    WHERE s.lead_id::text = (SELECT id::text FROM final_lead)\n  )\n),\ninserted_message AS (\n  INSERT INTO public.messages (\n    lead_id,\n    direction,\n    channel,\n    message_type,\n    content,\n    provider_message_id,\n    provider_status,\n    status,\n    created_at\n  )\n  SELECT\n    id,\n    \u0027inbound\u0027,\n    \u0027{{ ($json.event.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.message_type || \"text\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.text || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.message_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027received\u0027,\n    \u0027received\u0027,\n    NOW()\n  FROM final_lead\n  RETURNING id, lead_id, content, created_at\n)\nSELECT\n  (SELECT id FROM final_lead) AS lead_id,\n  (SELECT id FROM inserted_message) AS message_db_id,\n  \u0027{{ JSON.stringify($json.event).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS event,\n  \u0027{{ JSON.stringify($json.lead).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS lead;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       416,
+                                       0
+                                   ],
+                      "id":  "4bdc2eaf-d1fc-440c-ac51-f55816a3e4c6",
+                      "name":  "insert_inbound_message",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const normalized = $(\"normalize_qa_payload\").item.json;\nconst db = $json;\n\nconst phone = String(\n  normalized.lead?.phone ||\n  normalized.lead?.external_id ||\n  \"\"\n).trim();\n\nreturn [\n  {\n    json: {\n      channel: normalized.event.channel || \"whatsapp\",\n\n      // Importante:\n      // lead_loader usa lead_id como external_id, así que debe ser el teléfono,\n      // no el UUID interno de Supabase.\n      lead_id: phone,\n\n      message_id: normalized.event.message_id,\n      timestamp: normalized.event.timestamp,\n      text: normalized.event.text,\n      message_type: normalized.event.message_type || \"text\",\n      attachments: normalized.event.attachments || [],\n\n      contact: {\n        wa_id: phone,\n        name: normalized.lead?.name || \"Cliente QA\"\n      },\n\n      source_metadata: {\n        ...(normalized.event.source_metadata || {}),\n        test_mode: true,\n        raw_type: \"qa_normalized\",\n        qa_router: true,\n        qa_db_lead_id: db.lead_id,\n        qa_message_db_id: db.message_db_id\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       624,
+                                       0
+                                   ],
+                      "id":  "bbe0695d-d04c-4f09-8165-5c67a0109e0e",
+                      "name":  "build_commercial_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "KPlLCK7DDIxh7Fnn",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                            "cachedResultName":  "2 lead_loader"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       832,
+                                       0
+                                   ],
+                      "id":  "6ba6319f-6184-4189-ad49-5ab843b6a470",
+                      "name":  "Call \u00272 lead_loader\u0027"
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "normalize_qa_payload",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "normalize_qa_payload":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "insert_inbound_message",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "insert_inbound_message":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "build_commercial_payload",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "build_commercial_payload":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Call \u00272 lead_loader\u0027",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Call \u00272 lead_loader\u0027":  {
+                                                               "main":  [
+                                                                            [
+
+                                                                            ]
+                                                                        ]
+                                                           }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "159a63b3-292a-4d6b-8d43-1cc430bf28ed",
+    "activeVersionId":  "159a63b3-292a-4d6b-8d43-1cc430bf28ed",
+    "versionCounter":  28,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-03T21:48:26.982Z",
+                       "createdAt":  "2026-05-03T21:48:26.982Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "wHsOCBM5CtkaQdfK",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-05-12T14:07:45.243Z",
+                     "createdAt":  "2026-05-12T14:07:45.243Z",
+                     "id":  "SWrPpTejQihQMzIq",
+                     "name":  "QA"
+                 },
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T21:56:04.000Z",
+                          "createdAt":  "2026-05-03T21:56:02.338Z",
+                          "versionId":  "159a63b3-292a-4d6b-8d43-1cc430bf28ed",
+                          "workflowId":  "wHsOCBM5CtkaQdfK",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "httpMethod":  "POST",
+                                                               "path":  "qa-whatsapp-normalized",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  2.1,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ],
+                                            "id":  "bf1f5744-f0bd-4c8b-b4de-340fa0f75ffa",
+                                            "name":  "Webhook",
+                                            "webhookId":  "f3c11849-cdf6-4b0f-acea-e5caf6f53b19"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const body = $json.body || $json;\n\nconst phone = String(\n  body.lead?.phone ||\n  body.lead?.external_id ||\n  body.lead_id ||\n  \"\"\n).trim();\n\nif (!phone) {\n  throw new Error(\"QA payload missing lead.phone\");\n}\n\nconst text = String(body.text || \"\").trim();\n\nif (!text) {\n  throw new Error(\"QA payload missing text\");\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      event: {\n        channel: body.channel || \"whatsapp\",\n        message_id: body.message_id || `qa_${Date.now()}`,\n        timestamp: body.timestamp || now,\n        text,\n        message_type: body.message_type || \"text\",\n        attachments: Array.isArray(body.attachments) ? body.attachments : [],\n        source_metadata: {\n          ...(body.source_metadata || {}),\n          test_mode: true,\n          raw_type: \"qa_normalized\"\n        }\n      },\n      lead: {\n        name: body.lead?.name || \"Cliente QA\",\n        phone,\n        external_id: phone,\n        channel: body.lead?.channel || body.channel || \"whatsapp\"\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             208,
+                                                             0
+                                                         ],
+                                            "id":  "08986389-310b-443e-8d23-8e25198ab4ba",
+                                            "name":  "normalize_qa_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "WITH target_lead AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = \u0027{{ ($json.lead.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n    AND external_id = \u0027{{ ($json.lead.external_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n  LIMIT 1\n),\ncreated_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  SELECT\n    \u0027{{ ($json.lead.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.external_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.lead.name || \"Cliente QA\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM target_lead)\n  RETURNING id\n),\nfinal_lead AS (\n  SELECT id FROM target_lead\n  UNION ALL\n  SELECT id FROM created_lead\n  LIMIT 1\n),\ncreated_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    \u0027new_lead\u0027,\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    \u0027[]\u0027::jsonb,\n    NULL,\n    \u0027qualify_lead\u0027,\n    false,\n    NOW()\n  FROM final_lead\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM public.lead_state s\n    WHERE s.lead_id::text = (SELECT id::text FROM final_lead)\n  )\n),\ninserted_message AS (\n  INSERT INTO public.messages (\n    lead_id,\n    direction,\n    channel,\n    message_type,\n    content,\n    provider_message_id,\n    provider_status,\n    status,\n    created_at\n  )\n  SELECT\n    id,\n    \u0027inbound\u0027,\n    \u0027{{ ($json.event.channel || \"whatsapp\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.message_type || \"text\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.text || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.event.message_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027received\u0027,\n    \u0027received\u0027,\n    NOW()\n  FROM final_lead\n  RETURNING id, lead_id, content, created_at\n)\nSELECT\n  (SELECT id FROM final_lead) AS lead_id,\n  (SELECT id FROM inserted_message) AS message_db_id,\n  \u0027{{ JSON.stringify($json.event).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS event,\n  \u0027{{ JSON.stringify($json.lead).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS lead;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             416,
+                                                             0
+                                                         ],
+                                            "id":  "4bdc2eaf-d1fc-440c-ac51-f55816a3e4c6",
+                                            "name":  "insert_inbound_message",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const normalized = $(\"normalize_qa_payload\").item.json;\nconst db = $json;\n\nconst phone = String(\n  normalized.lead?.phone ||\n  normalized.lead?.external_id ||\n  \"\"\n).trim();\n\nreturn [\n  {\n    json: {\n      channel: normalized.event.channel || \"whatsapp\",\n\n      // Importante:\n      // lead_loader usa lead_id como external_id, así que debe ser el teléfono,\n      // no el UUID interno de Supabase.\n      lead_id: phone,\n\n      message_id: normalized.event.message_id,\n      timestamp: normalized.event.timestamp,\n      text: normalized.event.text,\n      message_type: normalized.event.message_type || \"text\",\n      attachments: normalized.event.attachments || [],\n\n      contact: {\n        wa_id: phone,\n        name: normalized.lead?.name || \"Cliente QA\"\n      },\n\n      source_metadata: {\n        ...(normalized.event.source_metadata || {}),\n        test_mode: true,\n        raw_type: \"qa_normalized\",\n        qa_router: true,\n        qa_db_lead_id: db.lead_id,\n        qa_message_db_id: db.message_db_id\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             624,
+                                                             0
+                                                         ],
+                                            "id":  "bbe0695d-d04c-4f09-8165-5c67a0109e0e",
+                                            "name":  "build_commercial_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "KPlLCK7DDIxh7Fnn",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                                                  "cachedResultName":  "2 lead_loader"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             832,
+                                                             0
+                                                         ],
+                                            "id":  "6ba6319f-6184-4189-ad49-5ab843b6a470",
+                                            "name":  "Call \u00272 lead_loader\u0027"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "Webhook":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "normalize_qa_payload",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                                              "normalize_qa_payload":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "insert_inbound_message",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "insert_inbound_message":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "build_commercial_payload",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "build_commercial_payload":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "Call \u00272 lead_loader\u0027",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "Call \u00272 lead_loader\u0027":  {
+                                                                                     "main":  [
+                                                                                                  [
+
+                                                                                                  ]
+                                                                                              ]
+                                                                                 }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 159a63b3",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T21:56:04.233Z",
+                                                             "id":  454,
+                                                             "workflowId":  "wHsOCBM5CtkaQdfK",
+                                                             "versionId":  "159a63b3-292a-4d6b-8d43-1cc430bf28ed",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

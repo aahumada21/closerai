@@ -1,0 +1,274 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:09:15.259Z",
+    "createdAt":  "2026-04-30T13:59:49.716Z",
+    "id":  "naj7GEIT38lAm3nC",
+    "name":  "6.13 send_pre_service_instruction",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nfunction parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  ...input,\n\n  lead_id: input.lead_id || input.execution_context?.lead_id || null,\n  phone: input.phone || input.execution_context?.phone || null,\n  channel: input.channel || input.execution_context?.channel || \"whatsapp\",\n\n  service_interest: input.service_interest || input.execution_context?.service_interest || null,\n  vehicle_type: input.vehicle_type || input.execution_context?.vehicle_type || null,\n  district: input.district || input.execution_context?.district || null,\n\n  booking_date: input.booking_date || input.execution_context?.booking_date || null,\n  booking_time: input.booking_time || input.execution_context?.booking_time || null,\n  slot_id: input.slot_id || input.execution_context?.slot_id || null,\n\n  execution_context: parseMaybeJson(input.execution_context, {}),\n  context_packet: parseMaybeJson(input.context_packet, {}),\n  decision: parseMaybeJson(input.decision, {}),\n  state_update: parseMaybeJson(input.state_update, {}),\n  execution_meta: parseMaybeJson(input.execution_meta, {})\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "4162e049-e60c-4b81-b739-bce5cb705edf",
+                      "name":  "Normalize Input"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  address_reference\nFROM public.appointments\nWHERE conversation_id = NULLIF(\u0027{{ $json.lead_id }}\u0027, \u0027\u0027)::uuid\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "fec72081-bc67-43ba-ba70-aae5b0101e54",
+                      "name":  "DB Get Active Appointment",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\"Normalize Input\").first().json;\nconst appointment = $json || {};\n\nif (!appointment.id) {\n  return [{\n    ...input,\n    message_to_send: \"Por ahora no encontré una reserva activa asociada para enviarte las indicaciones previas. Si quieres, reviso tu agendamiento manualmente.\",\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...(input.state_update || {}),\n      next_goal: \"manual_booking_review\",\n      last_bot_action: \"pre_service_instructions_no_active_appointment\",\n      missing_fields: []\n    },\n    notes: [\n      ...(input.notes || []),\n      \"no_active_appointment_found_for_pre_service_instructions\"\n    ]\n  }];\n}\nfunction formatDateTime(value) {\n  if (!value) return \"la fecha agendada\";\n\n  const d = new Date(value);\n\n  return d.toLocaleString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n}\n\nconst appointmentDate = formatDateTime(appointment.start_at);\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service = serviceLabel(input.service_interest);\n\nconst vehicle = input.vehicle_type ? ` para tu ${input.vehicle_type}` : \"\";\n\nconst message =\n`Perfecto. Te dejo las indicaciones previas para tu ${service}${vehicle} agendado para ${appointmentDate}.\n\nAntes del servicio, idealmente:\n\n1. Deja el vehículo en un lugar accesible y con espacio para trabajar.\n2. Retira objetos personales importantes del interior.\n3. Si el maletero o los asientos están muy cargados, intenta dejarlos despejados.\n4. Ten disponible a alguien al momento de la llegada.\n5. Si hay indicaciones especiales del domicilio, portón, conserjería o estacionamiento, nos las puedes enviar por aquí.\n\nCon eso llegamos mejor preparados y evitamos atrasos.`;\n\nreturn [{\n  ...input,\n\n  appointment,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(input.state_update || {}),\n    stage: \"booked\",\n    intent_last: \"send_pre_service_instructions\",\n    next_goal: \"service_prepared\",\n    last_bot_action: \"send_pre_service_instructions\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"pre_service_instructions_built\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "295bb23d-549e-4243-b88d-73a48e4bc0d4",
+                      "name":  "Build Pre Service Instructions Result"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "Normalize Input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "Normalize Input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "DB Get Active Appointment",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "DB Get Active Appointment":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Build Pre Service Instructions Result",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "bd9852fc-3084-4fa2-a05a-c9fcab2b3a2b",
+    "activeVersionId":  "bd9852fc-3084-4fa2-a05a-c9fcab2b3a2b",
+    "versionCounter":  37,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-30T13:59:49.736Z",
+                       "createdAt":  "2026-04-30T13:59:49.736Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "naj7GEIT38lAm3nC",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T19:39:31.000Z",
+                          "createdAt":  "2026-05-03T19:39:26.190Z",
+                          "versionId":  "bd9852fc-3084-4fa2-a05a-c9fcab2b3a2b",
+                          "workflowId":  "naj7GEIT38lAm3nC",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nfunction parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  ...input,\n\n  lead_id: input.lead_id || input.execution_context?.lead_id || null,\n  phone: input.phone || input.execution_context?.phone || null,\n  channel: input.channel || input.execution_context?.channel || \"whatsapp\",\n\n  service_interest: input.service_interest || input.execution_context?.service_interest || null,\n  vehicle_type: input.vehicle_type || input.execution_context?.vehicle_type || null,\n  district: input.district || input.execution_context?.district || null,\n\n  booking_date: input.booking_date || input.execution_context?.booking_date || null,\n  booking_time: input.booking_time || input.execution_context?.booking_time || null,\n  slot_id: input.slot_id || input.execution_context?.slot_id || null,\n\n  execution_context: parseMaybeJson(input.execution_context, {}),\n  context_packet: parseMaybeJson(input.context_packet, {}),\n  decision: parseMaybeJson(input.decision, {}),\n  state_update: parseMaybeJson(input.state_update, {}),\n  execution_meta: parseMaybeJson(input.execution_meta, {})\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "4162e049-e60c-4b81-b739-bce5cb705edf",
+                                            "name":  "Normalize Input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  address_reference\nFROM public.appointments\nWHERE conversation_id = NULLIF(\u0027{{ $json.lead_id }}\u0027, \u0027\u0027)::uuid\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "fec72081-bc67-43ba-ba70-aae5b0101e54",
+                                            "name":  "DB Get Active Appointment",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $(\"Normalize Input\").first().json;\nconst appointment = $json || {};\n\nif (!appointment.id) {\n  return [{\n    ...input,\n    message_to_send: \"Por ahora no encontré una reserva activa asociada para enviarte las indicaciones previas. Si quieres, reviso tu agendamiento manualmente.\",\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...(input.state_update || {}),\n      next_goal: \"manual_booking_review\",\n      last_bot_action: \"pre_service_instructions_no_active_appointment\",\n      missing_fields: []\n    },\n    notes: [\n      ...(input.notes || []),\n      \"no_active_appointment_found_for_pre_service_instructions\"\n    ]\n  }];\n}\nfunction formatDateTime(value) {\n  if (!value) return \"la fecha agendada\";\n\n  const d = new Date(value);\n\n  return d.toLocaleString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n}\n\nconst appointmentDate = formatDateTime(appointment.start_at);\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service = serviceLabel(input.service_interest);\n\nconst vehicle = input.vehicle_type ? ` para tu ${input.vehicle_type}` : \"\";\n\nconst message =\n`Perfecto. Te dejo las indicaciones previas para tu ${service}${vehicle} agendado para ${appointmentDate}.\n\nAntes del servicio, idealmente:\n\n1. Deja el vehículo en un lugar accesible y con espacio para trabajar.\n2. Retira objetos personales importantes del interior.\n3. Si el maletero o los asientos están muy cargados, intenta dejarlos despejados.\n4. Ten disponible a alguien al momento de la llegada.\n5. Si hay indicaciones especiales del domicilio, portón, conserjería o estacionamiento, nos las puedes enviar por aquí.\n\nCon eso llegamos mejor preparados y evitamos atrasos.`;\n\nreturn [{\n  ...input,\n\n  appointment,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(input.state_update || {}),\n    stage: \"booked\",\n    intent_last: \"send_pre_service_instructions\",\n    next_goal: \"service_prepared\",\n    last_bot_action: \"send_pre_service_instructions\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"pre_service_instructions_built\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "295bb23d-549e-4243-b88d-73a48e4bc0d4",
+                                            "name":  "Build Pre Service Instructions Result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "Normalize Input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "Normalize Input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "DB Get Active Appointment",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "DB Get Active Appointment":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "Build Pre Service Instructions Result",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version bd9852fc",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T19:39:31.769Z",
+                                                             "id":  428,
+                                                             "workflowId":  "naj7GEIT38lAm3nC",
+                                                             "versionId":  "bd9852fc-3084-4fa2-a05a-c9fcab2b3a2b",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

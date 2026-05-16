@@ -1,0 +1,85 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:11:10.000Z",
+    "createdAt":  "2026-05-03T20:42:13.535Z",
+    "id":  "DZIqY4VajmaTK7rD",
+    "name":  "My Sub-Workflow 1",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       260,
+                                       340
+                                   ],
+                      "parameters":  {
+
+                                     }
+                  },
+                  {
+                      "id":  "b5942df6-0160-4ef7-965d-57583acdc8aa",
+                      "name":  "Replace me with your logic",
+                      "type":  "n8n-nodes-base.noOp",
+                      "position":  [
+                                       520,
+                                       340
+                                   ],
+                      "parameters":  {
+
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "Replace me with your logic",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "47d1246b-58df-4131-b165-26ed524eaa0b",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-03T20:42:13.538Z",
+                       "createdAt":  "2026-05-03T20:42:13.538Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "DZIqY4VajmaTK7rD",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

@@ -1,0 +1,590 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:41:22.119Z",
+    "createdAt":  "2026-05-13T14:02:12.096Z",
+    "id":  "HFDEtN5WN2oMU7E2",
+    "name":  "6.8 send_quote",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                     },
+                      "id":  "69549bf9-8bb8-4169-8237-9cbefe3cdb87",
+                      "name":  "6.8 send_quote",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowsend_quoteinput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "88b661b3-6402-4ae9-be52-e8b50a9d68f5",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       224,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [\n  {\n    ...$json,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n\n    state_update: {\n      ...($json.execution_context.state_update || {}),\n      missing_fields: []\n    },\n\n    internal_status: \"send_quote_in_progress\"\n  }\n];"
+                                     },
+                      "id":  "5c2cf377-95b7-4633-986a-2f8e4b1d6336",
+                      "name":  "send_quote",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       448,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "IY7i8Sd3LFcjGHe4",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/IY7i8Sd3LFcjGHe4",
+                                                            "cachedResultName":  "6.0 resolve_pricing_from_db"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "service_interest":  "={{$json.execution_context.service_interest}}",
+                                                                              "vehicle_type":  "={{$json.execution_context.vehicle_type}}",
+                                                                              "district":  "={{$json.execution_context.district}}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "service_interest",
+                                                                                   "displayName":  "service_interest",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "vehicle_type",
+                                                                                   "displayName":  "vehicle_type",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "district",
+                                                                                   "displayName":  "district",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       720,
+                                       16
+                                   ],
+                      "id":  "3d2fffef-9772-4c66-a9d0-e99b8c12f501",
+                      "name":  "Call 6.0 resolve_pricing_from_db"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "79c53f91-06e2-4516-84ed-dfb68704558e",
+                                                                                   "leftValue":  "={{ $json.pricing_found === true || ($json.success === true \u0026\u0026 !!$json.quote?.base_price) }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1136,
+                                       16
+                                   ],
+                      "id":  "a04f32d0-7548-439a-a440-501faef298c4",
+                      "name":  "IF pricing_found1"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const q = $json.quote;\n\nif (!q || !q.price) {\n  throw new Error(\"Missing resolved quote\");\n}\n\nfunction formatCLP(value) {\n  const number = Number(value);\n\n  if (!Number.isFinite(number)) {\n    return `$${value}`;\n  }\n\n  return `$${number.toLocaleString(\"es-CL\")}`;\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    // Alias internos / antiguos\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service =\n  q.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst vehicle =\n  q.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  \"tu vehículo\";\n\nconst district =\n  q.district ||\n  $json.execution_context?.district ||\n  $json.context_packet?.state?.district ||\n  \"tu comuna\";\n\nconst message = `Perfecto. Para tu ${vehicle} en ${district}, el ${serviceLabel(service)} tiene un valor de ${formatCLP(q.price)}. ¿Te gustaría agendar?`;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"offers_or_quotes\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"quoted\",\n    intent_last: \"quote_sent\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"send_quote\",\n  \n    service_interest: service,\n    vehicle_type: vehicle,\n    district: district,\n  \n    missing_fields: []\n  },\n  internal_status: \"send_quote_in_progress\"\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1328,
+                                       -128
+                                   ],
+                      "id":  "0c8bd8e4-a88f-4e7b-b6b8-c0e5ef62d2f4",
+                      "name":  "build_quote_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send: \"No pude calcular la cotización en este momento. Lo revisaré y te ayudo enseguida.\",\n  db_operations: [\"messages\"],\n  state_update: {\n    ...($json.state_update || {}),\n    last_bot_action: \"pricing_rule_not_found\",\n    next_goal: \"manual_pricing_review\"\n  },\n  notes: [\n    ...($json.notes || []),\n    \"pricing_rule_not_found\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1328,
+                                       16
+                                   ],
+                      "id":  "a209e70b-566b-4614-897a-f73227f8c2cc",
+                      "name":  "build_pricing_unavailable_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       928,
+                                       -32
+                                   ],
+                      "id":  "bf860dd8-4b4a-4610-9fbe-9de91e45c798",
+                      "name":  "merge_pricing_with_context"
+                  }
+              ],
+    "connections":  {
+                        "6.8 send_quote":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "normalize_input",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "send_quote",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Call 6.0 resolve_pricing_from_db":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "merge_pricing_with_context",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "IF pricing_found1":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "build_quote_message",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "build_pricing_unavailable_result",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "merge_pricing_with_context":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "IF pricing_found1",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "send_quote":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "Call 6.0 resolve_pricing_from_db",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "8e0150df-bbc4-45a6-ba39-6e1a0860b8f1",
+    "activeVersionId":  "8e0150df-bbc4-45a6-ba39-6e1a0860b8f1",
+    "versionCounter":  9,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:02:12.102Z",
+                       "createdAt":  "2026-05-13T14:02:12.102Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "HFDEtN5WN2oMU7E2",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:42:46.000Z",
+                          "createdAt":  "2026-05-13T14:41:22.121Z",
+                          "versionId":  "8e0150df-bbc4-45a6-ba39-6e1a0860b8f1",
+                          "workflowId":  "HFDEtN5WN2oMU7E2",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                                           },
+                                            "id":  "69549bf9-8bb8-4169-8237-9cbefe3cdb87",
+                                            "name":  "6.8 send_quote",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowsend_quoteinput_normalized\"\n  ]\n}];"
+                                                           },
+                                            "id":  "88b661b3-6402-4ae9-be52-e8b50a9d68f5",
+                                            "name":  "normalize_input",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             224,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [\n  {\n    ...$json,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n\n    state_update: {\n      ...($json.execution_context.state_update || {}),\n      missing_fields: []\n    },\n\n    internal_status: \"send_quote_in_progress\"\n  }\n];"
+                                                           },
+                                            "id":  "5c2cf377-95b7-4633-986a-2f8e4b1d6336",
+                                            "name":  "send_quote",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             448,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "IY7i8Sd3LFcjGHe4",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/IY7i8Sd3LFcjGHe4",
+                                                                                  "cachedResultName":  "6.0 resolve_pricing_from_db"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "service_interest":  "={{$json.execution_context.service_interest}}",
+                                                                                                    "vehicle_type":  "={{$json.execution_context.vehicle_type}}",
+                                                                                                    "district":  "={{$json.execution_context.district}}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "service_interest",
+                                                                                                         "displayName":  "service_interest",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "vehicle_type",
+                                                                                                         "displayName":  "vehicle_type",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "district",
+                                                                                                         "displayName":  "district",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             720,
+                                                             16
+                                                         ],
+                                            "id":  "3d2fffef-9772-4c66-a9d0-e99b8c12f501",
+                                            "name":  "Call 6.0 resolve_pricing_from_db"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "79c53f91-06e2-4516-84ed-dfb68704558e",
+                                                                                                         "leftValue":  "={{ $json.pricing_found === true || ($json.success === true \u0026\u0026 !!$json.quote?.base_price) }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1136,
+                                                             16
+                                                         ],
+                                            "id":  "a04f32d0-7548-439a-a440-501faef298c4",
+                                            "name":  "IF pricing_found1"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const q = $json.quote;\n\nif (!q || !q.price) {\n  throw new Error(\"Missing resolved quote\");\n}\n\nfunction formatCLP(value) {\n  const number = Number(value);\n\n  if (!Number.isFinite(number)) {\n    return `$${value}`;\n  }\n\n  return `$${number.toLocaleString(\"es-CL\")}`;\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    // Alias internos / antiguos\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service =\n  q.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst vehicle =\n  q.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  \"tu vehículo\";\n\nconst district =\n  q.district ||\n  $json.execution_context?.district ||\n  $json.context_packet?.state?.district ||\n  \"tu comuna\";\n\nconst message = `Perfecto. Para tu ${vehicle} en ${district}, el ${serviceLabel(service)} tiene un valor de ${formatCLP(q.price)}. ¿Te gustaría agendar?`;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"offers_or_quotes\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"quoted\",\n    intent_last: \"quote_sent\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"send_quote\",\n  \n    service_interest: service,\n    vehicle_type: vehicle,\n    district: district,\n  \n    missing_fields: []\n  },\n  internal_status: \"send_quote_in_progress\"\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1328,
+                                                             -128
+                                                         ],
+                                            "id":  "0c8bd8e4-a88f-4e7b-b6b8-c0e5ef62d2f4",
+                                            "name":  "build_quote_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n  message_to_send: \"No pude calcular la cotización en este momento. Lo revisaré y te ayudo enseguida.\",\n  db_operations: [\"messages\"],\n  state_update: {\n    ...($json.state_update || {}),\n    last_bot_action: \"pricing_rule_not_found\",\n    next_goal: \"manual_pricing_review\"\n  },\n  notes: [\n    ...($json.notes || []),\n    \"pricing_rule_not_found\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1328,
+                                                             16
+                                                         ],
+                                            "id":  "a209e70b-566b-4614-897a-f73227f8c2cc",
+                                            "name":  "build_pricing_unavailable_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             928,
+                                                             -32
+                                                         ],
+                                            "id":  "bf860dd8-4b4a-4610-9fbe-9de91e45c798",
+                                            "name":  "merge_pricing_with_context"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.8 send_quote":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "normalize_input",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "send_quote",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "Call 6.0 resolve_pricing_from_db":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "merge_pricing_with_context",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "IF pricing_found1":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_quote_message",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ],
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_pricing_unavailable_result",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "merge_pricing_with_context":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "IF pricing_found1",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "send_quote":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "Call 6.0 resolve_pricing_from_db",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 8e0150df",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:42:46.953Z",
+                                                             "id":  592,
+                                                             "workflowId":  "HFDEtN5WN2oMU7E2",
+                                                             "versionId":  "8e0150df-bbc4-45a6-ba39-6e1a0860b8f1",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

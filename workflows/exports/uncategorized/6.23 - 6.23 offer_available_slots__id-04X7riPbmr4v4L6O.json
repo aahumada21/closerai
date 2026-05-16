@@ -1,0 +1,1125 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:26:52.540Z",
+    "createdAt":  "2026-05-13T14:05:23.587Z",
+    "id":  "04X7riPbmr4v4L6O",
+    "name":  "6.23 offer_available_slots",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                     },
+                      "id":  "529edd98-c8e1-485d-bb27-4a6699752b21",
+                      "name":  "6.23 offer_available_slots",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       128,
+                                       -192
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowoffer_available_slotsinput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "527c13f9-1bb5-4b05-8ec2-37067a9bf20e",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       352,
+                                       -192
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const ctx = $json.execution_context || {};\nconst stateUpdate = ctx.state_update || {};\n\nfunction getAvailabilityConfig(window) {\n  switch (window) {\n    case \"this_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los prÃ³ximos dÃ­as\",\n        max_slots: 3\n      };\n\n    case \"next_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 7,\n        availability_label: \"la prÃ³xima semana\",\n        max_slots: 5\n      };\n\n    case \"next_14_days\":\n      return {\n        days_ahead: 14,\n        start_offset_days: 0,\n        availability_label: \"las prÃ³ximas dos semanas\",\n        max_slots: 6\n      };\n\n    case \"next_30_days\":\n      return {\n        days_ahead: 30,\n        start_offset_days: 0,\n        availability_label: \"las prÃ³ximas semanas\",\n        max_slots: 8\n      };\n\n    default:\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los prÃ³ximos dÃ­as\",\n        max_slots: 3\n      };\n  }\n}\n\nconst bookingDate = ctx.booking_date || stateUpdate.booking_date || null;\nconst bookingTime = ctx.booking_time || stateUpdate.booking_time || null;\nconst slotId = ctx.slot_id || stateUpdate.slot_id || (\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst isSpecificSlotCheck =\n  ctx.next_goal === \"check_specific_slot_availability\" ||\n  stateUpdate.next_goal === \"check_specific_slot_availability\" ||\n  (\n    !!bookingDate \u0026\u0026\n    !!bookingTime \u0026\u0026\n    ctx.availability_confirmed !== true \u0026\u0026\n    stateUpdate.availability_confirmed !== true\n  );\n\nconst config = getAvailabilityConfig(ctx.availability_window || stateUpdate.availability_window || \"this_week\");\n\nreturn [{\n  ...$json,\n  db_operations: [\"messages\", \"lead_state\"],\n\n  availability_request: {\n    lead_id: ctx.lead_id,\n    service_interest: ctx.service_interest,\n    vehicle_type: ctx.vehicle_type,\n    district: ctx.district,\n    duration_minutes: ctx.duration_minutes || 120,\n    calendar_id: ctx.calendar_id || \"primary\",\n\n    check_type: isSpecificSlotCheck ? \"specific_slot\" : \"list_slots\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    days_ahead: Number(ctx.days_ahead || stateUpdate.days_ahead || config.days_ahead),\n    start_offset_days: Number(ctx.start_offset_days || stateUpdate.start_offset_days || config.start_offset_days),\n    max_slots: Number(ctx.max_slots || stateUpdate.max_slots || config.max_slots)\n  },\n\n  state_update: {\n    ...(ctx.state_update || {}),\n\n    stage: \"booking_selection\",\n    intent_last: isSpecificSlotCheck ? \"manual_slot_requested\" : \"availability_requested\",\n    next_goal: isSpecificSlotCheck ? \"check_specific_slot_availability\" : \"show_available_slots\",\n    last_bot_action: \"offer_available_slots_in_progress\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: false,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    missing_fields: []\n  }\n}];"
+                                     },
+                      "id":  "a58e2c35-ee62-4fb2-a743-5199e7c7197c",
+                      "name":  "offer_available_slots",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       576,
+                                       -192
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "SWHJNhMwBbbNsZiU",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/SWHJNhMwBbbNsZiU",
+                                                            "cachedResultName":  "6.4 list_available_slots"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.availability_request?.lead_id || $json.execution_context?.lead_id }}",
+                                                                              "calendar_id":  "={{ $json.availability_request?.calendar_id || $json.execution_context?.calendar_id || \"primary\" }}",
+                                                                              "duration_minutes":  "={{ String($json.availability_request?.duration_minutes || $json.execution_context?.duration_minutes || 120) }}",
+                                                                              "days_ahead":  "={{ String($json.availability_request?.days_ahead || $json.execution_context?.days_ahead || 7) }}",
+                                                                              "max_slots":  "={{ String($json.availability_request?.max_slots || $json.execution_context?.max_slots || 3) }}",
+                                                                              "service_interest":  "={{ $json.availability_request?.service_interest || $json.execution_context?.service_interest }}",
+                                                                              "vehicle_type":  "={{ $json.availability_request?.vehicle_type || $json.execution_context?.vehicle_type }}",
+                                                                              "district":  "={{ $json.availability_request?.district || $json.execution_context?.district }}",
+                                                                              "availability_window":  "={{ $json.availability_request?.availability_window || $json.execution_context?.availability_window || \"this_week\" }}",
+                                                                              "start_offset_days":  "={{ String($json.availability_request?.start_offset_days || $json.execution_context?.start_offset_days || 0) }}",
+                                                                              "availability_label":  "={{ $json.availability_request?.availability_label || $json.execution_context?.availability_label || \"los próximos días\" }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "calendar_id",
+                                                                                   "displayName":  "calendar_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "duration_minutes",
+                                                                                   "displayName":  "duration_minutes",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "days_ahead",
+                                                                                   "displayName":  "days_ahead",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "max_slots",
+                                                                                   "displayName":  "max_slots",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "service_interest",
+                                                                                   "displayName":  "service_interest",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "vehicle_type",
+                                                                                   "displayName":  "vehicle_type",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "district",
+                                                                                   "displayName":  "district",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "availability_window",
+                                                                                   "displayName":  "availability_window",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "availability_label",
+                                                                                   "displayName":  "availability_label",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "start_offset_days",
+                                                                                   "displayName":  "start_offset_days",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1104,
+                                       -160
+                                   ],
+                      "id":  "0649bfd3-f6cb-4a18-aac5-5876ed037669",
+                      "name":  "6.4 list_available_slots"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1312,
+                                       -160
+                                   ],
+                      "id":  "4b845615-88d0-49b6-b2e0-047b2aaba749",
+                      "name":  "merge_available_slots_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const ctx = $json.execution_context || {};\n\nconst slots =\n  Array.isArray($json.slots) ? $json.slots :\n  Array.isArray($json.available_slots) ? $json.available_slots :\n  Array.isArray($json.booking_options) ? $json.booking_options :\n  [];\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nfunction formatSlot(slot) {\n  const rawStart =\n    slot.slot_start_at ||\n    slot.start_at ||\n    slot.start ||\n    slot.datetime ||\n    null;\n\n  if (!rawStart) {\n    return slot.label || \"horario disponible\";\n  }\n\n  const start = new Date(rawStart);\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  const hora = start.toLocaleTimeString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n\n  return `${fecha} a las ${hora}`;\n}\n\nconst availabilityLabel =\n  $json.availability_label ||\n  ctx.availability_label ||\n  \"los próximos días\";\n\nconst service =\n  ctx.service_interest ||\n  $json.service_interest ||\n  \"lavado_premium\";\n\nif (slots.length === 0) {\n  const noSlotsMessage =\n    `Por ahora no encontré horarios disponibles para ${availabilityLabel}. ` +\n    `Si quieres, te puedo derivar para revisar manualmente una hora.`;\n\n  return [{\n    ...$json,\n    message_to_send: noSlotsMessage,\n    message: noSlotsMessage,\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"booking_selection\",\n      intent_last: \"availability_requested\",\n      next_goal: \"manual_availability_review\",\n      last_bot_action: \"no_available_slots_found\",\n      missing_fields: [],\n      booking_options: [],\n      availability_window: $json.availability_window || ctx.availability_window || \"this_week\",\n      availability_label: availabilityLabel\n    },\n    notes: [\n      ...($json.notes || []),\n      \"no_available_slots_found\"\n    ]\n  }];\n}\n\nconst lines = slots.map((slot, index) =\u003e {\n  return `${index + 1}. ${formatSlot(slot)}`;\n});\n\nconst optionNumbers =\n  slots.length === 1\n    ? \"1\"\n    : slots.length === 2\n      ? \"1 o 2\"\n      : `${slots.slice(0, -1).map((_, index) =\u003e index + 1).join(\", \")} o ${slots.length}`;\n\nconst wasSpecificSlotUnavailable =\n  $json.unavailable_specific_slot === true ||\n  $json.state_update?.intent_last === \"manual_slot_unavailable\";\n\nconst intro = wasSpecificSlotUnavailable\n  ? `Ese horario no aparece disponible. Tengo estas opciones cercanas para ${serviceLabel(service)}:\\n\\n`\n  : `Tengo estos horarios disponibles para ${serviceLabel(service)} durante ${availabilityLabel}:\\n\\n`;\n\nconst finalMessage =\n  intro +\n  `${lines.join(\"\\n\")}\\n\\n` +\n  `¿Cuál te acomoda? Puedes responder con ${optionNumbers}.`;\n\nreturn [{\n  ...$json,\n  message_to_send: finalMessage,\n  message: finalMessage,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"booking_selection\",\n    intent_last: \"availability_options_sent\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_available_slots\",\n    missing_fields: [],\n    booking_options: slots,\n    availability_window: $json.availability_window || ctx.availability_window || \"this_week\",\n    availability_label: availabilityLabel\n  },\n  notes: [\n    ...($json.notes || []),\n    \"available_slots_sent\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1552,
+                                       -160
+                                   ],
+                      "id":  "1df77526-8129-4850-9d9b-03b4aab3072d",
+                      "name":  "build_available_slots_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "d305669c-0dd0-445c-a6a5-cadfe4ce4156",
+                                                                                   "leftValue":  "={{ $json.availability_request?.check_type === \"specific_slot\" }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       832,
+                                       -272
+                                   ],
+                      "id":  "ed1a67db-1237-4cd7-881f-23c5e92fd68b",
+                      "name":  "IF specific_slot_requested"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "EI0cTkMum1UCKHbN",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/EI0cTkMum1UCKHbN",
+                                                            "cachedResultName":  "6.2 check_calendar_slot"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.availability_request?.lead_id || $json.execution_context?.lead_id }}",
+                                                                              "booking_date":  "={{ $json.availability_request?.booking_date || $json.execution_context?.booking_date }}",
+                                                                              "booking_time":  "={{ $json.availability_request?.booking_time || $json.execution_context?.booking_time }}",
+                                                                              "slot_id":  "={{ $json.availability_request?.slot_id || $json.execution_context?.slot_id }}",
+                                                                              "duration_minutes":  "={{ String($json.availability_request?.duration_minutes || $json.execution_context?.duration_minutes || 120) }}",
+                                                                              "calendar_id":  "={{ $json.availability_request?.calendar_id || $json.execution_context?.calendar_id || \"primary\" }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "booking_date",
+                                                                                   "displayName":  "booking_date",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "booking_time",
+                                                                                   "displayName":  "booking_time",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "slot_id",
+                                                                                   "displayName":  "slot_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "duration_minutes",
+                                                                                   "displayName":  "duration_minutes",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "calendar_id",
+                                                                                   "displayName":  "calendar_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1088,
+                                       -400
+                                   ],
+                      "id":  "3ca86ac5-6077-4f5d-bfdf-d66d8799a086",
+                      "name":  "6.2 check_calendar_slot"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const ctx = $json.execution_context || {};\nconst req = $json.availability_request || {};\n\nconst available =\n  $json.available === true ||\n  $json.is_available === true ||\n  $json.slot_available === true;\n\nconst bookingDate =\n  $json.booking_date ||\n  req.booking_date ||\n  ctx.booking_date ||\n  null;\n\nconst bookingTime =\n  $json.booking_time ||\n  req.booking_time ||\n  ctx.booking_time ||\n  null;\n\nconst slotId =\n  $json.slot_id ||\n  req.slot_id ||\n  ctx.slot_id ||\n  (\n    bookingDate \u0026\u0026 bookingTime\n      ? `${bookingDate}_${bookingTime}`\n      : null\n  );\n\nfunction formatManualSlot(date, time) {\n  if (!date || !time) return \"ese horario\";\n\n  const start = new Date(`${date}T${time}:00`);\n\n  if (isNaN(start.getTime())) {\n    return `${date} a las ${time}`;\n  }\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  return `${fecha} a las ${time}`;\n}\n\nconst formattedSlot = formatManualSlot(bookingDate, bookingTime);\n\nif (available) {\n  const message =\n    `Perfecto, ${formattedSlot} está disponible. ` +\n    `Para dejarlo reservado, ¿me compartes la dirección exacta donde sería el servicio?`;\n\n  return [{\n    ...$json,\n\n    message_to_send: message,\n    message,\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...($json.state_update || {}),\n\n      stage: \"collecting_address\",\n      intent_last: \"manual_slot_available_address_required\",\n      next_goal: \"collect_address\",\n      last_bot_action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed: true,\n\n      booking_options: [],\n      missing_fields: [\"address\"]\n    },\n\n    notes: [\n      ...($json.notes || []),\n      \"specific_slot_available_address_requested\"\n    ]\n  }];\n}\n\nreturn [{\n  ...$json,\n\n  unavailable_specific_slot: true,\n\n  state_update: {\n    ...($json.state_update || {}),\n\n    stage: \"booking_selection\",\n    intent_last: \"manual_slot_unavailable\",\n    next_goal: \"show_nearby_available_slots\",\n    last_bot_action: \"manual_slot_unavailable\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n\n    availability_confirmed: false,\n\n    availability_label: \"opciones cercanas\",\n    availability_window: \"this_week\",\n\n    missing_fields: []\n  },\n\n  notes: [\n    ...($json.notes || []),\n    \"specific_slot_unavailable\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1296,
+                                       -400
+                                   ],
+                      "id":  "58ea787b-2d95-4a58-92f3-a4c4a2404840",
+                      "name":  "build_specific_slot_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "dda68f36-67d5-44c1-b4fc-fc68917ec903",
+                                                                                   "leftValue":  "={{ $json.state_update?.availability_confirmed === true }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1568,
+                                       -384
+                                   ],
+                      "id":  "87f40dde-6021-491a-ae40-d0128ea58772",
+                      "name":  "IF specific_slot_available"
+                  }
+              ],
+    "connections":  {
+                        "6.23 offer_available_slots":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "normalize_input",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "offer_available_slots",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "6.4 list_available_slots":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "merge_available_slots_with_context",
+                                                                              "type":  "main",
+                                                                              "index":  1
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "merge_available_slots_with_context":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "build_available_slots_message",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                        "IF specific_slot_requested":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "6.2 check_calendar_slot",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ],
+                                                                        [
+                                                                            {
+                                                                                "node":  "6.4 list_available_slots",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "6.2 check_calendar_slot":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "build_specific_slot_result",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "build_specific_slot_result":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "IF specific_slot_available",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "IF specific_slot_available":  {
+                                                           "main":  [
+                                                                        [
+
+                                                                        ],
+                                                                        [
+                                                                            {
+                                                                                "node":  "6.4 list_available_slots",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "offer_available_slots":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "merge_available_slots_with_context",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       },
+                                                                       {
+                                                                           "node":  "IF specific_slot_requested",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "48f9239c-c23f-4955-9d0b-a22c96ddf151",
+    "activeVersionId":  "48f9239c-c23f-4955-9d0b-a22c96ddf151",
+    "versionCounter":  20,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:05:23.594Z",
+                       "createdAt":  "2026-05-13T14:05:23.594Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "04X7riPbmr4v4L6O",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:27:26.000Z",
+                          "createdAt":  "2026-05-13T14:26:52.542Z",
+                          "versionId":  "48f9239c-c23f-4955-9d0b-a22c96ddf151",
+                          "workflowId":  "04X7riPbmr4v4L6O",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                                           },
+                                            "id":  "529edd98-c8e1-485d-bb27-4a6699752b21",
+                                            "name":  "6.23 offer_available_slots",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             128,
+                                                             -192
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowoffer_available_slotsinput_normalized\"\n  ]\n}];"
+                                                           },
+                                            "id":  "527c13f9-1bb5-4b05-8ec2-37067a9bf20e",
+                                            "name":  "normalize_input",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             352,
+                                                             -192
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const ctx = $json.execution_context || {};\nconst stateUpdate = ctx.state_update || {};\n\nfunction getAvailabilityConfig(window) {\n  switch (window) {\n    case \"this_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los prÃ³ximos dÃ­as\",\n        max_slots: 3\n      };\n\n    case \"next_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 7,\n        availability_label: \"la prÃ³xima semana\",\n        max_slots: 5\n      };\n\n    case \"next_14_days\":\n      return {\n        days_ahead: 14,\n        start_offset_days: 0,\n        availability_label: \"las prÃ³ximas dos semanas\",\n        max_slots: 6\n      };\n\n    case \"next_30_days\":\n      return {\n        days_ahead: 30,\n        start_offset_days: 0,\n        availability_label: \"las prÃ³ximas semanas\",\n        max_slots: 8\n      };\n\n    default:\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los prÃ³ximos dÃ­as\",\n        max_slots: 3\n      };\n  }\n}\n\nconst bookingDate = ctx.booking_date || stateUpdate.booking_date || null;\nconst bookingTime = ctx.booking_time || stateUpdate.booking_time || null;\nconst slotId = ctx.slot_id || stateUpdate.slot_id || (\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst isSpecificSlotCheck =\n  ctx.next_goal === \"check_specific_slot_availability\" ||\n  stateUpdate.next_goal === \"check_specific_slot_availability\" ||\n  (\n    !!bookingDate \u0026\u0026\n    !!bookingTime \u0026\u0026\n    ctx.availability_confirmed !== true \u0026\u0026\n    stateUpdate.availability_confirmed !== true\n  );\n\nconst config = getAvailabilityConfig(ctx.availability_window || stateUpdate.availability_window || \"this_week\");\n\nreturn [{\n  ...$json,\n  db_operations: [\"messages\", \"lead_state\"],\n\n  availability_request: {\n    lead_id: ctx.lead_id,\n    service_interest: ctx.service_interest,\n    vehicle_type: ctx.vehicle_type,\n    district: ctx.district,\n    duration_minutes: ctx.duration_minutes || 120,\n    calendar_id: ctx.calendar_id || \"primary\",\n\n    check_type: isSpecificSlotCheck ? \"specific_slot\" : \"list_slots\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    days_ahead: Number(ctx.days_ahead || stateUpdate.days_ahead || config.days_ahead),\n    start_offset_days: Number(ctx.start_offset_days || stateUpdate.start_offset_days || config.start_offset_days),\n    max_slots: Number(ctx.max_slots || stateUpdate.max_slots || config.max_slots)\n  },\n\n  state_update: {\n    ...(ctx.state_update || {}),\n\n    stage: \"booking_selection\",\n    intent_last: isSpecificSlotCheck ? \"manual_slot_requested\" : \"availability_requested\",\n    next_goal: isSpecificSlotCheck ? \"check_specific_slot_availability\" : \"show_available_slots\",\n    last_bot_action: \"offer_available_slots_in_progress\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: false,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    missing_fields: []\n  }\n}];"
+                                                           },
+                                            "id":  "a58e2c35-ee62-4fb2-a743-5199e7c7197c",
+                                            "name":  "offer_available_slots",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             576,
+                                                             -192
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "SWHJNhMwBbbNsZiU",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/SWHJNhMwBbbNsZiU",
+                                                                                  "cachedResultName":  "6.4 list_available_slots"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.availability_request?.lead_id || $json.execution_context?.lead_id }}",
+                                                                                                    "calendar_id":  "={{ $json.availability_request?.calendar_id || $json.execution_context?.calendar_id || \"primary\" }}",
+                                                                                                    "duration_minutes":  "={{ String($json.availability_request?.duration_minutes || $json.execution_context?.duration_minutes || 120) }}",
+                                                                                                    "days_ahead":  "={{ String($json.availability_request?.days_ahead || $json.execution_context?.days_ahead || 7) }}",
+                                                                                                    "max_slots":  "={{ String($json.availability_request?.max_slots || $json.execution_context?.max_slots || 3) }}",
+                                                                                                    "service_interest":  "={{ $json.availability_request?.service_interest || $json.execution_context?.service_interest }}",
+                                                                                                    "vehicle_type":  "={{ $json.availability_request?.vehicle_type || $json.execution_context?.vehicle_type }}",
+                                                                                                    "district":  "={{ $json.availability_request?.district || $json.execution_context?.district }}",
+                                                                                                    "availability_window":  "={{ $json.availability_request?.availability_window || $json.execution_context?.availability_window || \"this_week\" }}",
+                                                                                                    "start_offset_days":  "={{ String($json.availability_request?.start_offset_days || $json.execution_context?.start_offset_days || 0) }}",
+                                                                                                    "availability_label":  "={{ $json.availability_request?.availability_label || $json.execution_context?.availability_label || \"los próximos días\" }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "calendar_id",
+                                                                                                         "displayName":  "calendar_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "duration_minutes",
+                                                                                                         "displayName":  "duration_minutes",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "days_ahead",
+                                                                                                         "displayName":  "days_ahead",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "max_slots",
+                                                                                                         "displayName":  "max_slots",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "service_interest",
+                                                                                                         "displayName":  "service_interest",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "vehicle_type",
+                                                                                                         "displayName":  "vehicle_type",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "district",
+                                                                                                         "displayName":  "district",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "availability_window",
+                                                                                                         "displayName":  "availability_window",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "availability_label",
+                                                                                                         "displayName":  "availability_label",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "start_offset_days",
+                                                                                                         "displayName":  "start_offset_days",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1104,
+                                                             -160
+                                                         ],
+                                            "id":  "0649bfd3-f6cb-4a18-aac5-5876ed037669",
+                                            "name":  "6.4 list_available_slots"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1312,
+                                                             -160
+                                                         ],
+                                            "id":  "4b845615-88d0-49b6-b2e0-047b2aaba749",
+                                            "name":  "merge_available_slots_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const ctx = $json.execution_context || {};\n\nconst slots =\n  Array.isArray($json.slots) ? $json.slots :\n  Array.isArray($json.available_slots) ? $json.available_slots :\n  Array.isArray($json.booking_options) ? $json.booking_options :\n  [];\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nfunction formatSlot(slot) {\n  const rawStart =\n    slot.slot_start_at ||\n    slot.start_at ||\n    slot.start ||\n    slot.datetime ||\n    null;\n\n  if (!rawStart) {\n    return slot.label || \"horario disponible\";\n  }\n\n  const start = new Date(rawStart);\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  const hora = start.toLocaleTimeString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n\n  return `${fecha} a las ${hora}`;\n}\n\nconst availabilityLabel =\n  $json.availability_label ||\n  ctx.availability_label ||\n  \"los próximos días\";\n\nconst service =\n  ctx.service_interest ||\n  $json.service_interest ||\n  \"lavado_premium\";\n\nif (slots.length === 0) {\n  const noSlotsMessage =\n    `Por ahora no encontré horarios disponibles para ${availabilityLabel}. ` +\n    `Si quieres, te puedo derivar para revisar manualmente una hora.`;\n\n  return [{\n    ...$json,\n    message_to_send: noSlotsMessage,\n    message: noSlotsMessage,\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"booking_selection\",\n      intent_last: \"availability_requested\",\n      next_goal: \"manual_availability_review\",\n      last_bot_action: \"no_available_slots_found\",\n      missing_fields: [],\n      booking_options: [],\n      availability_window: $json.availability_window || ctx.availability_window || \"this_week\",\n      availability_label: availabilityLabel\n    },\n    notes: [\n      ...($json.notes || []),\n      \"no_available_slots_found\"\n    ]\n  }];\n}\n\nconst lines = slots.map((slot, index) =\u003e {\n  return `${index + 1}. ${formatSlot(slot)}`;\n});\n\nconst optionNumbers =\n  slots.length === 1\n    ? \"1\"\n    : slots.length === 2\n      ? \"1 o 2\"\n      : `${slots.slice(0, -1).map((_, index) =\u003e index + 1).join(\", \")} o ${slots.length}`;\n\nconst wasSpecificSlotUnavailable =\n  $json.unavailable_specific_slot === true ||\n  $json.state_update?.intent_last === \"manual_slot_unavailable\";\n\nconst intro = wasSpecificSlotUnavailable\n  ? `Ese horario no aparece disponible. Tengo estas opciones cercanas para ${serviceLabel(service)}:\\n\\n`\n  : `Tengo estos horarios disponibles para ${serviceLabel(service)} durante ${availabilityLabel}:\\n\\n`;\n\nconst finalMessage =\n  intro +\n  `${lines.join(\"\\n\")}\\n\\n` +\n  `¿Cuál te acomoda? Puedes responder con ${optionNumbers}.`;\n\nreturn [{\n  ...$json,\n  message_to_send: finalMessage,\n  message: finalMessage,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"booking_selection\",\n    intent_last: \"availability_options_sent\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_available_slots\",\n    missing_fields: [],\n    booking_options: slots,\n    availability_window: $json.availability_window || ctx.availability_window || \"this_week\",\n    availability_label: availabilityLabel\n  },\n  notes: [\n    ...($json.notes || []),\n    \"available_slots_sent\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1552,
+                                                             -160
+                                                         ],
+                                            "id":  "1df77526-8129-4850-9d9b-03b4aab3072d",
+                                            "name":  "build_available_slots_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "d305669c-0dd0-445c-a6a5-cadfe4ce4156",
+                                                                                                         "leftValue":  "={{ $json.availability_request?.check_type === \"specific_slot\" }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             832,
+                                                             -272
+                                                         ],
+                                            "id":  "ed1a67db-1237-4cd7-881f-23c5e92fd68b",
+                                            "name":  "IF specific_slot_requested"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "EI0cTkMum1UCKHbN",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/EI0cTkMum1UCKHbN",
+                                                                                  "cachedResultName":  "6.2 check_calendar_slot"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.availability_request?.lead_id || $json.execution_context?.lead_id }}",
+                                                                                                    "booking_date":  "={{ $json.availability_request?.booking_date || $json.execution_context?.booking_date }}",
+                                                                                                    "booking_time":  "={{ $json.availability_request?.booking_time || $json.execution_context?.booking_time }}",
+                                                                                                    "slot_id":  "={{ $json.availability_request?.slot_id || $json.execution_context?.slot_id }}",
+                                                                                                    "duration_minutes":  "={{ String($json.availability_request?.duration_minutes || $json.execution_context?.duration_minutes || 120) }}",
+                                                                                                    "calendar_id":  "={{ $json.availability_request?.calendar_id || $json.execution_context?.calendar_id || \"primary\" }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "booking_date",
+                                                                                                         "displayName":  "booking_date",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "booking_time",
+                                                                                                         "displayName":  "booking_time",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "slot_id",
+                                                                                                         "displayName":  "slot_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "duration_minutes",
+                                                                                                         "displayName":  "duration_minutes",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "calendar_id",
+                                                                                                         "displayName":  "calendar_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1088,
+                                                             -400
+                                                         ],
+                                            "id":  "3ca86ac5-6077-4f5d-bfdf-d66d8799a086",
+                                            "name":  "6.2 check_calendar_slot"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const ctx = $json.execution_context || {};\nconst req = $json.availability_request || {};\n\nconst available =\n  $json.available === true ||\n  $json.is_available === true ||\n  $json.slot_available === true;\n\nconst bookingDate =\n  $json.booking_date ||\n  req.booking_date ||\n  ctx.booking_date ||\n  null;\n\nconst bookingTime =\n  $json.booking_time ||\n  req.booking_time ||\n  ctx.booking_time ||\n  null;\n\nconst slotId =\n  $json.slot_id ||\n  req.slot_id ||\n  ctx.slot_id ||\n  (\n    bookingDate \u0026\u0026 bookingTime\n      ? `${bookingDate}_${bookingTime}`\n      : null\n  );\n\nfunction formatManualSlot(date, time) {\n  if (!date || !time) return \"ese horario\";\n\n  const start = new Date(`${date}T${time}:00`);\n\n  if (isNaN(start.getTime())) {\n    return `${date} a las ${time}`;\n  }\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  return `${fecha} a las ${time}`;\n}\n\nconst formattedSlot = formatManualSlot(bookingDate, bookingTime);\n\nif (available) {\n  const message =\n    `Perfecto, ${formattedSlot} está disponible. ` +\n    `Para dejarlo reservado, ¿me compartes la dirección exacta donde sería el servicio?`;\n\n  return [{\n    ...$json,\n\n    message_to_send: message,\n    message,\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...($json.state_update || {}),\n\n      stage: \"collecting_address\",\n      intent_last: \"manual_slot_available_address_required\",\n      next_goal: \"collect_address\",\n      last_bot_action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed: true,\n\n      booking_options: [],\n      missing_fields: [\"address\"]\n    },\n\n    notes: [\n      ...($json.notes || []),\n      \"specific_slot_available_address_requested\"\n    ]\n  }];\n}\n\nreturn [{\n  ...$json,\n\n  unavailable_specific_slot: true,\n\n  state_update: {\n    ...($json.state_update || {}),\n\n    stage: \"booking_selection\",\n    intent_last: \"manual_slot_unavailable\",\n    next_goal: \"show_nearby_available_slots\",\n    last_bot_action: \"manual_slot_unavailable\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n\n    availability_confirmed: false,\n\n    availability_label: \"opciones cercanas\",\n    availability_window: \"this_week\",\n\n    missing_fields: []\n  },\n\n  notes: [\n    ...($json.notes || []),\n    \"specific_slot_unavailable\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1296,
+                                                             -400
+                                                         ],
+                                            "id":  "58ea787b-2d95-4a58-92f3-a4c4a2404840",
+                                            "name":  "build_specific_slot_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "dda68f36-67d5-44c1-b4fc-fc68917ec903",
+                                                                                                         "leftValue":  "={{ $json.state_update?.availability_confirmed === true }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1568,
+                                                             -384
+                                                         ],
+                                            "id":  "87f40dde-6021-491a-ae40-d0128ea58772",
+                                            "name":  "IF specific_slot_available"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.23 offer_available_slots":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "normalize_input",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "offer_available_slots",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "6.4 list_available_slots":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "merge_available_slots_with_context",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  1
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "merge_available_slots_with_context":  {
+                                                                                         "main":  [
+                                                                                                      [
+                                                                                                          {
+                                                                                                              "node":  "build_available_slots_message",
+                                                                                                              "type":  "main",
+                                                                                                              "index":  0
+                                                                                                          }
+                                                                                                      ]
+                                                                                                  ]
+                                                                                     },
+                                              "IF specific_slot_requested":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "6.2 check_calendar_slot",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ],
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "6.4 list_available_slots",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "6.2 check_calendar_slot":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "build_specific_slot_result",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "build_specific_slot_result":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "IF specific_slot_available",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "IF specific_slot_available":  {
+                                                                                 "main":  [
+                                                                                              [
+
+                                                                                              ],
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "6.4 list_available_slots",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "offer_available_slots":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "merge_available_slots_with_context",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             },
+                                                                                             {
+                                                                                                 "node":  "IF specific_slot_requested",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 48f9239c",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:27:26.066Z",
+                                                             "id":  580,
+                                                             "workflowId":  "04X7riPbmr4v4L6O",
+                                                             "versionId":  "48f9239c-c23f-4955-9d0b-a22c96ddf151",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

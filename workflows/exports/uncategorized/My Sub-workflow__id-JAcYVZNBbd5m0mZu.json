@@ -1,0 +1,97 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:12:56.000Z",
+    "createdAt":  "2026-04-07T14:13:02.725Z",
+    "id":  "JAcYVZNBbd5m0mZu",
+    "name":  "My Sub-workflow",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "descriptionType":  "manual",
+                                         "toolDescription":  "Use this tool to create an event - Add the user\u0027s name and the service",
+                                         "resource":  "event",
+                                         "operation":  "create",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com",
+                                                          "mode":  "list",
+                                                          "cachedResultName":  "Ahumada Detailing"
+                                                      },
+                                         "start":  "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI(\u0027Start\u0027, ``, \u0027string\u0027) }}",
+                                         "end":  "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI(\u0027End\u0027, ``, \u0027string\u0027) }}",
+                                         "useDefaultReminders":  true,
+                                         "additionalFields":  {
+                                                                  "description":  "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI(\u0027Description\u0027, ``, \u0027string\u0027) }}",
+                                                                  "summary":  "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI(\u0027Summary\u0027, `Title: Client\u0027s name - Service`, \u0027string\u0027) }}"
+                                                              },
+                                         "useN8nTimeZone":  ""
+                                     },
+                      "id":  "ce65d60b-0510-4a18-88c7-d8fa053adc72",
+                      "name":  "Create event",
+                      "type":  "n8n-nodes-base.googleCalendarTool",
+                      "position":  [
+                                       3056,
+                                       976
+                                   ],
+                      "typeVersion":  1.3,
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "mpmI0f0dGSSsN1Rj",
+                                                                          "name":  "Google Calendar account"
+                                                                      }
+                                      }
+                  },
+                  {
+                      "id":  "7a6f5c00-2a57-4ad4-86af-820b67ee0231",
+                      "typeVersion":  1.1,
+                      "name":  "Start",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       2848,
+                                       976
+                                   ],
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     }
+                  }
+              ],
+    "connections":  {
+
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "76f7c585-29f8-4192-85f8-0f5f5bfbad7d",
+    "activeVersionId":  null,
+    "versionCounter":  5,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-07T14:13:02.737Z",
+                       "createdAt":  "2026-04-07T14:13:02.737Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "JAcYVZNBbd5m0mZu",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

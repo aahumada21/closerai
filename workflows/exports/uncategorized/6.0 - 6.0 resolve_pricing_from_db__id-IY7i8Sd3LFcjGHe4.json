@@ -1,0 +1,406 @@
+﻿{
+    "updatedAt":  "2026-05-03T19:14:53.007Z",
+    "createdAt":  "2026-04-21T19:40:50.399Z",
+    "id":  "IY7i8Sd3LFcjGHe4",
+    "name":  "6.0 resolve_pricing_from_db",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH input_values AS (\n  SELECT\n    \u0027{{ String($json.service_code || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS service_code,\n    \u0027{{ String($json.vehicle_type || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS vehicle_type,\n    \u0027{{ String($json.district_key || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS district_key\n),\n\nactive_version AS (\n  SELECT id\n  FROM public.pricing_versions\n  WHERE is_active = true\n    AND valid_from \u003c= NOW()\n  ORDER BY valid_from DESC\n  LIMIT 1\n),\n\nbase_rule AS (\n  SELECT\n    p.pricing_version_id,\n    p.service_code,\n    p.vehicle_type,\n    p.base_price\n  FROM public.service_vehicle_prices p\n  JOIN active_version v\n    ON v.id = p.pricing_version_id\n  JOIN input_values i\n    ON replace(lower(trim(p.service_code)), \u0027 \u0027, \u0027_\u0027) = i.service_code\n   AND replace(lower(trim(p.vehicle_type)), \u0027 \u0027, \u0027_\u0027) = i.vehicle_type\n  WHERE p.is_active = true\n  LIMIT 1\n),\n\ndistrict_rule AS (\n  SELECT\n    d.district_key,\n    d.surcharge\n  FROM public.district_surcharges d\n  JOIN active_version v\n    ON v.id = d.pricing_version_id\n  JOIN input_values i\n    ON replace(lower(trim(d.district_key)), \u0027 \u0027, \u0027_\u0027) IN (i.district_key, \u0027*\u0027)\n  WHERE d.is_active = true\n  ORDER BY\n    CASE\n      WHEN replace(lower(trim(d.district_key)), \u0027 \u0027, \u0027_\u0027) = (SELECT district_key FROM input_values) THEN 0\n      ELSE 1\n    END\n  LIMIT 1\n)\n\nSELECT\n  CASE\n    WHEN b.base_price IS NOT NULL THEN true\n    ELSE false\n  END AS pricing_found,\n\n  i.service_code,\n  i.vehicle_type,\n  i.district_key,\n\n  b.pricing_version_id,\n  b.base_price,\n  COALESCE(d.surcharge, 0) AS surcharge,\n\n  CASE\n    WHEN b.base_price IS NOT NULL\n      THEN b.base_price + COALESCE(d.surcharge, 0)\n    ELSE NULL\n  END AS final_price\n\nFROM input_values i\nLEFT JOIN base_rule b\n  ON true\nLEFT JOIN district_rule d\n  ON true;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "29646759-807a-41f9-b29c-3176f34869f1",
+                      "name":  "get_pricing_from_db",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function norm(value) {\n  return String(value || \"\")\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .toLowerCase()\n    .trim()\n    .replace(/\\s+/g, \"_\");\n}\n\nfunction canonicalService(value) {\n  const service = norm(value);\n\n  const map = {\n    // Premium / profundo\n    lavado_profundo: \"lavado_premium\",\n    profundo: \"lavado_premium\",\n    interior_full: \"lavado_premium\",\n    limpieza_completa: \"lavado_premium\",\n    completo: \"lavado_premium\",\n    lavado_completo: \"lavado_premium\",\n\n    // Básico / esencial / mantención\n    lavado_esencial: \"lavado_basico\",\n    esencial: \"lavado_basico\",\n    basico: \"lavado_basico\",\n    lavado_basico: \"lavado_basico\",\n    lavado_de_mantencion: \"lavado_basico\",\n    lavado_mantencion: \"lavado_basico\",\n    mantencion: \"lavado_basico\",\n    mantenimiento: \"lavado_basico\",\n\n    // Oficiales\n    lavado_premium: \"lavado_premium\",\n    encerado_full: \"encerado_full\",\n    encerado: \"encerado_full\"\n  };\n\n  return map[service] || service;\n}\n\nfunction canonicalVehicle(value) {\n  const vehicle = norm(value);\n\n  const map = {\n    suv: \"suv\",\n    jeep: \"suv\",\n    \"4x4\": \"suv\",\n\n    sedan: \"sedan\",\n    auto: \"sedan\",\n    automovil: \"sedan\",\n\n    camioneta: \"camioneta\",\n    pickup: \"camioneta\",\n    pick_up: \"camioneta\"\n  };\n\n  return map[vehicle] || vehicle;\n}\n\n// Soporta entrada directa o entrada anidada desde execution_context\nconst input =\n  $json.execution_context \u0026\u0026 typeof $json.execution_context === \"object\"\n    ? { ...$json.execution_context, ...$json }\n    : $json;\n\nconst service = canonicalService(\n  input.service_interest || input.service_code || input.service\n);\n\nconst vehicle = canonicalVehicle(\n  input.vehicle_type\n);\n\nconst district = norm(\n  input.district || input.district_key\n);\n\nif (!service || !vehicle || !district) {\n  throw new Error(\n    `Missing pricing inputs: service=${service || \"empty\"}, vehicle=${vehicle || \"empty\"}, district=${district || \"empty\"}`\n  );\n}\n\nreturn [\n  {\n    service_code: service,\n    vehicle_type: vehicle,\n    district_key: district,\n    original_inputs: {\n      service_interest: input.service_interest || null,\n      service_code: input.service_code || null,\n      vehicle_type: input.vehicle_type || null,\n      district: input.district || null,\n      district_key: input.district_key || null\n    },\n    normalized_inputs: {\n      service_code: service,\n      vehicle_type: vehicle,\n      district_key: district\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "e809837f-4540-47d1-a8bb-e367b3a50e1c",
+                      "name":  "normalize_pricing_keys"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  success: false,\n  pricing_found: false,\n  error_code: \"pricing_rule_not_found\",\n  details: {\n    service: $json.service_code || null,\n    vehicle_type: $json.vehicle_type || null,\n    district: $json.district_key || null,\n    base_price: $json.base_price || null,\n    final_price: $json.final_price || null\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       448
+                                   ],
+                      "id":  "eab55dff-a94b-444a-bacd-2f4f52893445",
+                      "name":  "build_pricing_not_found"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  success: true,\n  pricing_found: true,\n  quote: {\n    service: $json.service_code,\n    vehicle_type: $json.vehicle_type,\n    district: $json.district_key,\n    pricing_version_id: $json.pricing_version_id,\n    base_price: Number($json.base_price),\n    surcharge: Number($json.surcharge || 0),\n    price: Number($json.final_price)\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       256
+                                   ],
+                      "id":  "36b4fddb-c007-4196-b48b-29cd91d72dc4",
+                      "name":  "build_pricing_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "79c53f91-06e2-4516-84ed-dfb68704558e",
+                                                                                   "leftValue":  "={{ $json.pricing_found === true \u0026\u0026 Number($json.final_price) \u003e 0 }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "de80c71a-d279-4dca-9e72-ed2c356e30a5",
+                      "name":  "IF pricing_found"
+                  },
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"service_interest\": \"={{$json.execution_context.service_interest}}\",\n  \"vehicle_type\": \"={{$json.execution_context.vehicle_type}}\",\n  \"district\": \"={{$json.execution_context.district}}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "Call 6.0 resolve_pricing_from_db",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_pricing_keys":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "get_pricing_from_db",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "get_pricing_from_db":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "IF pricing_found",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "IF pricing_found":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "build_pricing_result",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "build_pricing_not_found",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Call 6.0 resolve_pricing_from_db":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "normalize_pricing_keys",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "38be212f-672a-4243-9c13-7cb956abf647",
+    "activeVersionId":  "38be212f-672a-4243-9c13-7cb956abf647",
+    "versionCounter":  64,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-21T19:40:50.404Z",
+                       "createdAt":  "2026-04-21T19:40:50.404Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "IY7i8Sd3LFcjGHe4",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T19:14:54.000Z",
+                          "createdAt":  "2026-05-03T19:14:12.463Z",
+                          "versionId":  "38be212f-672a-4243-9c13-7cb956abf647",
+                          "workflowId":  "IY7i8Sd3LFcjGHe4",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "WITH input_values AS (\n  SELECT\n    \u0027{{ String($json.service_code || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS service_code,\n    \u0027{{ String($json.vehicle_type || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS vehicle_type,\n    \u0027{{ String($json.district_key || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS district_key\n),\n\nactive_version AS (\n  SELECT id\n  FROM public.pricing_versions\n  WHERE is_active = true\n    AND valid_from \u003c= NOW()\n  ORDER BY valid_from DESC\n  LIMIT 1\n),\n\nbase_rule AS (\n  SELECT\n    p.pricing_version_id,\n    p.service_code,\n    p.vehicle_type,\n    p.base_price\n  FROM public.service_vehicle_prices p\n  JOIN active_version v\n    ON v.id = p.pricing_version_id\n  JOIN input_values i\n    ON replace(lower(trim(p.service_code)), \u0027 \u0027, \u0027_\u0027) = i.service_code\n   AND replace(lower(trim(p.vehicle_type)), \u0027 \u0027, \u0027_\u0027) = i.vehicle_type\n  WHERE p.is_active = true\n  LIMIT 1\n),\n\ndistrict_rule AS (\n  SELECT\n    d.district_key,\n    d.surcharge\n  FROM public.district_surcharges d\n  JOIN active_version v\n    ON v.id = d.pricing_version_id\n  JOIN input_values i\n    ON replace(lower(trim(d.district_key)), \u0027 \u0027, \u0027_\u0027) IN (i.district_key, \u0027*\u0027)\n  WHERE d.is_active = true\n  ORDER BY\n    CASE\n      WHEN replace(lower(trim(d.district_key)), \u0027 \u0027, \u0027_\u0027) = (SELECT district_key FROM input_values) THEN 0\n      ELSE 1\n    END\n  LIMIT 1\n)\n\nSELECT\n  CASE\n    WHEN b.base_price IS NOT NULL THEN true\n    ELSE false\n  END AS pricing_found,\n\n  i.service_code,\n  i.vehicle_type,\n  i.district_key,\n\n  b.pricing_version_id,\n  b.base_price,\n  COALESCE(d.surcharge, 0) AS surcharge,\n\n  CASE\n    WHEN b.base_price IS NOT NULL\n      THEN b.base_price + COALESCE(d.surcharge, 0)\n    ELSE NULL\n  END AS final_price\n\nFROM input_values i\nLEFT JOIN base_rule b\n  ON true\nLEFT JOIN district_rule d\n  ON true;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "29646759-807a-41f9-b29c-3176f34869f1",
+                                            "name":  "get_pricing_from_db",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function norm(value) {\n  return String(value || \"\")\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .toLowerCase()\n    .trim()\n    .replace(/\\s+/g, \"_\");\n}\n\nfunction canonicalService(value) {\n  const service = norm(value);\n\n  const map = {\n    // Premium / profundo\n    lavado_profundo: \"lavado_premium\",\n    profundo: \"lavado_premium\",\n    interior_full: \"lavado_premium\",\n    limpieza_completa: \"lavado_premium\",\n    completo: \"lavado_premium\",\n    lavado_completo: \"lavado_premium\",\n\n    // Básico / esencial / mantención\n    lavado_esencial: \"lavado_basico\",\n    esencial: \"lavado_basico\",\n    basico: \"lavado_basico\",\n    lavado_basico: \"lavado_basico\",\n    lavado_de_mantencion: \"lavado_basico\",\n    lavado_mantencion: \"lavado_basico\",\n    mantencion: \"lavado_basico\",\n    mantenimiento: \"lavado_basico\",\n\n    // Oficiales\n    lavado_premium: \"lavado_premium\",\n    encerado_full: \"encerado_full\",\n    encerado: \"encerado_full\"\n  };\n\n  return map[service] || service;\n}\n\nfunction canonicalVehicle(value) {\n  const vehicle = norm(value);\n\n  const map = {\n    suv: \"suv\",\n    jeep: \"suv\",\n    \"4x4\": \"suv\",\n\n    sedan: \"sedan\",\n    auto: \"sedan\",\n    automovil: \"sedan\",\n\n    camioneta: \"camioneta\",\n    pickup: \"camioneta\",\n    pick_up: \"camioneta\"\n  };\n\n  return map[vehicle] || vehicle;\n}\n\n// Soporta entrada directa o entrada anidada desde execution_context\nconst input =\n  $json.execution_context \u0026\u0026 typeof $json.execution_context === \"object\"\n    ? { ...$json.execution_context, ...$json }\n    : $json;\n\nconst service = canonicalService(\n  input.service_interest || input.service_code || input.service\n);\n\nconst vehicle = canonicalVehicle(\n  input.vehicle_type\n);\n\nconst district = norm(\n  input.district || input.district_key\n);\n\nif (!service || !vehicle || !district) {\n  throw new Error(\n    `Missing pricing inputs: service=${service || \"empty\"}, vehicle=${vehicle || \"empty\"}, district=${district || \"empty\"}`\n  );\n}\n\nreturn [\n  {\n    service_code: service,\n    vehicle_type: vehicle,\n    district_key: district,\n    original_inputs: {\n      service_interest: input.service_interest || null,\n      service_code: input.service_code || null,\n      vehicle_type: input.vehicle_type || null,\n      district: input.district || null,\n      district_key: input.district_key || null\n    },\n    normalized_inputs: {\n      service_code: service,\n      vehicle_type: vehicle,\n      district_key: district\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "e809837f-4540-47d1-a8bb-e367b3a50e1c",
+                                            "name":  "normalize_pricing_keys"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  success: false,\n  pricing_found: false,\n  error_code: \"pricing_rule_not_found\",\n  details: {\n    service: $json.service_code || null,\n    vehicle_type: $json.vehicle_type || null,\n    district: $json.district_key || null,\n    base_price: $json.base_price || null,\n    final_price: $json.final_price || null\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             448
+                                                         ],
+                                            "id":  "eab55dff-a94b-444a-bacd-2f4f52893445",
+                                            "name":  "build_pricing_not_found"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  success: true,\n  pricing_found: true,\n  quote: {\n    service: $json.service_code,\n    vehicle_type: $json.vehicle_type,\n    district: $json.district_key,\n    pricing_version_id: $json.pricing_version_id,\n    base_price: Number($json.base_price),\n    surcharge: Number($json.surcharge || 0),\n    price: Number($json.final_price)\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             256
+                                                         ],
+                                            "id":  "36b4fddb-c007-4196-b48b-29cd91d72dc4",
+                                            "name":  "build_pricing_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "79c53f91-06e2-4516-84ed-dfb68704558e",
+                                                                                                         "leftValue":  "={{ $json.pricing_found === true \u0026\u0026 Number($json.final_price) \u003e 0 }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "de80c71a-d279-4dca-9e72-ed2c356e30a5",
+                                            "name":  "IF pricing_found"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"service_interest\": \"={{$json.execution_context.service_interest}}\",\n  \"vehicle_type\": \"={{$json.execution_context.vehicle_type}}\",\n  \"district\": \"={{$json.execution_context.district}}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "Call 6.0 resolve_pricing_from_db",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "normalize_pricing_keys":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "get_pricing_from_db",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "get_pricing_from_db":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "IF pricing_found",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "IF pricing_found":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "build_pricing_result",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ],
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "build_pricing_not_found",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "Call 6.0 resolve_pricing_from_db":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "normalize_pricing_keys",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 38be212f",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T19:14:54.756Z",
+                                                             "id":  414,
+                                                             "workflowId":  "IY7i8Sd3LFcjGHe4",
+                                                             "versionId":  "38be212f-672a-4243-9c13-7cb956abf647",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

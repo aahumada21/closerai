@@ -1,0 +1,123 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:06:24.000Z",
+    "createdAt":  "2026-04-13T15:16:29.825Z",
+    "id":  "AYVbNWRJJ7qGXOGA",
+    "name":  "My workflow",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "chatwoot",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -320,
+                                       -64
+                                   ],
+                      "id":  "88eb7b95-8744-4263-947e-0d3133b1a543",
+                      "name":  "Webhook",
+                      "webhookId":  "7d4491a9-1ccc-401e-aee5-0b828f45f7b9"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "c111f92b-b3a3-4fec-a1d6-d51d17b827e0",
+                                                                                     "name":  "trigger_message_id",
+                                                                                     "value":  "={{ $json.body.id }}",
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "ed3fc804-9b87-4909-b530-cc1807e5be2d",
+                                                                                     "name":  "conversation_id",
+                                                                                     "value":  "={{ $json.body.conversation.id }}",
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "43a0065a-56cc-477e-ba8e-49d855d69b98",
+                                                                                     "name":  "mensaje_cliente",
+                                                                                     "value":  "={{ $json.body.content }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "cf1fc825-0721-4b9e-a28f-eb014e77c926",
+                                                                                     "name":  "contacto",
+                                                                                     "value":  "={{ $json.body.sender.name }}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       -128,
+                                       -32
+                                   ],
+                      "id":  "7487cbbe-c29c-466b-9346-990bd8bb97de",
+                      "name":  "Edit Fields"
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Edit Fields",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "e5edfa1f-93bf-4e83-a231-b2a5e0283297",
+    "activeVersionId":  null,
+    "versionCounter":  7,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-13T15:16:29.833Z",
+                       "createdAt":  "2026-04-13T15:16:29.833Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "AYVbNWRJJ7qGXOGA",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

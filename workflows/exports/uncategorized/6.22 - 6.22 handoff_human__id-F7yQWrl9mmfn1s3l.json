@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:45.000Z",
+    "createdAt":  "2026-05-12T18:38:30.139Z",
+    "id":  "F7yQWrl9mmfn1s3l",
+    "name":  "6.22 handoff_human",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "b55e7dc4-83d9-45e1-b08c-9371d38c4802",
+                      "name":  "6.22 handoff_human",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowhandoff_humaninput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "30edc699-3115-49a5-8503-112e5708ac00",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send: $json.execution_context.message || \"Te voy a derivar con una persona para ayudarte mejor.\",\n  db_operations: [\"handoff_cases\", \"messages\", \"lead_state\"],\n  handoff_case: {\n    lead_id: $json.execution_context.lead_id,\n    reason: $json.execution_context.handoff_reason || \"handoff requested\",\n    summary:\n      $json.execution_context.handoff_summary ||\n      $json.context_packet?.conversation?.latest_user_message ||\n      \"Sin resumen\",\n    lead: $json.context_packet?.lead || {},\n    state: $json.context_packet?.state || {},\n    conversation: $json.context_packet?.conversation || {},\n    metadata: {\n      source_action: \"handoff_human\",\n      idempotency_key: $json.execution_context?.idempotency_key || null\n    }\n  },\n  state_update: {\n    ...($json.execution_context.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: []\n  }\n}];"
+                                     },
+                      "id":  "53951328-97e9-43f3-98aa-f26eae53182b",
+                      "name":  "handoff_human",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "6.22 handoff_human":  {
+                                                   "main":  [
+                                                                {
+                                                                    "node":  "normalize_input",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                               },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "handoff_human",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "d10b9263-f557-4fb3-92d3-2f8a3a0f9a44",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:30.144Z",
+                       "createdAt":  "2026-05-12T18:38:30.144Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "F7yQWrl9mmfn1s3l",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

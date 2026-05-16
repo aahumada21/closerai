@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:43.000Z",
+    "createdAt":  "2026-05-12T18:38:29.526Z",
+    "id":  "giQtgQRUuRIFe4zk",
+    "name":  "6.21 schedule_followup",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "ab519514-a8a9-40a7-b6c7-173282b57bb5",
+                      "name":  "6.21 schedule_followup",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowschedule_followupinput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "f424d0bd-6ed3-404f-a889-a5dad1c1a647",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  db_operations: [\"followups\"],\n  followup: {\n    type: $json.execution_context.followup_type,\n    scheduled_for: $json.execution_context.scheduled_for\n  },\n  state_update: {\n    ...$json.execution_context.state_update,\n    last_bot_action: \"schedule_followup\"\n  }\n}];"
+                                     },
+                      "id":  "d28d8317-ee1a-451b-b0d4-c04c0cc5256f",
+                      "name":  "schedule_followup",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "schedule_followup",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            },
+                        "6.21 schedule_followup":  {
+                                                       "main":  [
+                                                                    {
+                                                                        "node":  "normalize_input",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                   }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "2297dc41-2b04-4ab4-be12-e325a87e3b6c",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:29.529Z",
+                       "createdAt":  "2026-05-12T18:38:29.529Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "giQtgQRUuRIFe4zk",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

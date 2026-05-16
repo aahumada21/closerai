@@ -1,0 +1,961 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:28:04.564Z",
+    "createdAt":  "2026-04-29T14:18:16.495Z",
+    "id":  "HG7Wzxf3eRUQ8Cck",
+    "name":  "6.6 cancel_booking",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56949186386\",\n    \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       464,
+                                       352
+                                   ],
+                      "id":  "2790319e-3017-42b3-b5b5-2a75406ab271",
+                      "name":  "normalize_cancel_booking_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status\nFROM public.appointments\nWHERE conversation_id = $1\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.lead_id }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "5ca931b7-5edf-4512-bd18-c1cdbc67a0f2",
+                      "name":  "DB_Check_Active_Appointment_For_Cancel",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "153590ca-f155-4d5d-acc8-4c25fe565a52",
+                      "name":  "merge_cancel_context_with_appointment"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "e2f691e1-b85d-490e-a47c-47ed64bb05c1",
+                                                                                   "leftValue":  "={{ !!$json.id }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1104,
+                                       352
+                                   ],
+                      "id":  "e80b7280-13f6-4dd8-bdf8-65b6154eacad",
+                      "name":  "IF active_appointment_exists"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [\n  {\n    json: {\n      ...$json,\n      success: true,\n      action: \"cancel_booking\",\n      message_to_send:\n        \"No encontr� una reserva activa a tu nombre. Si quieres, puedo ayudarte a agendar una nueva.\",\n      db_operations: [\"messages\", \"lead_state\"],\n      state_update: {\n        ...($json.state_update || {}),\n        last_bot_action: \"cancel_booking_no_active_appointment\",\n        next_goal: \"offer_booking\",\n        missing_fields: []\n      },\n      execution_result: {\n        success: true,\n        action: \"cancel_booking\",\n        message_sent: false,\n        state_updated: true,\n        db_records_created: [\"messages\", \"lead_state\"],\n        notes: [\"cancel_booking_no_active_appointment\"]\n      },\n      notes: [...($json.notes || []), \"cancel_booking_no_active_appointment\"]\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1360,
+                                       432
+                                   ],
+                      "id":  "1c0a05a9-5e84-45e3-be9b-8afc9c68f415",
+                      "name":  "build_cancel_no_active_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "delete",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "={{ $json.execution_context.calendar_id }}",
+                                                          "mode":  "id"
+                                                      },
+                                         "eventId":  "={{ $json.event_id }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1360,
+                                       288
+                                   ],
+                      "id":  "102cd782-4d93-4887-92f3-6e25cf526dd2",
+                      "name":  "Delete an event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "mpmI0f0dGSSsN1Rj",
+                                                                          "name":  "Google Calendar account"
+                                                                      }
+                                      },
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1568,
+                                       288
+                                   ],
+                      "id":  "a4c4885f-cd25-4d87-ac48-8454f5a1a24c",
+                      "name":  "Merge Context Delete"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.appointments\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  cancel_reason = NULLIF(\u0027{{ ($json.execution_context.cancellation_reason || \"cancelled_by_client\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027)\nWHERE id = {{ $json.id }}\nRETURNING\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  cancelled_at,\n  cancel_reason;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1776,
+                                       288
+                                   ],
+                      "id":  "fb7cf09f-8a05-4b80-8990-5213f635e79a",
+                      "name":  "DB_Update_Appointment_Cancelled",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1984,
+                                       288
+                                   ],
+                      "id":  "9a3f041e-da71-4bac-919d-e5708ef8fc4d",
+                      "name":  "merge_cancelled_appointment_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.followups\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  skipped_reason = \u0027appointment_cancelled\u0027\nWHERE lead_id = \u0027{{ $json.execution_context.lead_id }}\u0027::uuid\n  AND status = \u0027pending\u0027\n  AND (\n    metadata-\u003e\u003e\u0027appointment_event_id\u0027 = \u0027{{ $json.event_id }}\u0027\n    OR followup_type IN (\n      \u0027appointment_reminder_1d\u0027,\n      \u0027appointment_reminder_1h\u0027,\n      \u0027pre_service_instructions_24h\u0027,\n      \u0027notify_on_the_way_30m\u0027,\n      \u0027post_service_review_24h\u0027,\n      \u0027post_service_referral_72h\u0027\n    )\n  )\nRETURNING id, lead_id, followup_type, status, cancelled_at;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2192,
+                                       288
+                                   ],
+                      "id":  "f59e3ca3-26f0-43f6-9282-8b14775a67b4",
+                      "name":  "DB_Cancel_Appointment_Followups",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       2416,
+                                       288
+                                   ],
+                      "id":  "162a7336-fd01-4c22-98d6-28b9cc7e9e42",
+                      "name":  "merge_cancel_followups_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const eventId = $json.event_id || $json.appointment?.event_id || null;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      success: true,\n      action: \"cancel_booking\",\n\n      message_to_send:\n        \"Listo, dej� cancelada tu reserva. Si m�s adelante quieres reagendar, me escribes y revisamos un nuevo horario.\",\n\n      db_operations: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n\n      state_update: {\n        ...($json.state_update || {}),\n        stage: \"cancelled\",\n        next_goal: \"reactivate_later\",\n        last_bot_action: \"cancel_booking\",\n        cancellation_reason:\n          $json.execution_context?.cancellation_reason || \"cancelled_by_client\",\n        last_appointment_event_id: eventId,\n        missing_fields: []\n      },\n\n      execution_result: {\n        success: true,\n        action: \"cancel_booking\",\n        message_sent: false,\n        state_updated: true,\n        db_records_created: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n        notes: [\n          \"booking_cancelled\",\n          eventId ? `event_id:${eventId}` : \"event_id_missing\"\n        ]\n      },\n\n      notes: [...($json.notes || []), \"booking_cancelled\"]\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2624,
+                                       288
+                                   ],
+                      "id":  "2826ffee-b4ef-45fb-ad12-5eb9f228c865",
+                      "name":  "build_cancel_booking_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"cancel_booking\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  decision: $json.decision || original.decision || {}\n};\n\nconst outcome =\n  data.outcome ||\n  data.execution_result?.outcome ||\n  data.result?.outcome ||\n  (\n    data.active_appointment_found === false ||\n    data.active_appointment === null ||\n    data.appointment === null\n      ? \"no_active_appointment\"\n      : \"active_appointment_found\"\n  );\n\nconst finalMessage =\n  data.message_to_send ||\n  data.message ||\n  (\n    outcome === \"no_active_appointment\"\n      ? \"Revisé y no encontré una reserva activa asociada a este número. Si quieres, te puedo ayudar a agendar una nueva hora.\"\n      : \"Listo, dejé cancelada tu reserva. Si más adelante quieres reagendar, te puedo ayudar por aquí.\"\n  );\n\nreturn [{\n  ...data,\n\n  action: \"cancel_booking\",\n  outcome,\n\n  message_to_send: finalMessage,\n  message: finalMessage,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: outcome === \"active_appointment_found\"\n      ? \"cancelled\"\n      : data.context_packet?.state?.stage,\n    intent_last: outcome,\n    next_goal: outcome === \"no_active_appointment\"\n      ? \"clarify_or_book\"\n      : \"reactivation\",\n    last_bot_action: outcome === \"no_active_appointment\"\n      ? \"cancel_no_active_appointment\"\n      : \"cancel_booking\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    ...(data.execution_result || {}),\n    success: true,\n    action: \"cancel_booking\",\n    outcome,\n    bot: finalMessage\n  },\n\n  notes: [\n    ...(data.notes || []),\n    `cancel_booking_outcome_${outcome}`\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2848,
+                                       448
+                                   ],
+                      "id":  "d6d2f7a9-1ed2-4221-857d-5b8ace8d5608",
+                      "name":  "normalize_cancel_booking_result"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "normalize_cancel_booking_input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "normalize_cancel_booking_input":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "DB_Check_Active_Appointment_For_Cancel",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                },
+                                                                                {
+                                                                                    "node":  "merge_cancel_context_with_appointment",
+                                                                                    "type":  "main",
+                                                                                    "index":  1
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "DB_Check_Active_Appointment_For_Cancel":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "merge_cancel_context_with_appointment",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                        "merge_cancel_context_with_appointment":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "IF active_appointment_exists",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                        "IF active_appointment_exists":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Delete an event",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              },
+                                                                              {
+                                                                                  "node":  "Merge Context Delete",
+                                                                                  "type":  "main",
+                                                                                  "index":  1
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "node":  "build_cancel_no_active_result",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Delete an event":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Merge Context Delete",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Merge Context Delete":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "DB_Update_Appointment_Cancelled",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      },
+                                                                      {
+                                                                          "node":  "merge_cancelled_appointment_with_context",
+                                                                          "type":  "main",
+                                                                          "index":  1
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "DB_Update_Appointment_Cancelled":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "merge_cancelled_appointment_with_context",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "merge_cancelled_appointment_with_context":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "DB_Cancel_Appointment_Followups",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          },
+                                                                                          {
+                                                                                              "node":  "merge_cancel_followups_with_context",
+                                                                                              "type":  "main",
+                                                                                              "index":  1
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                        "DB_Cancel_Appointment_Followups":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "merge_cancel_followups_with_context",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "merge_cancel_followups_with_context":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "build_cancel_booking_result",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                },
+                        "build_cancel_no_active_result":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "normalize_cancel_booking_result",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "build_cancel_booking_result":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "normalize_cancel_booking_result",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate",
+                     "callerPolicy":  "workflowsFromSameOwner"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "c3ffa04c-8ce5-4d8c-b54f-285f4a160067",
+    "activeVersionId":  "c3ffa04c-8ce5-4d8c-b54f-285f4a160067",
+    "versionCounter":  76,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-29T14:18:16.503Z",
+                       "createdAt":  "2026-04-29T14:18:16.503Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "HG7Wzxf3eRUQ8Cck",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:28:06.000Z",
+                          "createdAt":  "2026-05-13T14:28:04.576Z",
+                          "versionId":  "c3ffa04c-8ce5-4d8c-b54f-285f4a160067",
+                          "workflowId":  "HG7Wzxf3eRUQ8Cck",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56949186386\",\n    \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             464,
+                                                             352
+                                                         ],
+                                            "id":  "2790319e-3017-42b3-b5b5-2a75406ab271",
+                                            "name":  "normalize_cancel_booking_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status\nFROM public.appointments\nWHERE conversation_id = $1\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ $json.lead_id }}"
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "5ca931b7-5edf-4512-bd18-c1cdbc67a0f2",
+                                            "name":  "DB_Check_Active_Appointment_For_Cancel",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "153590ca-f155-4d5d-acc8-4c25fe565a52",
+                                            "name":  "merge_cancel_context_with_appointment"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "e2f691e1-b85d-490e-a47c-47ed64bb05c1",
+                                                                                                         "leftValue":  "={{ !!$json.id }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1104,
+                                                             352
+                                                         ],
+                                            "id":  "e80b7280-13f6-4dd8-bdf8-65b6154eacad",
+                                            "name":  "IF active_appointment_exists"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [\n  {\n    json: {\n      ...$json,\n      success: true,\n      action: \"cancel_booking\",\n      message_to_send:\n        \"No encontr� una reserva activa a tu nombre. Si quieres, puedo ayudarte a agendar una nueva.\",\n      db_operations: [\"messages\", \"lead_state\"],\n      state_update: {\n        ...($json.state_update || {}),\n        last_bot_action: \"cancel_booking_no_active_appointment\",\n        next_goal: \"offer_booking\",\n        missing_fields: []\n      },\n      execution_result: {\n        success: true,\n        action: \"cancel_booking\",\n        message_sent: false,\n        state_updated: true,\n        db_records_created: [\"messages\", \"lead_state\"],\n        notes: [\"cancel_booking_no_active_appointment\"]\n      },\n      notes: [...($json.notes || []), \"cancel_booking_no_active_appointment\"]\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1360,
+                                                             432
+                                                         ],
+                                            "id":  "1c0a05a9-5e84-45e3-be9b-8afc9c68f415",
+                                            "name":  "build_cancel_no_active_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "delete",
+                                                               "calendar":  {
+                                                                                "__rl":  true,
+                                                                                "value":  "={{ $json.execution_context.calendar_id }}",
+                                                                                "mode":  "id"
+                                                                            },
+                                                               "eventId":  "={{ $json.event_id }}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.googleCalendar",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1360,
+                                                             288
+                                                         ],
+                                            "id":  "102cd782-4d93-4887-92f3-6e25cf526dd2",
+                                            "name":  "Delete an event",
+                                            "credentials":  {
+                                                                "googleCalendarOAuth2Api":  {
+                                                                                                "id":  "mpmI0f0dGSSsN1Rj",
+                                                                                                "name":  "Google Calendar account"
+                                                                                            }
+                                                            },
+                                            "onError":  "continueRegularOutput"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1568,
+                                                             288
+                                                         ],
+                                            "id":  "a4c4885f-cd25-4d87-ac48-8454f5a1a24c",
+                                            "name":  "Merge Context Delete"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.appointments\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  cancel_reason = NULLIF(\u0027{{ ($json.execution_context.cancellation_reason || \"cancelled_by_client\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027)\nWHERE id = {{ $json.id }}\nRETURNING\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  cancelled_at,\n  cancel_reason;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1776,
+                                                             288
+                                                         ],
+                                            "id":  "fb7cf09f-8a05-4b80-8990-5213f635e79a",
+                                            "name":  "DB_Update_Appointment_Cancelled",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1984,
+                                                             288
+                                                         ],
+                                            "id":  "9a3f041e-da71-4bac-919d-e5708ef8fc4d",
+                                            "name":  "merge_cancelled_appointment_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.followups\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  skipped_reason = \u0027appointment_cancelled\u0027\nWHERE lead_id = \u0027{{ $json.execution_context.lead_id }}\u0027::uuid\n  AND status = \u0027pending\u0027\n  AND (\n    metadata-\u003e\u003e\u0027appointment_event_id\u0027 = \u0027{{ $json.event_id }}\u0027\n    OR followup_type IN (\n      \u0027appointment_reminder_1d\u0027,\n      \u0027appointment_reminder_1h\u0027,\n      \u0027pre_service_instructions_24h\u0027,\n      \u0027notify_on_the_way_30m\u0027,\n      \u0027post_service_review_24h\u0027,\n      \u0027post_service_referral_72h\u0027\n    )\n  )\nRETURNING id, lead_id, followup_type, status, cancelled_at;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2192,
+                                                             288
+                                                         ],
+                                            "id":  "f59e3ca3-26f0-43f6-9282-8b14775a67b4",
+                                            "name":  "DB_Cancel_Appointment_Followups",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             2416,
+                                                             288
+                                                         ],
+                                            "id":  "162a7336-fd01-4c22-98d6-28b9cc7e9e42",
+                                            "name":  "merge_cancel_followups_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const eventId = $json.event_id || $json.appointment?.event_id || null;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      success: true,\n      action: \"cancel_booking\",\n\n      message_to_send:\n        \"Listo, dej� cancelada tu reserva. Si m�s adelante quieres reagendar, me escribes y revisamos un nuevo horario.\",\n\n      db_operations: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n\n      state_update: {\n        ...($json.state_update || {}),\n        stage: \"cancelled\",\n        next_goal: \"reactivate_later\",\n        last_bot_action: \"cancel_booking\",\n        cancellation_reason:\n          $json.execution_context?.cancellation_reason || \"cancelled_by_client\",\n        last_appointment_event_id: eventId,\n        missing_fields: []\n      },\n\n      execution_result: {\n        success: true,\n        action: \"cancel_booking\",\n        message_sent: false,\n        state_updated: true,\n        db_records_created: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n        notes: [\n          \"booking_cancelled\",\n          eventId ? `event_id:${eventId}` : \"event_id_missing\"\n        ]\n      },\n\n      notes: [...($json.notes || []), \"booking_cancelled\"]\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2624,
+                                                             288
+                                                         ],
+                                            "id":  "2826ffee-b4ef-45fb-ad12-5eb9f228c865",
+                                            "name":  "build_cancel_booking_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"cancel_booking\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  decision: $json.decision || original.decision || {}\n};\n\nconst outcome =\n  data.outcome ||\n  data.execution_result?.outcome ||\n  data.result?.outcome ||\n  (\n    data.active_appointment_found === false ||\n    data.active_appointment === null ||\n    data.appointment === null\n      ? \"no_active_appointment\"\n      : \"active_appointment_found\"\n  );\n\nconst finalMessage =\n  data.message_to_send ||\n  data.message ||\n  (\n    outcome === \"no_active_appointment\"\n      ? \"Revisé y no encontré una reserva activa asociada a este número. Si quieres, te puedo ayudar a agendar una nueva hora.\"\n      : \"Listo, dejé cancelada tu reserva. Si más adelante quieres reagendar, te puedo ayudar por aquí.\"\n  );\n\nreturn [{\n  ...data,\n\n  action: \"cancel_booking\",\n  outcome,\n\n  message_to_send: finalMessage,\n  message: finalMessage,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: outcome === \"active_appointment_found\"\n      ? \"cancelled\"\n      : data.context_packet?.state?.stage,\n    intent_last: outcome,\n    next_goal: outcome === \"no_active_appointment\"\n      ? \"clarify_or_book\"\n      : \"reactivation\",\n    last_bot_action: outcome === \"no_active_appointment\"\n      ? \"cancel_no_active_appointment\"\n      : \"cancel_booking\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    ...(data.execution_result || {}),\n    success: true,\n    action: \"cancel_booking\",\n    outcome,\n    bot: finalMessage\n  },\n\n  notes: [\n    ...(data.notes || []),\n    `cancel_booking_outcome_${outcome}`\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2848,
+                                                             448
+                                                         ],
+                                            "id":  "d6d2f7a9-1ed2-4221-857d-5b8ace8d5608",
+                                            "name":  "normalize_cancel_booking_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "normalize_cancel_booking_input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "normalize_cancel_booking_input":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "DB_Check_Active_Appointment_For_Cancel",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      },
+                                                                                                      {
+                                                                                                          "node":  "merge_cancel_context_with_appointment",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  1
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "DB_Check_Active_Appointment_For_Cancel":  {
+                                                                                             "main":  [
+                                                                                                          [
+                                                                                                              {
+                                                                                                                  "node":  "merge_cancel_context_with_appointment",
+                                                                                                                  "type":  "main",
+                                                                                                                  "index":  0
+                                                                                                              }
+                                                                                                          ]
+                                                                                                      ]
+                                                                                         },
+                                              "merge_cancel_context_with_appointment":  {
+                                                                                            "main":  [
+                                                                                                         [
+                                                                                                             {
+                                                                                                                 "node":  "IF active_appointment_exists",
+                                                                                                                 "type":  "main",
+                                                                                                                 "index":  0
+                                                                                                             }
+                                                                                                         ]
+                                                                                                     ]
+                                                                                        },
+                                              "IF active_appointment_exists":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "Delete an event",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "node":  "Merge Context Delete",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  1
+                                                                                                    }
+                                                                                                ],
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "build_cancel_no_active_result",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "Delete an event":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "Merge Context Delete",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "Merge Context Delete":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "DB_Update_Appointment_Cancelled",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            },
+                                                                                            {
+                                                                                                "node":  "merge_cancelled_appointment_with_context",
+                                                                                                "type":  "main",
+                                                                                                "index":  1
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "DB_Update_Appointment_Cancelled":  {
+                                                                                      "main":  [
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "merge_cancelled_appointment_with_context",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ]
+                                                                                               ]
+                                                                                  },
+                                              "merge_cancelled_appointment_with_context":  {
+                                                                                               "main":  [
+                                                                                                            [
+                                                                                                                {
+                                                                                                                    "node":  "DB_Cancel_Appointment_Followups",
+                                                                                                                    "type":  "main",
+                                                                                                                    "index":  0
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "node":  "merge_cancel_followups_with_context",
+                                                                                                                    "type":  "main",
+                                                                                                                    "index":  1
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        ]
+                                                                                           },
+                                              "DB_Cancel_Appointment_Followups":  {
+                                                                                      "main":  [
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "merge_cancel_followups_with_context",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ]
+                                                                                               ]
+                                                                                  },
+                                              "merge_cancel_followups_with_context":  {
+                                                                                          "main":  [
+                                                                                                       [
+                                                                                                           {
+                                                                                                               "node":  "build_cancel_booking_result",
+                                                                                                               "type":  "main",
+                                                                                                               "index":  0
+                                                                                                           }
+                                                                                                       ]
+                                                                                                   ]
+                                                                                      },
+                                              "build_cancel_no_active_result":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "normalize_cancel_booking_result",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "build_cancel_booking_result":  {
+                                                                                  "main":  [
+                                                                                               [
+                                                                                                   {
+                                                                                                       "node":  "normalize_cancel_booking_result",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   }
+                                                                                               ]
+                                                                                           ]
+                                                                              }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version c3ffa04c",
+                          "description":  "",
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:28:06.747Z",
+                                                             "id":  582,
+                                                             "workflowId":  "HG7Wzxf3eRUQ8Cck",
+                                                             "versionId":  "c3ffa04c-8ce5-4d8c-b54f-285f4a160067",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

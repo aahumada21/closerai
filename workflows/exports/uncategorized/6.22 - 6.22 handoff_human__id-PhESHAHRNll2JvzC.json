@@ -1,0 +1,607 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:29:42.798Z",
+    "createdAt":  "2026-05-13T14:04:54.388Z",
+    "id":  "PhESHAHRNll2JvzC",
+    "name":  "6.22 handoff_human",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                     },
+                      "id":  "c5647f9e-b7f6-4078-b37e-d4d7a59239c8",
+                      "name":  "6.22 handoff_human",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       192,
+                                       -112
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowhandoff_humaninput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "df0c83f4-edae-4754-b5d3-b3cb1f1c5e5b",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       416,
+                                       -112
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send: $json.execution_context.message || \"Te voy a derivar con una persona para ayudarte mejor.\",\n  db_operations: [\"handoff_cases\", \"messages\", \"lead_state\"],\n  handoff_case: {\n    lead_id: $json.execution_context.lead_id,\n    reason: $json.execution_context.handoff_reason || \"handoff requested\",\n    summary:\n      $json.execution_context.handoff_summary ||\n      $json.context_packet?.conversation?.latest_user_message ||\n      \"Sin resumen\",\n    lead: $json.context_packet?.lead || {},\n    state: $json.context_packet?.state || {},\n    conversation: $json.context_packet?.conversation || {},\n    metadata: {\n      source_action: \"handoff_human\",\n      idempotency_key: $json.execution_context?.idempotency_key || null\n    }\n  },\n  state_update: {\n    ...($json.execution_context.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: []\n  }\n}];"
+                                     },
+                      "id":  "9de5777c-f253-41b5-9d08-ad33796f484a",
+                      "name":  "handoff_human",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       640,
+                                       -112
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "xvmK0kUsHy6KIu1k",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/xvmK0kUsHy6KIu1k",
+                                                            "cachedResultName":  "8.0 human_handof"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.handoff_case.lead_id }}",
+                                                                              "reason":  "={{$json.handoff_case.reason}}",
+                                                                              "summary":  "={{$json.handoff_case.summary}}",
+                                                                              "lead":  "={{ JSON.stringify($json.handoff_case.lead || {}) }}",
+                                                                              "state":  "={{ JSON.stringify($json.handoff_case.state || {}) }}",
+                                                                              "conversation":  "={{ JSON.stringify($json.handoff_case.conversation || {}) }}",
+                                                                              "metadata":  "={{ JSON.stringify($json.handoff_case.metadata || {}) }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "reason",
+                                                                                   "displayName":  "reason",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "summary",
+                                                                                   "displayName":  "summary",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "lead",
+                                                                                   "displayName":  "lead",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "state",
+                                                                                   "displayName":  "state",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "conversation",
+                                                                                   "displayName":  "conversation",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "metadata",
+                                                                                   "displayName":  "metadata",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       960,
+                                       -128
+                                   ],
+                      "id":  "3c7f484e-0e26-4ed2-9b1a-12acac4e479c",
+                      "name":  "8.0 human_handof"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1392,
+                                       -128
+                                   ],
+                      "id":  "f55e9682-6126-4d46-944f-5dbb5399c1e8",
+                      "name":  "merge_handoff_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  lead_id: $json.lead_id || null,\n  reason: $json.reason || \"handoff_requested\",\n  summary: $json.summary || \"Sin resumen\",\n  lead: parseMaybeJson($json.lead, {}),\n  state: parseMaybeJson($json.state, {}),\n  conversation: parseMaybeJson($json.conversation, {}),\n  metadata: parseMaybeJson($json.metadata, {})\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1168,
+                                       -128
+                                   ],
+                      "id":  "27ec4ca9-c571-43dc-bd19-face8636feac",
+                      "name":  "normalize_handoff_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const handoffCaseId =\n  $json.handoff_case_id ||\n  $json.handoff?.handoff_case_id ||\n  null;\n\nconst assignedTo =\n  $json.assigned_to ||\n  $json.handoff?.assigned_to ||\n  null;\n\nconst assignedTeam =\n  $json.assigned_team ||\n  $json.handoff?.assigned_team ||\n  null;\n\nconst notificationSent =\n  $json.notification_sent === true ||\n  $json.handoff?.notification_sent === true;\n\nconst existingStateUpdate = $json.state_update || {};\n\nreturn [\n  {\n    ...$json,\n\n    handoff: true,\n    handoff_case_id: handoffCaseId,\n    assigned_to: assignedTo,\n    assigned_team: assignedTeam,\n    notification_sent: notificationSent,\n\n    state_update: {\n      ...existingStateUpdate,\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    },\n\n    db_operations: [\n      ...new Set([\n        ...($json.db_operations || []),\n        \"handoff_cases\",\n        \"messages\",\n        \"lead_state\"\n      ])\n    ],\n\n    notes: [\n      ...($json.notes || []),\n      \"handoff_case_created\",\n      notificationSent\n        ? \"handoff_notification_sent\"\n        : \"handoff_notification_not_confirmed\"\n    ]\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1600,
+                                       -128
+                                   ],
+                      "id":  "e46816ac-3b2e-41d7-a146-95000589c584",
+                      "name":  "normalize_handoff_result"
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "handoff_human",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "6.22 handoff_human":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "normalize_input",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "8.0 human_handof":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "normalize_handoff_input",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "merge_handoff_with_context":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "normalize_handoff_result",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "normalize_handoff_input":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "merge_handoff_with_context",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "handoff_human":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "8.0 human_handof",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               },
+                                                               {
+                                                                   "node":  "merge_handoff_with_context",
+                                                                   "type":  "main",
+                                                                   "index":  1
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "0473e172-dd3b-41fe-9800-86832b18e157",
+    "activeVersionId":  "0473e172-dd3b-41fe-9800-86832b18e157",
+    "versionCounter":  11,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:04:54.392Z",
+                       "createdAt":  "2026-05-13T14:04:54.392Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "PhESHAHRNll2JvzC",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:30:33.000Z",
+                          "createdAt":  "2026-05-13T14:29:42.800Z",
+                          "versionId":  "0473e172-dd3b-41fe-9800-86832b18e157",
+                          "workflowId":  "PhESHAHRNll2JvzC",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                                           },
+                                            "id":  "c5647f9e-b7f6-4078-b37e-d4d7a59239c8",
+                                            "name":  "6.22 handoff_human",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             192,
+                                                             -112
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowhandoff_humaninput_normalized\"\n  ]\n}];"
+                                                           },
+                                            "id":  "df0c83f4-edae-4754-b5d3-b3cb1f1c5e5b",
+                                            "name":  "normalize_input",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             416,
+                                                             -112
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n  message_to_send: $json.execution_context.message || \"Te voy a derivar con una persona para ayudarte mejor.\",\n  db_operations: [\"handoff_cases\", \"messages\", \"lead_state\"],\n  handoff_case: {\n    lead_id: $json.execution_context.lead_id,\n    reason: $json.execution_context.handoff_reason || \"handoff requested\",\n    summary:\n      $json.execution_context.handoff_summary ||\n      $json.context_packet?.conversation?.latest_user_message ||\n      \"Sin resumen\",\n    lead: $json.context_packet?.lead || {},\n    state: $json.context_packet?.state || {},\n    conversation: $json.context_packet?.conversation || {},\n    metadata: {\n      source_action: \"handoff_human\",\n      idempotency_key: $json.execution_context?.idempotency_key || null\n    }\n  },\n  state_update: {\n    ...($json.execution_context.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: []\n  }\n}];"
+                                                           },
+                                            "id":  "9de5777c-f253-41b5-9d08-ad33796f484a",
+                                            "name":  "handoff_human",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             640,
+                                                             -112
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "xvmK0kUsHy6KIu1k",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/xvmK0kUsHy6KIu1k",
+                                                                                  "cachedResultName":  "8.0 human_handof"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.handoff_case.lead_id }}",
+                                                                                                    "reason":  "={{$json.handoff_case.reason}}",
+                                                                                                    "summary":  "={{$json.handoff_case.summary}}",
+                                                                                                    "lead":  "={{ JSON.stringify($json.handoff_case.lead || {}) }}",
+                                                                                                    "state":  "={{ JSON.stringify($json.handoff_case.state || {}) }}",
+                                                                                                    "conversation":  "={{ JSON.stringify($json.handoff_case.conversation || {}) }}",
+                                                                                                    "metadata":  "={{ JSON.stringify($json.handoff_case.metadata || {}) }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "reason",
+                                                                                                         "displayName":  "reason",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "summary",
+                                                                                                         "displayName":  "summary",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "lead",
+                                                                                                         "displayName":  "lead",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "state",
+                                                                                                         "displayName":  "state",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "conversation",
+                                                                                                         "displayName":  "conversation",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "metadata",
+                                                                                                         "displayName":  "metadata",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             960,
+                                                             -128
+                                                         ],
+                                            "id":  "3c7f484e-0e26-4ed2-9b1a-12acac4e479c",
+                                            "name":  "8.0 human_handof"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1392,
+                                                             -128
+                                                         ],
+                                            "id":  "f55e9682-6126-4d46-944f-5dbb5399c1e8",
+                                            "name":  "merge_handoff_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  lead_id: $json.lead_id || null,\n  reason: $json.reason || \"handoff_requested\",\n  summary: $json.summary || \"Sin resumen\",\n  lead: parseMaybeJson($json.lead, {}),\n  state: parseMaybeJson($json.state, {}),\n  conversation: parseMaybeJson($json.conversation, {}),\n  metadata: parseMaybeJson($json.metadata, {})\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1168,
+                                                             -128
+                                                         ],
+                                            "id":  "27ec4ca9-c571-43dc-bd19-face8636feac",
+                                            "name":  "normalize_handoff_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const handoffCaseId =\n  $json.handoff_case_id ||\n  $json.handoff?.handoff_case_id ||\n  null;\n\nconst assignedTo =\n  $json.assigned_to ||\n  $json.handoff?.assigned_to ||\n  null;\n\nconst assignedTeam =\n  $json.assigned_team ||\n  $json.handoff?.assigned_team ||\n  null;\n\nconst notificationSent =\n  $json.notification_sent === true ||\n  $json.handoff?.notification_sent === true;\n\nconst existingStateUpdate = $json.state_update || {};\n\nreturn [\n  {\n    ...$json,\n\n    handoff: true,\n    handoff_case_id: handoffCaseId,\n    assigned_to: assignedTo,\n    assigned_team: assignedTeam,\n    notification_sent: notificationSent,\n\n    state_update: {\n      ...existingStateUpdate,\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    },\n\n    db_operations: [\n      ...new Set([\n        ...($json.db_operations || []),\n        \"handoff_cases\",\n        \"messages\",\n        \"lead_state\"\n      ])\n    ],\n\n    notes: [\n      ...($json.notes || []),\n      \"handoff_case_created\",\n      notificationSent\n        ? \"handoff_notification_sent\"\n        : \"handoff_notification_not_confirmed\"\n    ]\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1600,
+                                                             -128
+                                                         ],
+                                            "id":  "e46816ac-3b2e-41d7-a146-95000589c584",
+                                            "name":  "normalize_handoff_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "handoff_human",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "6.22 handoff_human":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "normalize_input",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "8.0 human_handof":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "normalize_handoff_input",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "merge_handoff_with_context":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "normalize_handoff_result",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "normalize_handoff_input":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "merge_handoff_with_context",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "handoff_human":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "8.0 human_handof",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     },
+                                                                                     {
+                                                                                         "node":  "merge_handoff_with_context",
+                                                                                         "type":  "main",
+                                                                                         "index":  1
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 0473e172",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:30:33.515Z",
+                                                             "id":  588,
+                                                             "workflowId":  "PhESHAHRNll2JvzC",
+                                                             "versionId":  "0473e172-dd3b-41fe-9800-86832b18e157",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

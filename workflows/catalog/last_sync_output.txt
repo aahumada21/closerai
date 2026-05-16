@@ -1,0 +1,8 @@
+Falta variable de entorno: N8N_API_URL
+En C:\Dev\Closer IA Agent\N8N\scripts\n8n_sync_workflows.ps1: 7 Carácter: 5
++     throw "Falta variable de entorno: $Name"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Falta variable de entorno: N8N_API_URL:String) [], RuntimeException
+    + FullyQualifiedErrorId : Falta variable de entorno: N8N_API_URL
+ 
+

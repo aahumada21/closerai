@@ -1,0 +1,368 @@
+﻿{
+    "updatedAt":  "2026-05-03T19:29:32.068Z",
+    "createdAt":  "2026-04-27T15:28:50.068Z",
+    "id":  "SWHJNhMwBbbNsZiU",
+    "name":  "6.4 list_available_slots",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\"  \n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const slots = Array.isArray($json.slots) ? $json.slots : [];\n\nreturn [{\n  ...$json,\n  success: true,\n  slots,\n  available_slots: slots,\n  booking_options: slots,\n  availability_window: $json.availability_window || \"this_week\",\n  availability_label: $json.availability_label || \"los próximos días\",\n  checked_at: $json.checked_at || new Date().toISOString()\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1280,
+                                       352
+                                   ],
+                      "id":  "5a8e7f1e-b8fe-4a3d-a779-d3d9208580eb",
+                      "name":  "build_available_slots_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nfunction toNumber(value, fallback) {\n  const n = Number(value);\n  return Number.isFinite(n) ? n : fallback;\n}\n\nconst leadId = input.lead_id || null;\nconst calendarId = input.calendar_id || \"primary\";\nconst durationMinutes = toNumber(input.duration_minutes, 120);\nconst daysAhead = toNumber(input.days_ahead, 7);\nconst startOffsetDays = toNumber(input.start_offset_days, 0);\nconst maxSlots = toNumber(input.max_slots, 3);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id\");\n}\n\nreturn [{\n  lead_id: leadId,\n  calendar_id: calendarId,\n  duration_minutes: durationMinutes,\n  days_ahead: daysAhead,\n  start_offset_days: startOffsetDays,\n  max_slots: maxSlots,\n\n  availability_window: input.availability_window || \"this_week\",\n  availability_label: input.availability_label || \"los próximos días\",\n\n  service_interest: input.service_interest || null,\n  vehicle_type: input.vehicle_type || null,\n  district: input.district || null,\n  timezone: \"America/Santiago\"\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "6c326035-0a55-421a-b702-84ef5f3f3ea9",
+                      "name":  "normalize_availability_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nconst durationMinutes = Number(input.duration_minutes || 120);\nconst daysAhead = Number(input.days_ahead || 14);\nconst maxSlots = Number(input.max_slots || 3);\n\n// ===============================\n// CONFIGURACIÓN DE DISPONIBILIDAD\n// ===============================\n\n// 0 = domingo\n// 1 = lunes\n// 2 = martes\n// 3 = miércoles\n// 4 = jueves\n// 5 = viernes\n// 6 = sábado\n\nconst availabilityRules = [\n  {\n    weekday: 2, // martes\n    times: [\"09:00\"]\n  },\n  {\n    weekday: 4, // jueves\n    times: [\"09:00\"]\n  },\n  {\n    weekday: 0, // domingo\n    times: [\"09:00\", \"15:00\"]\n  }\n];\n\n// ===============================\n// FUNCIONES INTERNAS\n// ===============================\n\nfunction pad(n) {\n  return String(n).padStart(2, \"0\");\n}\n\nfunction getChileDateParts(date) {\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"America/Santiago\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n    weekday: \"short\"\n  }).formatToParts(date);\n\n  const map = {};\n  for (const part of parts) {\n    map[part.type] = part.value;\n  }\n\n  return {\n    year: Number(map.year),\n    month: Number(map.month),\n    day: Number(map.day)\n  };\n}\n\n// Por ahora usamos UTC-4 para Chile.\n// Más adelante se puede hacer dinámico si necesitas máxima precisión con cambio de hora.\nfunction chileLocalToIso(year, month, day, hour, minute = 0) {\n  const localString = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00-04:00`;\n  return new Date(localString).toISOString();\n}\n\nfunction getWeekdayFromChileDate(year, month, day) {\n  const date = new Date(`${year}-${pad(month)}-${pad(day)}T12:00:00-04:00`);\n  return date.getUTCDay();\n}\n\nfunction parseTime(timeString) {\n  const [hour, minute] = String(timeString).split(\":\").map(Number);\n\n  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {\n    throw new Error(`Invalid time rule: ${timeString}`);\n  }\n\n  return { hour, minute };\n}\n\n// ===============================\n// GENERAR HORARIOS CANDIDATOS\n// ===============================\n\nconst now = new Date();\nconst candidates = [];\n\nconst startOffsetDays = Number(input.start_offset_days || 0);\nconst searchLengthDays = Number(input.days_ahead || 7);\n\nfor (let i = startOffsetDays; i \u003c= startOffsetDays + searchLengthDays + 14; i++) {\n  const future = new Date(now);\n  future.setUTCDate(future.getUTCDate() + i);\n\n  const parts = getChileDateParts(future);\n  const weekday = getWeekdayFromChileDate(parts.year, parts.month, parts.day);\n\n  const dayRule = availabilityRules.find(rule =\u003e rule.weekday === weekday);\n\n  if (!dayRule) continue;\n\n  for (const timeString of dayRule.times) {\n    const { hour, minute } = parseTime(timeString);\n\n    const startIso = chileLocalToIso(\n      parts.year,\n      parts.month,\n      parts.day,\n      hour,\n      minute\n    );\n\n    const endIso = new Date(\n      new Date(startIso).getTime() + durationMinutes * 60 * 1000\n    ).toISOString();\n\n    // Evita ofrecer horarios que ya pasaron\n    if (new Date(startIso).getTime() \u003c= now.getTime()) continue;\n\n    const slotDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;\n    const slotTime = `${pad(hour)}:${pad(minute)}`;\n\n    candidates.push({\n      slot_id: `${slotDate}_${slotTime}`,\n      booking_date: slotDate,\n      booking_time: slotTime,\n      slot_start_at: startIso,\n      slot_end_at: endIso\n    });\n  }\n\n  if (candidates.length \u003e= maxSlots + 10) break;\n}\n\nif (candidates.length === 0) {\n  return [{\n    ...input,\n    candidate_slots: [],\n    search_start_at: now.toISOString(),\n    search_end_at: new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000).toISOString()\n  }];\n}\n\nreturn [{\n  ...input,\n  candidate_slots: candidates,\n  search_start_at: candidates[0].slot_start_at,\n  search_end_at: candidates[candidates.length - 1].slot_end_at\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "2c845f22-db24-4aeb-89ca-226a4e402d62",
+                      "name":  "generate_candidate_slots"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  COALESCE(\n    jsonb_agg(\n      jsonb_build_object(\n        \u0027start_at\u0027, start_at,\n        \u0027end_at\u0027, end_at,\n        \u0027status\u0027, status\n      )\n    ),\n    \u0027[]\u0027::jsonb\n  ) AS busy_events\nFROM public.appointments\nWHERE status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003c \u0027{{ $json.search_end_at }}\u0027::timestamptz\n  AND end_at \u003e \u0027{{ $json.search_start_at }}\u0027::timestamptz;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "55f3841e-3d21-4df6-b855-07eb435cc1f5",
+                      "name":  "DB_Check_Busy_Appointments",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const base = $(\"generate_candidate_slots\").first().json;\n\nconst busyEvents = Array.isArray($json.busy_events)\n  ? $json.busy_events\n  : [];\n\nconst candidateSlots = Array.isArray(base.candidate_slots)\n  ? base.candidate_slots\n  : [];\n\nconst maxSlots = Number(base.max_slots || 3);\n\nfunction overlaps(slot, event) {\n  const slotStart = new Date(slot.slot_start_at).getTime();\n  const slotEnd = new Date(slot.slot_end_at).getTime();\n\n  const eventStart = new Date(event.start_at).getTime();\n  const eventEnd = new Date(event.end_at).getTime();\n\n  if (!Number.isFinite(slotStart)) return false;\n  if (!Number.isFinite(slotEnd)) return false;\n  if (!Number.isFinite(eventStart)) return false;\n  if (!Number.isFinite(eventEnd)) return false;\n\n  return slotStart \u003c eventEnd \u0026\u0026 slotEnd \u003e eventStart;\n}\n\nconst availableSlots = candidateSlots\n  .filter(slot =\u003e !busyEvents.some(event =\u003e overlaps(slot, event)))\n  .slice(0, maxSlots);\n\nreturn [{\n  success: true,\n  lead_id: base.lead_id,\n  calendar_id: base.calendar_id,\n  service_interest: base.service_interest,\n  vehicle_type: base.vehicle_type,\n  district: base.district,\n  duration_minutes: base.duration_minutes,\n  days_ahead: base.days_ahead,\n  start_offset_days: base.start_offset_days,\n  max_slots: base.max_slots,\n  availability_window: base.availability_window,\n  availability_label: base.availability_label,\n  slots: availableSlots,\n  busy_events: busyEvents,\n  checked_at: new Date().toISOString()\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       352
+                                   ],
+                      "id":  "2dd19599-1aa0-40e5-bef7-57ed092ec8e5",
+                      "name":  "filter_available_slots"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "normalize_availability_input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "normalize_availability_input":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "generate_candidate_slots",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "generate_candidate_slots":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "DB_Check_Busy_Appointments",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "DB_Check_Busy_Appointments":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "filter_available_slots",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "filter_available_slots":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "build_available_slots_message",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "1a17bacc-0f0e-40f9-b11d-838d4b2f28a7",
+    "activeVersionId":  "1a17bacc-0f0e-40f9-b11d-838d4b2f28a7",
+    "versionCounter":  67,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-27T15:28:50.087Z",
+                       "createdAt":  "2026-04-27T15:28:50.087Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "SWHJNhMwBbbNsZiU",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T19:30:19.000Z",
+                          "createdAt":  "2026-05-03T19:29:32.078Z",
+                          "versionId":  "1a17bacc-0f0e-40f9-b11d-838d4b2f28a7",
+                          "workflowId":  "SWHJNhMwBbbNsZiU",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\"  \n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const slots = Array.isArray($json.slots) ? $json.slots : [];\n\nreturn [{\n  ...$json,\n  success: true,\n  slots,\n  available_slots: slots,\n  booking_options: slots,\n  availability_window: $json.availability_window || \"this_week\",\n  availability_label: $json.availability_label || \"los próximos días\",\n  checked_at: $json.checked_at || new Date().toISOString()\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1280,
+                                                             352
+                                                         ],
+                                            "id":  "5a8e7f1e-b8fe-4a3d-a779-d3d9208580eb",
+                                            "name":  "build_available_slots_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nfunction toNumber(value, fallback) {\n  const n = Number(value);\n  return Number.isFinite(n) ? n : fallback;\n}\n\nconst leadId = input.lead_id || null;\nconst calendarId = input.calendar_id || \"primary\";\nconst durationMinutes = toNumber(input.duration_minutes, 120);\nconst daysAhead = toNumber(input.days_ahead, 7);\nconst startOffsetDays = toNumber(input.start_offset_days, 0);\nconst maxSlots = toNumber(input.max_slots, 3);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id\");\n}\n\nreturn [{\n  lead_id: leadId,\n  calendar_id: calendarId,\n  duration_minutes: durationMinutes,\n  days_ahead: daysAhead,\n  start_offset_days: startOffsetDays,\n  max_slots: maxSlots,\n\n  availability_window: input.availability_window || \"this_week\",\n  availability_label: input.availability_label || \"los próximos días\",\n\n  service_interest: input.service_interest || null,\n  vehicle_type: input.vehicle_type || null,\n  district: input.district || null,\n  timezone: \"America/Santiago\"\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "6c326035-0a55-421a-b702-84ef5f3f3ea9",
+                                            "name":  "normalize_availability_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nconst durationMinutes = Number(input.duration_minutes || 120);\nconst daysAhead = Number(input.days_ahead || 14);\nconst maxSlots = Number(input.max_slots || 3);\n\n// ===============================\n// CONFIGURACIÓN DE DISPONIBILIDAD\n// ===============================\n\n// 0 = domingo\n// 1 = lunes\n// 2 = martes\n// 3 = miércoles\n// 4 = jueves\n// 5 = viernes\n// 6 = sábado\n\nconst availabilityRules = [\n  {\n    weekday: 2, // martes\n    times: [\"09:00\"]\n  },\n  {\n    weekday: 4, // jueves\n    times: [\"09:00\"]\n  },\n  {\n    weekday: 0, // domingo\n    times: [\"09:00\", \"15:00\"]\n  }\n];\n\n// ===============================\n// FUNCIONES INTERNAS\n// ===============================\n\nfunction pad(n) {\n  return String(n).padStart(2, \"0\");\n}\n\nfunction getChileDateParts(date) {\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"America/Santiago\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n    weekday: \"short\"\n  }).formatToParts(date);\n\n  const map = {};\n  for (const part of parts) {\n    map[part.type] = part.value;\n  }\n\n  return {\n    year: Number(map.year),\n    month: Number(map.month),\n    day: Number(map.day)\n  };\n}\n\n// Por ahora usamos UTC-4 para Chile.\n// Más adelante se puede hacer dinámico si necesitas máxima precisión con cambio de hora.\nfunction chileLocalToIso(year, month, day, hour, minute = 0) {\n  const localString = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00-04:00`;\n  return new Date(localString).toISOString();\n}\n\nfunction getWeekdayFromChileDate(year, month, day) {\n  const date = new Date(`${year}-${pad(month)}-${pad(day)}T12:00:00-04:00`);\n  return date.getUTCDay();\n}\n\nfunction parseTime(timeString) {\n  const [hour, minute] = String(timeString).split(\":\").map(Number);\n\n  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {\n    throw new Error(`Invalid time rule: ${timeString}`);\n  }\n\n  return { hour, minute };\n}\n\n// ===============================\n// GENERAR HORARIOS CANDIDATOS\n// ===============================\n\nconst now = new Date();\nconst candidates = [];\n\nconst startOffsetDays = Number(input.start_offset_days || 0);\nconst searchLengthDays = Number(input.days_ahead || 7);\n\nfor (let i = startOffsetDays; i \u003c= startOffsetDays + searchLengthDays + 14; i++) {\n  const future = new Date(now);\n  future.setUTCDate(future.getUTCDate() + i);\n\n  const parts = getChileDateParts(future);\n  const weekday = getWeekdayFromChileDate(parts.year, parts.month, parts.day);\n\n  const dayRule = availabilityRules.find(rule =\u003e rule.weekday === weekday);\n\n  if (!dayRule) continue;\n\n  for (const timeString of dayRule.times) {\n    const { hour, minute } = parseTime(timeString);\n\n    const startIso = chileLocalToIso(\n      parts.year,\n      parts.month,\n      parts.day,\n      hour,\n      minute\n    );\n\n    const endIso = new Date(\n      new Date(startIso).getTime() + durationMinutes * 60 * 1000\n    ).toISOString();\n\n    // Evita ofrecer horarios que ya pasaron\n    if (new Date(startIso).getTime() \u003c= now.getTime()) continue;\n\n    const slotDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;\n    const slotTime = `${pad(hour)}:${pad(minute)}`;\n\n    candidates.push({\n      slot_id: `${slotDate}_${slotTime}`,\n      booking_date: slotDate,\n      booking_time: slotTime,\n      slot_start_at: startIso,\n      slot_end_at: endIso\n    });\n  }\n\n  if (candidates.length \u003e= maxSlots + 10) break;\n}\n\nif (candidates.length === 0) {\n  return [{\n    ...input,\n    candidate_slots: [],\n    search_start_at: now.toISOString(),\n    search_end_at: new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000).toISOString()\n  }];\n}\n\nreturn [{\n  ...input,\n  candidate_slots: candidates,\n  search_start_at: candidates[0].slot_start_at,\n  search_end_at: candidates[candidates.length - 1].slot_end_at\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "2c845f22-db24-4aeb-89ca-226a4e402d62",
+                                            "name":  "generate_candidate_slots"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  COALESCE(\n    jsonb_agg(\n      jsonb_build_object(\n        \u0027start_at\u0027, start_at,\n        \u0027end_at\u0027, end_at,\n        \u0027status\u0027, status\n      )\n    ),\n    \u0027[]\u0027::jsonb\n  ) AS busy_events\nFROM public.appointments\nWHERE status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003c \u0027{{ $json.search_end_at }}\u0027::timestamptz\n  AND end_at \u003e \u0027{{ $json.search_start_at }}\u0027::timestamptz;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "55f3841e-3d21-4df6-b855-07eb435cc1f5",
+                                            "name":  "DB_Check_Busy_Appointments",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const base = $(\"generate_candidate_slots\").first().json;\n\nconst busyEvents = Array.isArray($json.busy_events)\n  ? $json.busy_events\n  : [];\n\nconst candidateSlots = Array.isArray(base.candidate_slots)\n  ? base.candidate_slots\n  : [];\n\nconst maxSlots = Number(base.max_slots || 3);\n\nfunction overlaps(slot, event) {\n  const slotStart = new Date(slot.slot_start_at).getTime();\n  const slotEnd = new Date(slot.slot_end_at).getTime();\n\n  const eventStart = new Date(event.start_at).getTime();\n  const eventEnd = new Date(event.end_at).getTime();\n\n  if (!Number.isFinite(slotStart)) return false;\n  if (!Number.isFinite(slotEnd)) return false;\n  if (!Number.isFinite(eventStart)) return false;\n  if (!Number.isFinite(eventEnd)) return false;\n\n  return slotStart \u003c eventEnd \u0026\u0026 slotEnd \u003e eventStart;\n}\n\nconst availableSlots = candidateSlots\n  .filter(slot =\u003e !busyEvents.some(event =\u003e overlaps(slot, event)))\n  .slice(0, maxSlots);\n\nreturn [{\n  success: true,\n  lead_id: base.lead_id,\n  calendar_id: base.calendar_id,\n  service_interest: base.service_interest,\n  vehicle_type: base.vehicle_type,\n  district: base.district,\n  duration_minutes: base.duration_minutes,\n  days_ahead: base.days_ahead,\n  start_offset_days: base.start_offset_days,\n  max_slots: base.max_slots,\n  availability_window: base.availability_window,\n  availability_label: base.availability_label,\n  slots: availableSlots,\n  busy_events: busyEvents,\n  checked_at: new Date().toISOString()\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             352
+                                                         ],
+                                            "id":  "2dd19599-1aa0-40e5-bef7-57ed092ec8e5",
+                                            "name":  "filter_available_slots"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "normalize_availability_input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "normalize_availability_input":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "generate_candidate_slots",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "generate_candidate_slots":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "DB_Check_Busy_Appointments",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "DB_Check_Busy_Appointments":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "filter_available_slots",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "filter_available_slots":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "build_available_slots_message",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 1a17bacc",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T19:30:18.998Z",
+                                                             "id":  420,
+                                                             "workflowId":  "SWHJNhMwBbbNsZiU",
+                                                             "versionId":  "1a17bacc-0f0e-40f9-b11d-838d4b2f28a7",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

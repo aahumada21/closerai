@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:48.000Z",
+    "createdAt":  "2026-05-12T18:38:28.864Z",
+    "id":  "0IHN8o2MnUZm2hnc",
+    "name":  "6.20 offer_booking",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "e86606d1-b325-4c37-b631-db34e2a97ca6",
+                      "name":  "6.20 offer_booking",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowoffer_bookinginput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "f9e5b362-0890-4b33-9ffe-ddc69cc06f8b",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send: $json.execution_context.message,\n  db_operations: [\"messages\"],\n  state_update: {\n    ...$json.execution_context.state_update,\n    stage: \"closing\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"offer_booking\"\n  }\n}];"
+                                     },
+                      "id":  "c726b6e0-fbcb-493c-aa07-ff0fe91b8c55",
+                      "name":  "offer_booking",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "offer_booking",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            },
+                        "6.20 offer_booking":  {
+                                                   "main":  [
+                                                                {
+                                                                    "node":  "normalize_input",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                               }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "921dcafc-57a0-4d11-987a-30ff5433362e",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:28.867Z",
+                       "createdAt":  "2026-05-12T18:38:28.867Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "0IHN8o2MnUZm2hnc",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

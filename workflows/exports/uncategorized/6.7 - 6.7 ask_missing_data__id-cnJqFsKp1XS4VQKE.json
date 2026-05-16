@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:00:22.000Z",
+    "createdAt":  "2026-05-12T18:35:34.768Z",
+    "id":  "cnJqFsKp1XS4VQKE",
+    "name":  "6.7 ask_missing_data",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "68c179ac-6adc-4b4a-a653-30181ded709d",
+                      "name":  "6.7 ask_missing_data",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowask_missing_datainput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "a2780682-079b-417a-aa07-7d4bde6e0342",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const validationMissing = Array.isArray($json.validation?.missing_fields)\n  ? $json.validation.missing_fields\n  : [];\n\nconst decisionMissing = Array.isArray($json.execution_context?.state_update?.missing_fields)\n  ? $json.execution_context.state_update.missing_fields\n  : [];\n\nconst fallbackMissing = Array.isArray($json.state_update?.missing_fields)\n  ? $json.state_update.missing_fields\n  : [];\n\nconst missingFields =\n  validationMissing.length \u003e 0\n    ? validationMissing\n    : decisionMissing.length \u003e 0\n      ? decisionMissing\n      : fallbackMissing;\n\nreturn [\n  {\n    ...$json,\n    message_to_send: $json.execution_context.message,\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...($json.execution_context.state_update || {}),\n      missing_fields: missingFields,\n      last_bot_action: \"ask_missing_data\",\n    },\n  },\n];"
+                                     },
+                      "id":  "521a6f91-6820-4423-a0a3-17ca2de876a9",
+                      "name":  "ask_missing_data",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "ask_missing_data",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            },
+                        "6.7 ask_missing_data":  {
+                                                     "main":  [
+                                                                  {
+                                                                      "node":  "normalize_input",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                 }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "7988973f-d484-4ebf-a0ea-d9d8a26db716",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:35:34.782Z",
+                       "createdAt":  "2026-05-12T18:35:34.782Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "cnJqFsKp1XS4VQKE",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

@@ -1,0 +1,154 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:11:37.073Z",
+    "createdAt":  "2026-04-30T13:48:21.717Z",
+    "id":  "1uYpcefG9Yns364J",
+    "name":  "6.12 confirm_address",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"address\": \"={{ $json.address }}\",\n  \"address_reference\": \"={{ $json.address_reference }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction cleanText(value) {\n  if (value === undefined || value === null) return null;\n  const text = String(value).trim();\n  return text === \"\" ? null : text;\n}\n\nconst executionContext = parseMaybeJson($json.execution_context, $json.execution_context || {});\nconst contextPacket = parseMaybeJson($json.context_packet, $json.context_packet || {});\nconst decision = parseMaybeJson($json.decision, $json.decision || {});\nconst stateUpdateInput = parseMaybeJson($json.state_update, $json.state_update || {});\nconst executionMeta = parseMaybeJson($json.execution_meta, $json.execution_meta || {});\n\nconst state = contextPacket.state || {};\nconst lead = contextPacket.lead || {};\nconst conversation = contextPacket.conversation || {};\n\nconst leadId = firstValue(\n  $json.lead_id,\n  executionContext.lead_id,\n  lead.id,\n  state.lead_id\n);\n\nconst channel = firstValue(\n  $json.channel,\n  executionContext.channel,\n  lead.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  $json.phone,\n  executionContext.phone,\n  lead.phone\n);\n\nconst rawAddress = firstValue(\n  $json.address,\n  $json.service_address,\n  executionContext.address,\n  executionContext.service_address,\n  decision.address,\n  decision.state_update?.address,\n  decision.state_update?.service_address,\n  stateUpdateInput.address,\n  stateUpdateInput.service_address,\n  state.service_address,\n  state.address,\n  conversation.latest_user_message\n);\n\nconst normalizedAddress = cleanText(rawAddress);\n\nlet addressReference = firstValue(\n  $json.address_reference,\n  executionContext.address_reference,\n  decision.address_reference,\n  decision.state_update?.address_reference,\n  stateUpdateInput.address_reference,\n  state.address_reference\n);\n\naddressReference = cleanText(addressReference);\n\n// Evita guardar la misma dirección como referencia\nif (\n  addressReference \u0026\u0026\n  normalizedAddress \u0026\u0026\n  addressReference.toLowerCase() === normalizedAddress.toLowerCase()\n) {\n  addressReference = null;\n}\n\nconst district = firstValue(\n  $json.district,\n  executionContext.district,\n  decision.state_update?.district,\n  stateUpdateInput.district,\n  state.district\n);\n\nconst serviceInterest = firstValue(\n  $json.service_interest,\n  executionContext.service_interest,\n  state.service_interest\n);\n\nconst vehicleType = firstValue(\n  $json.vehicle_type,\n  executionContext.vehicle_type,\n  state.vehicle_type\n);\n\nconst bookingDate = firstValue(\n  executionContext.booking_date,\n  stateUpdateInput.booking_date,\n  decision.state_update?.booking_date,\n  state.booking_date,\n  $json.booking_date\n);\n\nconst bookingTime = firstValue(\n  executionContext.booking_time,\n  stateUpdateInput.booking_time,\n  decision.state_update?.booking_time,\n  state.booking_time,\n  $json.booking_time\n);\n\nconst slotId = firstValue(\n  executionContext.slot_id,\n  stateUpdateInput.slot_id,\n  decision.state_update?.slot_id,\n  state.slot_id,\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst availabilityConfirmed =\n  executionContext.availability_confirmed ??\n  stateUpdateInput.availability_confirmed ??\n  decision.state_update?.availability_confirmed ??\n  state.availability_confirmed ??\n  true;\n\nconst durationMinutes = Number(\n  executionContext.duration_minutes ||\n  stateUpdateInput.duration_minutes ||\n  state.duration_minutes ||\n  120\n);\n\nconst calendarId = firstValue(\n  executionContext.calendar_id,\n  stateUpdateInput.calendar_id,\n  state.calendar_id,\n  $json.calendar_id\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in confirm_address\");\n}\n\nif (!normalizedAddress || normalizedAddress.length \u003c 8) {\n  return [{\n    lead_id: leadId,\n    channel,\n    phone,\n\n    message_to_send:\n      \"Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\",\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...stateUpdateInput,\n      stage: \"collecting_address\",\n      missing_fields: [\"service_address\"],\n      next_goal: \"collect_address\",\n      last_bot_action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    execution_context: {\n      ...executionContext,\n      lead_id: leadId,\n      channel,\n      phone,\n      action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    context_packet: contextPacket,\n    decision,\n    execution_meta: executionMeta,\n\n    execution_result: {\n      success: true,\n      action: \"collect_address\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"missing_service_address\"]\n    },\n\n    notes: [\"missing_service_address\"]\n  }];\n}\n\nif (!district) {\n  return [{\n    lead_id: leadId,\n    channel,\n    phone,\n\n    message_to_send:\n      \"Gracias. ¿Me confirmas la comuna donde sería el servicio?\",\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...stateUpdateInput,\n      stage: \"collecting_address\",\n      service_address: normalizedAddress,\n      address_reference: addressReference,\n      address_confirmed: false,\n      missing_fields: [\"district\"],\n      next_goal: \"confirm_district\",\n      last_bot_action: \"confirm_address_missing_district\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    execution_context: {\n      ...executionContext,\n      lead_id: leadId,\n      channel,\n      phone,\n      action: \"confirm_address\",\n      address: normalizedAddress,\n      service_address: normalizedAddress,\n      address_reference: addressReference,\n      address_confirmed: false,\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    context_packet: contextPacket,\n    decision,\n    execution_meta: executionMeta,\n\n    execution_result: {\n      success: true,\n      action: \"confirm_address\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"missing_district\"]\n    },\n\n    notes: [\"missing_district\"]\n  }];\n}\n\nreturn [{\n  lead_id: leadId,\n  channel,\n  phone,\n\n  service_interest: serviceInterest,\n  vehicle_type: vehicleType,\n  district,\n\n  address: normalizedAddress,\n  service_address: normalizedAddress,\n  address_reference: addressReference,\n  address_confirmed: true,\n\n  booking_date: bookingDate,\n  booking_time: bookingTime,\n  slot_id: slotId,\n  availability_confirmed: availabilityConfirmed,\n  duration_minutes: durationMinutes,\n  calendar_id: calendarId,\n\n  message_to_send:\n    `Perfecto, dejo registrada la dirección: ${normalizedAddress}` +\n    `${addressReference ? `, referencia: ${addressReference}` : \"\"}. ` +\n    `Con eso ya puedo continuar con la reserva.`,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdateInput,\n\n    stage: \"booking_selection\",\n    next_goal: \"confirm_booking\",\n    last_bot_action: \"confirm_address\",\n    missing_fields: [],\n\n    service_address: normalizedAddress,\n    address_reference: addressReference,\n    address_confirmed: true,\n    address_confirmed_at: new Date().toISOString(),\n\n    district,\n    service_interest: serviceInterest,\n    vehicle_type: vehicleType,\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: availabilityConfirmed,\n    duration_minutes: durationMinutes,\n    calendar_id: calendarId\n  },\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    phone,\n    action: \"confirm_address\",\n\n    address: normalizedAddress,\n    service_address: normalizedAddress,\n    address_reference: addressReference,\n    address_confirmed: true,\n\n    district,\n    service_interest: serviceInterest,\n    vehicle_type: vehicleType,\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: availabilityConfirmed,\n    duration_minutes: durationMinutes,\n    calendar_id: calendarId\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  execution_result: {\n    success: true,\n    action: \"confirm_address\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"address_confirmed_and_booking_context_preserved\"]\n  },\n\n  notes: [\"address_confirmed_and_booking_context_preserved\"]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "06a3fb2b-c3e1-4aaa-90e4-032eb7f34dcf",
+                      "name":  "confirm_address_logic"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "confirm_address_logic",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "613afbd0-4097-43b9-8915-450732edb8f8",
+    "activeVersionId":  "613afbd0-4097-43b9-8915-450732edb8f8",
+    "versionCounter":  14,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-30T13:48:21.730Z",
+                       "createdAt":  "2026-04-30T13:48:21.730Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "1uYpcefG9Yns364J",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-01T14:41:17.000Z",
+                          "createdAt":  "2026-05-01T14:39:23.118Z",
+                          "versionId":  "613afbd0-4097-43b9-8915-450732edb8f8",
+                          "workflowId":  "1uYpcefG9Yns364J",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"address\": \"={{ $json.address }}\",\n  \"address_reference\": \"={{ $json.address_reference }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction cleanText(value) {\n  if (value === undefined || value === null) return null;\n  const text = String(value).trim();\n  return text === \"\" ? null : text;\n}\n\nconst executionContext = parseMaybeJson($json.execution_context, $json.execution_context || {});\nconst contextPacket = parseMaybeJson($json.context_packet, $json.context_packet || {});\nconst decision = parseMaybeJson($json.decision, $json.decision || {});\nconst stateUpdateInput = parseMaybeJson($json.state_update, $json.state_update || {});\nconst executionMeta = parseMaybeJson($json.execution_meta, $json.execution_meta || {});\n\nconst state = contextPacket.state || {};\nconst lead = contextPacket.lead || {};\nconst conversation = contextPacket.conversation || {};\n\nconst leadId = firstValue(\n  $json.lead_id,\n  executionContext.lead_id,\n  lead.id,\n  state.lead_id\n);\n\nconst channel = firstValue(\n  $json.channel,\n  executionContext.channel,\n  lead.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  $json.phone,\n  executionContext.phone,\n  lead.phone\n);\n\nconst rawAddress = firstValue(\n  $json.address,\n  $json.service_address,\n  executionContext.address,\n  executionContext.service_address,\n  decision.address,\n  decision.state_update?.address,\n  decision.state_update?.service_address,\n  stateUpdateInput.address,\n  stateUpdateInput.service_address,\n  state.service_address,\n  state.address,\n  conversation.latest_user_message\n);\n\nconst normalizedAddress = cleanText(rawAddress);\n\nlet addressReference = firstValue(\n  $json.address_reference,\n  executionContext.address_reference,\n  decision.address_reference,\n  decision.state_update?.address_reference,\n  stateUpdateInput.address_reference,\n  state.address_reference\n);\n\naddressReference = cleanText(addressReference);\n\n// Evita guardar la misma dirección como referencia\nif (\n  addressReference \u0026\u0026\n  normalizedAddress \u0026\u0026\n  addressReference.toLowerCase() === normalizedAddress.toLowerCase()\n) {\n  addressReference = null;\n}\n\nconst district = firstValue(\n  $json.district,\n  executionContext.district,\n  decision.state_update?.district,\n  stateUpdateInput.district,\n  state.district\n);\n\nconst serviceInterest = firstValue(\n  $json.service_interest,\n  executionContext.service_interest,\n  state.service_interest\n);\n\nconst vehicleType = firstValue(\n  $json.vehicle_type,\n  executionContext.vehicle_type,\n  state.vehicle_type\n);\n\nconst bookingDate = firstValue(\n  executionContext.booking_date,\n  stateUpdateInput.booking_date,\n  decision.state_update?.booking_date,\n  state.booking_date,\n  $json.booking_date\n);\n\nconst bookingTime = firstValue(\n  executionContext.booking_time,\n  stateUpdateInput.booking_time,\n  decision.state_update?.booking_time,\n  state.booking_time,\n  $json.booking_time\n);\n\nconst slotId = firstValue(\n  executionContext.slot_id,\n  stateUpdateInput.slot_id,\n  decision.state_update?.slot_id,\n  state.slot_id,\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst availabilityConfirmed =\n  executionContext.availability_confirmed ??\n  stateUpdateInput.availability_confirmed ??\n  decision.state_update?.availability_confirmed ??\n  state.availability_confirmed ??\n  true;\n\nconst durationMinutes = Number(\n  executionContext.duration_minutes ||\n  stateUpdateInput.duration_minutes ||\n  state.duration_minutes ||\n  120\n);\n\nconst calendarId = firstValue(\n  executionContext.calendar_id,\n  stateUpdateInput.calendar_id,\n  state.calendar_id,\n  $json.calendar_id\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in confirm_address\");\n}\n\nif (!normalizedAddress || normalizedAddress.length \u003c 8) {\n  return [{\n    lead_id: leadId,\n    channel,\n    phone,\n\n    message_to_send:\n      \"Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\",\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...stateUpdateInput,\n      stage: \"collecting_address\",\n      missing_fields: [\"service_address\"],\n      next_goal: \"collect_address\",\n      last_bot_action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    execution_context: {\n      ...executionContext,\n      lead_id: leadId,\n      channel,\n      phone,\n      action: \"collect_address\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    context_packet: contextPacket,\n    decision,\n    execution_meta: executionMeta,\n\n    execution_result: {\n      success: true,\n      action: \"collect_address\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"missing_service_address\"]\n    },\n\n    notes: [\"missing_service_address\"]\n  }];\n}\n\nif (!district) {\n  return [{\n    lead_id: leadId,\n    channel,\n    phone,\n\n    message_to_send:\n      \"Gracias. ¿Me confirmas la comuna donde sería el servicio?\",\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...stateUpdateInput,\n      stage: \"collecting_address\",\n      service_address: normalizedAddress,\n      address_reference: addressReference,\n      address_confirmed: false,\n      missing_fields: [\"district\"],\n      next_goal: \"confirm_district\",\n      last_bot_action: \"confirm_address_missing_district\",\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    execution_context: {\n      ...executionContext,\n      lead_id: leadId,\n      channel,\n      phone,\n      action: \"confirm_address\",\n      address: normalizedAddress,\n      service_address: normalizedAddress,\n      address_reference: addressReference,\n      address_confirmed: false,\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n      availability_confirmed: availabilityConfirmed,\n      duration_minutes: durationMinutes,\n      calendar_id: calendarId\n    },\n\n    context_packet: contextPacket,\n    decision,\n    execution_meta: executionMeta,\n\n    execution_result: {\n      success: true,\n      action: \"confirm_address\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"missing_district\"]\n    },\n\n    notes: [\"missing_district\"]\n  }];\n}\n\nreturn [{\n  lead_id: leadId,\n  channel,\n  phone,\n\n  service_interest: serviceInterest,\n  vehicle_type: vehicleType,\n  district,\n\n  address: normalizedAddress,\n  service_address: normalizedAddress,\n  address_reference: addressReference,\n  address_confirmed: true,\n\n  booking_date: bookingDate,\n  booking_time: bookingTime,\n  slot_id: slotId,\n  availability_confirmed: availabilityConfirmed,\n  duration_minutes: durationMinutes,\n  calendar_id: calendarId,\n\n  message_to_send:\n    `Perfecto, dejo registrada la dirección: ${normalizedAddress}` +\n    `${addressReference ? `, referencia: ${addressReference}` : \"\"}. ` +\n    `Con eso ya puedo continuar con la reserva.`,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdateInput,\n\n    stage: \"booking_selection\",\n    next_goal: \"confirm_booking\",\n    last_bot_action: \"confirm_address\",\n    missing_fields: [],\n\n    service_address: normalizedAddress,\n    address_reference: addressReference,\n    address_confirmed: true,\n    address_confirmed_at: new Date().toISOString(),\n\n    district,\n    service_interest: serviceInterest,\n    vehicle_type: vehicleType,\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: availabilityConfirmed,\n    duration_minutes: durationMinutes,\n    calendar_id: calendarId\n  },\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    phone,\n    action: \"confirm_address\",\n\n    address: normalizedAddress,\n    service_address: normalizedAddress,\n    address_reference: addressReference,\n    address_confirmed: true,\n\n    district,\n    service_interest: serviceInterest,\n    vehicle_type: vehicleType,\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: availabilityConfirmed,\n    duration_minutes: durationMinutes,\n    calendar_id: calendarId\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  execution_result: {\n    success: true,\n    action: \"confirm_address\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"address_confirmed_and_booking_context_preserved\"]\n  },\n\n  notes: [\"address_confirmed_and_booking_context_preserved\"]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "06a3fb2b-c3e1-4aaa-90e4-032eb7f34dcf",
+                                            "name":  "confirm_address_logic"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "confirm_address_logic",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 613afbd0",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-01T14:41:17.867Z",
+                                                             "id":  349,
+                                                             "workflowId":  "1uYpcefG9Yns364J",
+                                                             "versionId":  "613afbd0-4097-43b9-8915-450732edb8f8",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

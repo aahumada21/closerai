@@ -1,0 +1,827 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:10:18.325Z",
+    "createdAt":  "2026-05-02T18:24:48.964Z",
+    "id":  "uKJuQUJ3zcLxiAsI",
+    "name":  "1.1 n8n_chat_test_router",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "@n8n/n8n-nodes-langchain.chatTrigger",
+                      "typeVersion":  1.4,
+                      "position":  [
+                                       -176,
+                                       -32
+                                   ],
+                      "id":  "7f7a91a4-6537-4213-9e7e-d26429aed495",
+                      "name":  "When chat message received",
+                      "webhookId":  "7477a1e5-16b7-4400-88c1-5d55a84b72e7"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nconst chatInput =\n  input.chatInput ||\n  input.text ||\n  input.message ||\n  input.input ||\n  \u0027\u0027;\n\nconst chatSessionId =\n  input.sessionId ||\n  input.chatSessionId ||\n  input.chat_id ||\n  input.conversationId ||\n  \u0027manual_chat_session\u0027;\n\nconst text = String(chatInput || \u0027\u0027).trim();\n\nconst numberCommandMatch = text.match(/^\\/(?:numero|número|phone)\\s+(\\+?\\d[\\d\\s+-]*)$/i);\n\nlet requestedPhone = null;\n\nif (numberCommandMatch) {\n  requestedPhone = numberCommandMatch[1].replace(/\\D/g, \u0027\u0027);\n\n  // Si colocas 949186386, lo convierte a 56949186386\n  if (!requestedPhone.startsWith(\u002756\u0027) \u0026\u0026 requestedPhone.length === 9) {\n    requestedPhone = `56${requestedPhone}`;\n  }\n}\n\nreturn [\n  {\n    json: {\n      raw_chat_payload: input,\n      chat_session_id: chatSessionId,\n      text,\n      is_number_command: Boolean(requestedPhone),\n      requested_phone: requestedPhone,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       32,
+                                       -32
+                                   ],
+                      "id":  "e0abab30-3b8a-45f7-86b4-51fdb9c68a1c",
+                      "name":  "parse_chat_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.test_chat_sessions (\n  chat_session_id,\n  assigned_phone,\n  assigned_name,\n  channel,\n  updated_at\n)\nVALUES (\n  \u0027{{ $json.chat_session_id.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027{{ $json.requested_phone.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027Test Chat {{ $json.requested_phone.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027n8n_chat\u0027,\n  now()\n)\nON CONFLICT (chat_session_id)\nDO UPDATE SET\n  assigned_phone = EXCLUDED.assigned_phone,\n  assigned_name = EXCLUDED.assigned_name,\n  updated_at = now()\nRETURNING *;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       528,
+                                       -176
+                                   ],
+                      "id":  "b52772d2-598e-4565-9d2a-613c84f2d2db",
+                      "name":  "db Guardar Numero",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT *\nFROM public.test_chat_sessions\nWHERE chat_session_id = \u0027{{ $json.chat_session_id.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       448,
+                                       64
+                                   ],
+                      "id":  "d151ccb3-f6d7-44d5-adb7-cb59045a8496",
+                      "name":  "db BuscarNumero",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const chatInput = $(\u0027parse_chat_input\u0027).first().json;\nconst session = $json;\n\nconst phone = String(session.assigned_phone || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\n\nif (!phone || !phone.startsWith(\u002756\u0027)) {\n  throw new Error(\u0027Invalid assigned_phone for n8n_chat test session\u0027);\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      channel: \u0027n8n_chat\u0027,\n      lead_id: phone,\n      phone,\n      message_id: `n8n_chat_${chatInput.chat_session_id}_${Date.now()}`,\n      timestamp: now,\n      message_type: \u0027text\u0027,\n      text: chatInput.text,\n      attachments: [],\n      contact: {\n        wa_id: phone,\n        name: session.assigned_name || `Test Chat ${phone}`\n      },\n      source_metadata: {\n        provider: \u0027n8n_chat\u0027,\n        chat_session_id: chatInput.chat_session_id,\n        assigned_phone: phone,\n        test_mode: true\n      },\n      raw_message: {\n        chat_session_id: chatInput.chat_session_id,\n        text: chatInput.text\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       864,
+                                       64
+                                   ],
+                      "id":  "e0e7a677-934e-4738-ba28-ba54558c152b",
+                      "name":  "build_normalized_event"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "KPlLCK7DDIxh7Fnn",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                            "cachedResultName":  "2 lead_loader"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1072,
+                                       64
+                                   ],
+                      "id":  "825ceb0f-e7f2-4242-954e-67d0a678df53",
+                      "name":  "Call \u00272 lead_loader\u0027"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [\n  {\n    json: {\n      output: `Listo. Este chat ahora simula el número ${$json.assigned_phone}.`\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       736,
+                                       -176
+                                   ],
+                      "id":  "35cf5041-bd82-4f97-b30b-e1f8224119d7",
+                      "name":  "Responder número asignado"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [\n  {\n    json: {\n      output: `Primero asigna un número para este chat usando:\\n\\n/numero 569900000001`\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       880,
+                                       224
+                                   ],
+                      "id":  "a95c4482-b3a2-410b-9767-f70b1b180d2a",
+                      "name":  "responder pedir número"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "19970663-7d98-4e4b-ac3c-4802dbb664ac",
+                                                                                   "leftValue":  "={{ $json.assigned_phone !== undefined \u0026\u0026 $json.assigned_phone !== null \u0026\u0026 $json.assigned_phone !== \"\" }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       656,
+                                       64
+                                   ],
+                      "id":  "1758b83f-dcf4-4cd4-a25a-5757a8ab54bb",
+                      "name":  "IF: existe sesión"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "cbf2912c-b90b-46c0-b4fb-d9a1e3088d53",
+                                                                                   "leftValue":  "={{ $json.is_number_command === true }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       240,
+                                       -32
+                                   ],
+                      "id":  "4a51bcd4-662e-425c-b052-501788e90121",
+                      "name":  "IF: es comando número"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE\n    phone = \u0027{{ $(\"build_normalized_event\").first().json.phone }}\u0027\n    OR external_id = \u0027{{ $(\"build_normalized_event\").first().json.phone }}\u0027\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT\n  m.content,\n  m.created_at,\n  m.status,\n  m.channel\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE\n  m.direction = \u0027outbound\u0027\n  AND m.channel = \u0027n8n_chat\u0027\n  AND m.created_at \u003e= NOW() - INTERVAL \u00272 minutes\u0027\nORDER BY m.created_at DESC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1280,
+                                       64
+                                   ],
+                      "id":  "cfc38259-578c-460d-8bcb-0a37615cd585",
+                      "name":  "DB buscar respuesta outbound chat",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const row = $json;\n\nconst message =\n  row.content ||\n  row.message ||\n  row.output ||\n  null;\n\nif (!message) {\n  return [\n    {\n      json: {\n        output: \"No encontré una respuesta generada por el bot. Revisa si el action_executor llegó a enviar/guardar el mensaje outbound.\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      output: message\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1488,
+                                       64
+                                   ],
+                      "id":  "875c43d7-7019-41f6-9a6a-6838d1c945d2",
+                      "name":  "Responder al chat"
+                  }
+              ],
+    "connections":  {
+                        "When chat message received":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "parse_chat_input",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "parse_chat_input":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "IF: es comando número",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "db BuscarNumero":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "IF: existe sesión",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "build_normalized_event":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Call \u00272 lead_loader\u0027",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "db Guardar Numero":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Responder número asignado",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "IF: existe sesión":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "build_normalized_event",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "responder pedir número",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Call \u00272 lead_loader\u0027":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "DB buscar respuesta outbound chat",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "IF: es comando número":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "db Guardar Numero",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ],
+                                                                   [
+                                                                       {
+                                                                           "node":  "db BuscarNumero",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "DB buscar respuesta outbound chat":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "Responder al chat",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "41235fef-b768-4f50-b115-23a81164afab",
+    "activeVersionId":  "41235fef-b768-4f50-b115-23a81164afab",
+    "versionCounter":  60,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-02T18:24:48.971Z",
+                       "createdAt":  "2026-05-02T18:24:48.971Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "uKJuQUJ3zcLxiAsI",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-12T14:08:53.491Z",
+                     "createdAt":  "2026-05-12T14:08:53.491Z",
+                     "id":  "lEIaFX9FE9GJwQJS",
+                     "name":  "TOOL"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-02T18:53:07.000Z",
+                          "createdAt":  "2026-05-02T18:52:38.411Z",
+                          "versionId":  "41235fef-b768-4f50-b115-23a81164afab",
+                          "workflowId":  "uKJuQUJ3zcLxiAsI",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "@n8n/n8n-nodes-langchain.chatTrigger",
+                                            "typeVersion":  1.4,
+                                            "position":  [
+                                                             -176,
+                                                             -32
+                                                         ],
+                                            "id":  "7f7a91a4-6537-4213-9e7e-d26429aed495",
+                                            "name":  "When chat message received",
+                                            "webhookId":  "7477a1e5-16b7-4400-88c1-5d55a84b72e7"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nconst chatInput =\n  input.chatInput ||\n  input.text ||\n  input.message ||\n  input.input ||\n  \u0027\u0027;\n\nconst chatSessionId =\n  input.sessionId ||\n  input.chatSessionId ||\n  input.chat_id ||\n  input.conversationId ||\n  \u0027manual_chat_session\u0027;\n\nconst text = String(chatInput || \u0027\u0027).trim();\n\nconst numberCommandMatch = text.match(/^\\/(?:numero|número|phone)\\s+(\\+?\\d[\\d\\s+-]*)$/i);\n\nlet requestedPhone = null;\n\nif (numberCommandMatch) {\n  requestedPhone = numberCommandMatch[1].replace(/\\D/g, \u0027\u0027);\n\n  // Si colocas 949186386, lo convierte a 56949186386\n  if (!requestedPhone.startsWith(\u002756\u0027) \u0026\u0026 requestedPhone.length === 9) {\n    requestedPhone = `56${requestedPhone}`;\n  }\n}\n\nreturn [\n  {\n    json: {\n      raw_chat_payload: input,\n      chat_session_id: chatSessionId,\n      text,\n      is_number_command: Boolean(requestedPhone),\n      requested_phone: requestedPhone,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             32,
+                                                             -32
+                                                         ],
+                                            "id":  "e0abab30-3b8a-45f7-86b4-51fdb9c68a1c",
+                                            "name":  "parse_chat_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO public.test_chat_sessions (\n  chat_session_id,\n  assigned_phone,\n  assigned_name,\n  channel,\n  updated_at\n)\nVALUES (\n  \u0027{{ $json.chat_session_id.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027{{ $json.requested_phone.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027Test Chat {{ $json.requested_phone.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027n8n_chat\u0027,\n  now()\n)\nON CONFLICT (chat_session_id)\nDO UPDATE SET\n  assigned_phone = EXCLUDED.assigned_phone,\n  assigned_name = EXCLUDED.assigned_name,\n  updated_at = now()\nRETURNING *;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             528,
+                                                             -176
+                                                         ],
+                                            "id":  "b52772d2-598e-4565-9d2a-613c84f2d2db",
+                                            "name":  "db Guardar Numero",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT *\nFROM public.test_chat_sessions\nWHERE chat_session_id = \u0027{{ $json.chat_session_id.replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             448,
+                                                             64
+                                                         ],
+                                            "id":  "d151ccb3-f6d7-44d5-adb7-cb59045a8496",
+                                            "name":  "db BuscarNumero",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const chatInput = $(\u0027parse_chat_input\u0027).first().json;\nconst session = $json;\n\nconst phone = String(session.assigned_phone || \u0027\u0027).replace(/\\D/g, \u0027\u0027);\n\nif (!phone || !phone.startsWith(\u002756\u0027)) {\n  throw new Error(\u0027Invalid assigned_phone for n8n_chat test session\u0027);\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      channel: \u0027n8n_chat\u0027,\n      lead_id: phone,\n      phone,\n      message_id: `n8n_chat_${chatInput.chat_session_id}_${Date.now()}`,\n      timestamp: now,\n      message_type: \u0027text\u0027,\n      text: chatInput.text,\n      attachments: [],\n      contact: {\n        wa_id: phone,\n        name: session.assigned_name || `Test Chat ${phone}`\n      },\n      source_metadata: {\n        provider: \u0027n8n_chat\u0027,\n        chat_session_id: chatInput.chat_session_id,\n        assigned_phone: phone,\n        test_mode: true\n      },\n      raw_message: {\n        chat_session_id: chatInput.chat_session_id,\n        text: chatInput.text\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             864,
+                                                             64
+                                                         ],
+                                            "id":  "e0e7a677-934e-4738-ba28-ba54558c152b",
+                                            "name":  "build_normalized_event"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "KPlLCK7DDIxh7Fnn",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                                                  "cachedResultName":  "2 lead_loader"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1072,
+                                                             64
+                                                         ],
+                                            "id":  "825ceb0f-e7f2-4242-954e-67d0a678df53",
+                                            "name":  "Call \u00272 lead_loader\u0027"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [\n  {\n    json: {\n      output: `Listo. Este chat ahora simula el número ${$json.assigned_phone}.`\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             736,
+                                                             -176
+                                                         ],
+                                            "id":  "35cf5041-bd82-4f97-b30b-e1f8224119d7",
+                                            "name":  "Responder número asignado"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [\n  {\n    json: {\n      output: `Primero asigna un número para este chat usando:\\n\\n/numero 569900000001`\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             880,
+                                                             224
+                                                         ],
+                                            "id":  "a95c4482-b3a2-410b-9767-f70b1b180d2a",
+                                            "name":  "responder pedir número"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "19970663-7d98-4e4b-ac3c-4802dbb664ac",
+                                                                                                         "leftValue":  "={{ $json.assigned_phone !== undefined \u0026\u0026 $json.assigned_phone !== null \u0026\u0026 $json.assigned_phone !== \"\" }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             656,
+                                                             64
+                                                         ],
+                                            "id":  "1758b83f-dcf4-4cd4-a25a-5757a8ab54bb",
+                                            "name":  "IF: existe sesión"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "cbf2912c-b90b-46c0-b4fb-d9a1e3088d53",
+                                                                                                         "leftValue":  "={{ $json.is_number_command === true }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             240,
+                                                             -32
+                                                         ],
+                                            "id":  "4a51bcd4-662e-425c-b052-501788e90121",
+                                            "name":  "IF: es comando número"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE\n    phone = \u0027{{ $(\"build_normalized_event\").first().json.phone }}\u0027\n    OR external_id = \u0027{{ $(\"build_normalized_event\").first().json.phone }}\u0027\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT\n  m.content,\n  m.created_at,\n  m.status,\n  m.channel\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE\n  m.direction = \u0027outbound\u0027\n  AND m.channel = \u0027n8n_chat\u0027\n  AND m.created_at \u003e= NOW() - INTERVAL \u00272 minutes\u0027\nORDER BY m.created_at DESC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1280,
+                                                             64
+                                                         ],
+                                            "id":  "cfc38259-578c-460d-8bcb-0a37615cd585",
+                                            "name":  "DB buscar respuesta outbound chat",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const row = $json;\n\nconst message =\n  row.content ||\n  row.message ||\n  row.output ||\n  null;\n\nif (!message) {\n  return [\n    {\n      json: {\n        output: \"No encontré una respuesta generada por el bot. Revisa si el action_executor llegó a enviar/guardar el mensaje outbound.\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      output: message\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1488,
+                                                             64
+                                                         ],
+                                            "id":  "875c43d7-7019-41f6-9a6a-6838d1c945d2",
+                                            "name":  "Responder al chat"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When chat message received":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "parse_chat_input",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "parse_chat_input":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "IF: es comando número",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "db BuscarNumero":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "IF: existe sesión",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "build_normalized_event":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "Call \u00272 lead_loader\u0027",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "db Guardar Numero":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Responder número asignado",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "IF: existe sesión":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_normalized_event",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ],
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "responder pedir número",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Call \u00272 lead_loader\u0027":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "DB buscar respuesta outbound chat",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "IF: es comando número":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "db Guardar Numero",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ],
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "db BuscarNumero",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "DB buscar respuesta outbound chat":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "Responder al chat",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 41235fef",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-02T18:53:07.267Z",
+                                                             "id":  388,
+                                                             "workflowId":  "uKJuQUJ3zcLxiAsI",
+                                                             "versionId":  "41235fef-b768-4f50-b115-23a81164afab",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

@@ -1,0 +1,154 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:11:55.834Z",
+    "createdAt":  "2026-04-30T14:21:12.545Z",
+    "id":  "vumFLBQsUpXMNeaQ",
+    "name":  "6.15 request_review",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"review_url\": \"={{ $json.review_url }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "IN request_review",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst input = $json;\n\nconst executionContext = parseMaybeJson(input.execution_context, {});\nconst contextPacket = parseMaybeJson(input.context_packet, {});\nconst decision = parseMaybeJson(input.decision, {});\nconst stateUpdate = parseMaybeJson(input.state_update, {});\nconst executionMeta = parseMaybeJson(input.execution_meta, {});\n\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in request_review\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_review\");\n}\n\nconst reviewUrl =\n  input.review_url ||\n  decision.review_url ||\n  decision.state_update?.review_url ||\n  executionContext.review_url ||\n  state.review_url ||\n  \"\";\n\nlet message = \"\";\n\nif (reviewUrl) {\n  message =\n    `Gracias por confiar en Ahumada Detailing. Si te gustó el resultado, nos ayudaría mucho que nos dejaras una reseña aquí:\\n\\n${reviewUrl}\\n\\nEso nos ayuda a seguir creciendo y a llegar a más personas.`;\n} else {\n  message =\n    \"Gracias por confiar en Ahumada Detailing. Si te gustó el resultado, nos ayudaría mucho que nos dejaras una reseña. Eso nos ayuda a seguir creciendo y a llegar a más personas.\";\n}\n\nreturn [{\n  lead_id: leadId,\n  phone,\n  channel,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"request_review\"\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdate,\n    stage: \"post_service\",\n    intent_last: \"review_requested\",\n    next_goal: \"request_referral\",\n    last_bot_action: \"request_review\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"request_review_message_prepared\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "a9332949-7a62-45eb-960f-b41a6f591bc2",
+                      "name":  "build_request_review_result"
+                  }
+              ],
+    "connections":  {
+                        "IN request_review":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "build_request_review_result",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "3ed46cbf-b640-4ad7-be87-ba3bdbcf341b",
+    "activeVersionId":  "3ed46cbf-b640-4ad7-be87-ba3bdbcf341b",
+    "versionCounter":  14,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-30T14:21:12.548Z",
+                       "createdAt":  "2026-04-30T14:21:12.548Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "vumFLBQsUpXMNeaQ",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-30T14:23:18.000Z",
+                          "createdAt":  "2026-04-30T14:22:26.331Z",
+                          "versionId":  "3ed46cbf-b640-4ad7-be87-ba3bdbcf341b",
+                          "workflowId":  "vumFLBQsUpXMNeaQ",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"review_url\": \"={{ $json.review_url }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "IN request_review",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst input = $json;\n\nconst executionContext = parseMaybeJson(input.execution_context, {});\nconst contextPacket = parseMaybeJson(input.context_packet, {});\nconst decision = parseMaybeJson(input.decision, {});\nconst stateUpdate = parseMaybeJson(input.state_update, {});\nconst executionMeta = parseMaybeJson(input.execution_meta, {});\n\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in request_review\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_review\");\n}\n\nconst reviewUrl =\n  input.review_url ||\n  decision.review_url ||\n  decision.state_update?.review_url ||\n  executionContext.review_url ||\n  state.review_url ||\n  \"\";\n\nlet message = \"\";\n\nif (reviewUrl) {\n  message =\n    `Gracias por confiar en Ahumada Detailing. Si te gustó el resultado, nos ayudaría mucho que nos dejaras una reseña aquí:\\n\\n${reviewUrl}\\n\\nEso nos ayuda a seguir creciendo y a llegar a más personas.`;\n} else {\n  message =\n    \"Gracias por confiar en Ahumada Detailing. Si te gustó el resultado, nos ayudaría mucho que nos dejaras una reseña. Eso nos ayuda a seguir creciendo y a llegar a más personas.\";\n}\n\nreturn [{\n  lead_id: leadId,\n  phone,\n  channel,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"request_review\"\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdate,\n    stage: \"post_service\",\n    intent_last: \"review_requested\",\n    next_goal: \"request_referral\",\n    last_bot_action: \"request_review\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"request_review_message_prepared\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "a9332949-7a62-45eb-960f-b41a6f591bc2",
+                                            "name":  "build_request_review_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "IN request_review":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_request_review_result",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 3ed46cbf",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-30T14:23:18.113Z",
+                                                             "id":  310,
+                                                             "workflowId":  "vumFLBQsUpXMNeaQ",
+                                                             "versionId":  "3ed46cbf-b640-4ad7-be87-ba3bdbcf341b",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

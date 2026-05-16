@@ -1,0 +1,261 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:07:33.654Z",
+    "createdAt":  "2026-04-13T16:27:42.260Z",
+    "id":  "fV3SaxUyeTeL0EVV",
+    "name":  "1 Inbound_router",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "whatsapp-meta",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -64,
+                                       112
+                                   ],
+                      "id":  "a4f95007-2542-4616-9914-7283c8d42f7c",
+                      "name":  "WB Webhook",
+                      "webhookId":  "9395322a-eca6-4412-9168-b050e6ce38e3"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const body = $json.body || $json;\n\n// Ruta típica de WhatsApp Cloud API\nconst value = body?.entry?.[0]?.changes?.[0]?.value;\n\n// Si no viene la estructura esperada, cortar flujo\nif (!value) {\n  return [];\n}\n\n// Ignorar eventos de estados (delivered, read, sent, etc.)\nif (Array.isArray(value.statuses) \u0026\u0026 value.statuses.length \u003e 0) {\n  return [];\n}\n\n// Tomar mensajes\nconst messages = Array.isArray(value.messages) ? value.messages : [];\nif (messages.length === 0) {\n  return [];\n}\n\nconst msg = messages[0];\n\n// Solo procesar mensajes entrantes con remitente\nif (!msg?.from) {\n  return [];\n}\n\n// Contacto si viene disponible\nconst contact = Array.isArray(value.contacts) ? value.contacts[0] : null;\nconst profileName = contact?.profile?.name || null;\n\n// Texto normalizado según tipo\nlet normalizedText = \u0027\u0027;\nlet attachments = [];\n\nswitch (msg.type) {\n  case \u0027text\u0027:\n    normalizedText = msg.text?.body || \u0027\u0027;\n    break;\n\n  case \u0027image\u0027:\n    normalizedText = msg.image?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027image\u0027,\n      id: msg.image?.id || null,\n      mime_type: msg.image?.mime_type || null,\n      sha256: msg.image?.sha256 || null,\n      caption: msg.image?.caption || null,\n    });\n    break;\n\n  case \u0027document\u0027:\n    normalizedText = msg.document?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027document\u0027,\n      id: msg.document?.id || null,\n      mime_type: msg.document?.mime_type || null,\n      sha256: msg.document?.sha256 || null,\n      filename: msg.document?.filename || null,\n      caption: msg.document?.caption || null,\n    });\n    break;\n\n  case \u0027audio\u0027:\n    attachments.push({\n      type: \u0027audio\u0027,\n      id: msg.audio?.id || null,\n      mime_type: msg.audio?.mime_type || null,\n      sha256: msg.audio?.sha256 || null,\n      voice: msg.audio?.voice || false,\n    });\n    break;\n\n  case \u0027video\u0027:\n    normalizedText = msg.video?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027video\u0027,\n      id: msg.video?.id || null,\n      mime_type: msg.video?.mime_type || null,\n      sha256: msg.video?.sha256 || null,\n      caption: msg.video?.caption || null,\n    });\n    break;\n\n  case \u0027location\u0027:\n    normalizedText = \u0027El usuario envió una ubicación\u0027;\n    attachments.push({\n      type: \u0027location\u0027,\n      latitude: msg.location?.latitude || null,\n      longitude: msg.location?.longitude || null,\n      name: msg.location?.name || null,\n      address: msg.location?.address || null,\n    });\n    break;\n\n  case \u0027interactive\u0027:\n    normalizedText =\n      msg.interactive?.button_reply?.title ||\n      msg.interactive?.list_reply?.title ||\n      \u0027\u0027;\n    attachments.push({\n      type: \u0027interactive\u0027,\n      button_reply: msg.interactive?.button_reply || null,\n      list_reply: msg.interactive?.list_reply || null,\n    });\n    break;\n\n  default:\n    normalizedText = \u0027\u0027;\n    attachments.push({\n      type: msg.type || \u0027unknown\u0027,\n      raw: msg,\n    });\n    break;\n}\n\n// Normalización final\nconst normalizedEvent = {\n  channel: \u0027whatsapp\u0027,\n  lead_id: msg.from,\n  message_id: msg.id || null,\n  timestamp: msg.timestamp || null,\n  message_type: msg.type || \u0027unknown\u0027,\n  text: normalizedText,\n  attachments,\n  contact: {\n    wa_id: contact?.wa_id || msg.from,\n    name: profileName,\n  },\n  source_metadata: {\n    provider: \u0027whatsapp_cloud_api\u0027,\n    phone_number_id: value?.metadata?.phone_number_id || null,\n    display_phone_number: value?.metadata?.display_phone_number || null,\n  },\n  raw_message: msg,\n};\n\n// Si quieres ignorar todo lo que no sea texto, descomenta esto:\n// if (normalizedEvent.message_type !== \u0027text\u0027) {\n//   return [];\n// }\n\nreturn [\n  {\n    json: normalizedEvent,\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       304,
+                                       112
+                                   ],
+                      "id":  "cd31811d-3d9d-4f1c-a408-68b66dfdf5da",
+                      "name":  "FILTRAR Y NORMALIZAR"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "KPlLCK7DDIxh7Fnn",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                            "cachedResultName":  "lead_loader"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       512,
+                                       112
+                                   ],
+                      "id":  "69fdca33-4a90-4e2c-958d-bbaedea8d71c",
+                      "name":  "Call \u0027lead_loader\u0027"
+                  }
+              ],
+    "connections":  {
+                        "WB Webhook":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "FILTRAR Y NORMALIZAR",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "FILTRAR Y NORMALIZAR":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Call \u0027lead_loader\u0027",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "aced743f-51cf-4595-aae7-ef4b96af05c3",
+    "activeVersionId":  "aced743f-51cf-4595-aae7-ef4b96af05c3",
+    "versionCounter":  31,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-13T16:27:42.264Z",
+                       "createdAt":  "2026-04-13T16:27:42.264Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "fV3SaxUyeTeL0EVV",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-01T18:11:35.425Z",
+                     "createdAt":  "2026-05-01T18:11:35.425Z",
+                     "id":  "kESwVa42vzrEr7Y3",
+                     "name":  "main"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-02T18:46:48.000Z",
+                          "createdAt":  "2026-05-02T18:23:06.314Z",
+                          "versionId":  "aced743f-51cf-4595-aae7-ef4b96af05c3",
+                          "workflowId":  "fV3SaxUyeTeL0EVV",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "httpMethod":  "POST",
+                                                               "path":  "whatsapp-meta",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  2.1,
+                                            "position":  [
+                                                             -64,
+                                                             112
+                                                         ],
+                                            "id":  "a4f95007-2542-4616-9914-7283c8d42f7c",
+                                            "name":  "WB Webhook",
+                                            "webhookId":  "9395322a-eca6-4412-9168-b050e6ce38e3"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const body = $json.body || $json;\n\n// Ruta típica de WhatsApp Cloud API\nconst value = body?.entry?.[0]?.changes?.[0]?.value;\n\n// Si no viene la estructura esperada, cortar flujo\nif (!value) {\n  return [];\n}\n\n// Ignorar eventos de estados (delivered, read, sent, etc.)\nif (Array.isArray(value.statuses) \u0026\u0026 value.statuses.length \u003e 0) {\n  return [];\n}\n\n// Tomar mensajes\nconst messages = Array.isArray(value.messages) ? value.messages : [];\nif (messages.length === 0) {\n  return [];\n}\n\nconst msg = messages[0];\n\n// Solo procesar mensajes entrantes con remitente\nif (!msg?.from) {\n  return [];\n}\n\n// Contacto si viene disponible\nconst contact = Array.isArray(value.contacts) ? value.contacts[0] : null;\nconst profileName = contact?.profile?.name || null;\n\n// Texto normalizado según tipo\nlet normalizedText = \u0027\u0027;\nlet attachments = [];\n\nswitch (msg.type) {\n  case \u0027text\u0027:\n    normalizedText = msg.text?.body || \u0027\u0027;\n    break;\n\n  case \u0027image\u0027:\n    normalizedText = msg.image?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027image\u0027,\n      id: msg.image?.id || null,\n      mime_type: msg.image?.mime_type || null,\n      sha256: msg.image?.sha256 || null,\n      caption: msg.image?.caption || null,\n    });\n    break;\n\n  case \u0027document\u0027:\n    normalizedText = msg.document?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027document\u0027,\n      id: msg.document?.id || null,\n      mime_type: msg.document?.mime_type || null,\n      sha256: msg.document?.sha256 || null,\n      filename: msg.document?.filename || null,\n      caption: msg.document?.caption || null,\n    });\n    break;\n\n  case \u0027audio\u0027:\n    attachments.push({\n      type: \u0027audio\u0027,\n      id: msg.audio?.id || null,\n      mime_type: msg.audio?.mime_type || null,\n      sha256: msg.audio?.sha256 || null,\n      voice: msg.audio?.voice || false,\n    });\n    break;\n\n  case \u0027video\u0027:\n    normalizedText = msg.video?.caption || \u0027\u0027;\n    attachments.push({\n      type: \u0027video\u0027,\n      id: msg.video?.id || null,\n      mime_type: msg.video?.mime_type || null,\n      sha256: msg.video?.sha256 || null,\n      caption: msg.video?.caption || null,\n    });\n    break;\n\n  case \u0027location\u0027:\n    normalizedText = \u0027El usuario envió una ubicación\u0027;\n    attachments.push({\n      type: \u0027location\u0027,\n      latitude: msg.location?.latitude || null,\n      longitude: msg.location?.longitude || null,\n      name: msg.location?.name || null,\n      address: msg.location?.address || null,\n    });\n    break;\n\n  case \u0027interactive\u0027:\n    normalizedText =\n      msg.interactive?.button_reply?.title ||\n      msg.interactive?.list_reply?.title ||\n      \u0027\u0027;\n    attachments.push({\n      type: \u0027interactive\u0027,\n      button_reply: msg.interactive?.button_reply || null,\n      list_reply: msg.interactive?.list_reply || null,\n    });\n    break;\n\n  default:\n    normalizedText = \u0027\u0027;\n    attachments.push({\n      type: msg.type || \u0027unknown\u0027,\n      raw: msg,\n    });\n    break;\n}\n\n// Normalización final\nconst normalizedEvent = {\n  channel: \u0027whatsapp\u0027,\n  lead_id: msg.from,\n  message_id: msg.id || null,\n  timestamp: msg.timestamp || null,\n  message_type: msg.type || \u0027unknown\u0027,\n  text: normalizedText,\n  attachments,\n  contact: {\n    wa_id: contact?.wa_id || msg.from,\n    name: profileName,\n  },\n  source_metadata: {\n    provider: \u0027whatsapp_cloud_api\u0027,\n    phone_number_id: value?.metadata?.phone_number_id || null,\n    display_phone_number: value?.metadata?.display_phone_number || null,\n  },\n  raw_message: msg,\n};\n\n// Si quieres ignorar todo lo que no sea texto, descomenta esto:\n// if (normalizedEvent.message_type !== \u0027text\u0027) {\n//   return [];\n// }\n\nreturn [\n  {\n    json: normalizedEvent,\n  },\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             304,
+                                                             112
+                                                         ],
+                                            "id":  "cd31811d-3d9d-4f1c-a408-68b66dfdf5da",
+                                            "name":  "FILTRAR Y NORMALIZAR"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "KPlLCK7DDIxh7Fnn",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/KPlLCK7DDIxh7Fnn",
+                                                                                  "cachedResultName":  "lead_loader"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             512,
+                                                             112
+                                                         ],
+                                            "id":  "69fdca33-4a90-4e2c-958d-bbaedea8d71c",
+                                            "name":  "Call \u0027lead_loader\u0027"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "WB Webhook":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "FILTRAR Y NORMALIZAR",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                                              "FILTRAR Y NORMALIZAR":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Call \u0027lead_loader\u0027",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version aced743f",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-02T18:46:48.419Z",
+                                                             "id":  380,
+                                                             "workflowId":  "fV3SaxUyeTeL0EVV",
+                                                             "versionId":  "aced743f-51cf-4595-aae7-ef4b96af05c3",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

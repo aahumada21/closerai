@@ -1,0 +1,2140 @@
+﻿{
+    "updatedAt":  "2026-04-28T13:34:06.508Z",
+    "createdAt":  "2026-04-19T17:54:27.278Z",
+    "id":  "7Hwdia1G3zCgOZNz",
+    "name":  "7 followup_scheduler",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "minutes"
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "id":  "3ef75f5a-042a-47d6-a662-5e376072b693",
+                      "name":  "Schedule Trigger"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "raw",
+                                         "jsonOutput":  "{\n  \"allowed_start_hour\": 9,\n  \"allowed_end_hour\": 21,\n  \"recent_reply_minutes\": 180,\n  \"batch_size\": 20,\n  \"timezone\": \"America/Santiago\"\n}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       208,
+                                       0
+                                   ],
+                      "id":  "86e4accb-0524-4831-bc49-22b19e0461d6",
+                      "name":  "Set_Config"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  f.id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status,\n  f.created_at\nFROM followups f\nWHERE f.status = \u0027pending\u0027\n  AND f.scheduled_for \u003c= NOW()\nORDER BY f.scheduled_for ASC\nLIMIT 100;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       416,
+                                       0
+                                   ],
+                      "id":  "a29f74fc-5bd6-469f-8df5-f9767e9f61dc",
+                      "name":  "DB_Get_Due_Followups",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "e80066aa-f1e9-439d-8ec5-bff5427ac508",
+                                                                                   "leftValue":  "={{ $items().length \u003e 0 }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       624,
+                                       0
+                                   ],
+                      "id":  "ffd51ac9-da19-456e-ae92-5820410a2365",
+                      "name":  "IF_Has_Items"
+                  },
+                  {
+                      "parameters":  {
+                                         "batchSize":  20,
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       832,
+                                       -80
+                                   ],
+                      "id":  "396929c2-005f-40c6-b3aa-c6db8334939e",
+                      "name":  "Loop Over Items"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE followups\nSET\n  status = \u0027processing\u0027,\n  processing_started_at = NOW()\nWHERE id = \u0027{{ $json.id }}\u0027\n  AND status = \u0027pending\u0027\nRETURNING\n  id AS followup_id,\n  lead_id,\n  scheduled_for,\n  status;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1040,
+                                       32
+                                   ],
+                      "id":  "8675d2b8-1a9b-47c5-aaff-bccbac7e1d4f",
+                      "name":  "DB_Lock_Followup",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "5990c29a-823a-4b1c-b86c-b22c94af1455",
+                                                                                   "leftValue":  "={{ !!$json.followup_id }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1248,
+                                       32
+                                   ],
+                      "id":  "e23c3be4-f1e1-4f62-9050-7e23ed6a5ec0",
+                      "name":  "IF_Lock_Acquired"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  f.id AS followup_id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status AS followup_status,\n  f.created_at AS followup_created_at,\n  f.followup_type,\n  f.message_template_key,\n  COALESCE(f.metadata, \u0027{}\u0027::jsonb) AS metadata,\n\n  l.id AS lead_db_id,\n  l.phone,\n  l.name,\n  false AS opt_out,\n\n  ls.stage,\n  ls.intent_last,\n  ls.next_goal,\n  COALESCE(ls.human_handoff, false) AS human_handoff,\n  ls.updated_at AS state_updated_at,\n\n  a.id AS appointment_id,\n  a.event_id AS appointment_event_id,\n  a.status AS appointment_status,\n  a.start_at AS appointment_start_at,\n  a.end_at AS appointment_end_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027inbound\u0027\n  ) AS last_inbound_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027outbound\u0027\n  ) AS last_outbound_at,\n\n  (\n    SELECT m.content\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027outbound\u0027\n    ORDER BY m.created_at DESC\n    LIMIT 1\n  ) AS last_outbound_text\n\nFROM followups f\n\nJOIN leads l\n  ON l.id = f.lead_id\n\nLEFT JOIN lead_state ls\n  ON ls.lead_id = f.lead_id\n\nLEFT JOIN LATERAL (\n  SELECT\n    ap.id,\n    ap.event_id,\n    ap.conversation_id,\n    ap.start_at,\n    ap.end_at,\n    ap.status\n  FROM appointments ap\n  WHERE ap.conversation_id = f.lead_id\n    AND ap.status IN (\u0027confirmed\u0027, \u0027booked\u0027, \u0027completed\u0027)\n    AND (\n      ap.event_id = f.metadata-\u003e\u003e\u0027appointment_event_id\u0027\n      OR f.metadata-\u003e\u003e\u0027appointment_event_id\u0027 IS NULL\n    )\n  ORDER BY ap.start_at ASC\n  LIMIT 1\n) a ON true\n\nWHERE f.id = \u0027{{ $json.followup_id }}\u0027\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1696,
+                                       -144
+                                   ],
+                      "id":  "56cb971d-62cf-43ec-a9a4-d234afea172f",
+                      "name":  "DB_Load_Lead_Context",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const row = $json;\n\nconst allowedStartHour = 9;\nconst allowedEndHour = 21;\nconst recentReplyMinutes = 180;\n\nconst now = new Date();\nconst scheduledFor = row.scheduled_for ? new Date(row.scheduled_for) : null;\nconst followupCreatedAt = row.followup_created_at\n  ? new Date(row.followup_created_at)\n  : row.created_at\n    ? new Date(row.created_at)\n    : null;\n\nconst lastInboundAt = row.last_inbound_at ? new Date(row.last_inbound_at) : null;\n\nconst currentHour = Number(\n  new Intl.DateTimeFormat(\u0027en-US\u0027, {\n    timeZone: \u0027America/Santiago\u0027,\n    hour: \u00272-digit\u0027,\n    hour12: false\n  }).format(now)\n);\n\nconst followupType = row.followup_type || \u0027generic_followup\u0027;\n\nlet shouldSend = true;\nlet skipReason = null;\nlet nextStatus = null;\n\nfunction cancel(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027cancelled\u0027;\n}\n\nfunction fail(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027failed\u0027;\n}\n\nfunction requeue(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027pending\u0027;\n}\n\n// 1. scheduled_for válido\nif (!scheduledFor || isNaN(scheduledFor.getTime())) {\n  fail(\u0027missing_or_invalid_scheduled_for\u0027);\n}\n\n// 2. horario permitido\nif (shouldSend \u0026\u0026 (currentHour \u003c allowedStartHour || currentHour \u003e= allowedEndHour)) {\n  requeue(\u0027outside_allowed_hours\u0027);\n}\n\n// 3. opt-out\nif (shouldSend \u0026\u0026 row.opt_out === true) {\n  cancel(\u0027lead_opted_out\u0027);\n}\n\n// 4. handoff humano\nif (shouldSend \u0026\u0026 row.human_handoff === true) {\n  cancel(\u0027human_handoff_active\u0027);\n}\n\n// 5. reglas por tipo de follow-up\nif (shouldSend) {\n  const isQuoteFollowup = [\n    \u0027quote_no_reply_24h\u0027,\n    \u0027quote_no_reply_48h\u0027,\n    \u0027interest_nudge_6h\u0027\n  ].includes(followupType);\n\n  const isAppointmentReminder = [\n    \u0027appointment_reminder_1d\u0027,\n    \u0027appointment_reminder_1h\u0027\n  ].includes(followupType);\n\n  const isPostServiceReview = [\n    \u0027post_service_review_24h\u0027\n  ].includes(followupType);\n\n  // Seguimiento comercial: no enviar si ya reservó o tiene cita\n  if (isQuoteFollowup) {\n    if (row.stage === \u0027booked\u0027) {\n      cancel(\u0027lead_already_booked\u0027);\n    } else if (row.appointment_id) {\n      cancel(\u0027appointment_exists\u0027);\n    } else if (\n      lastInboundAt \u0026\u0026\n      followupCreatedAt \u0026\u0026\n      lastInboundAt \u003e followupCreatedAt\n    ) {\n      cancel(\u0027lead_replied_after_followup_created\u0027);\n    }\n  }\n\n  // Recordatorios de cita: requieren cita existente\n  if (shouldSend \u0026\u0026 isAppointmentReminder) {\n    if (!row.appointment_id) {\n      cancel(\u0027missing_appointment_for_reminder\u0027);\n    } else if (![\u0027confirmed\u0027, \u0027booked\u0027].includes(row.appointment_status)) {\n      cancel(\u0027appointment_not_active\u0027);\n    }\n  }\n\n  // Reseña post-servicio: no enviar si está en problema/handoff\n  if (shouldSend \u0026\u0026 isPostServiceReview) {\n    if (row.stage === \u0027human_handoff\u0027) {\n      cancel(\u0027human_handoff_active\u0027);\n    }\n\n    // Si después manejas status completed, puedes endurecer esta regla:\n    // if (row.appointment_status !== \u0027completed\u0027) cancel(\u0027appointment_not_completed\u0027);\n  }\n}\n\n// 6. respondió muy recientemente\n// Esto aplica para followups comerciales, no para recordatorios de cita\nif (\n  shouldSend \u0026\u0026\n  lastInboundAt \u0026\u0026\n  [\u0027quote_no_reply_24h\u0027, \u0027quote_no_reply_48h\u0027, \u0027interest_nudge_6h\u0027, \u0027generic_followup\u0027].includes(followupType)\n) {\n  const diffMinutes = (now - lastInboundAt) / 1000 / 60;\n\n  if (diffMinutes \u003c= recentReplyMinutes) {\n    cancel(\u0027recent_inbound_reply\u0027);\n  }\n}\n\nreturn [{\n  json: {\n    ...row,\n    should_send: shouldSend,\n    skip_reason: skipReason,\n    next_status: nextStatus\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1648,
+                                       144
+                                   ],
+                      "id":  "e10262a0-8a25-41f1-aa6e-dcafc223b103",
+                      "name":  "Code_Evaluate_Eligibility"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "91ab2767-4b1d-43cb-b6f5-27a1e5f6ceb4",
+                                                                                   "leftValue":  "={{ $json.should_send === true }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1952,
+                                       96
+                                   ],
+                      "id":  "eaf78044-fda0-4ee0-8904-f5138809271c",
+                      "name":  "IF_Should_Send"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const row = $json;\n\nconst templates = {\n  quote_no_reply_24h:\n    \u0027Hola, te escribo para ver si aún te interesa el servicio que cotizamos. Si quieres, puedo ayudarte a revisar un horario disponible.\u0027,\n\n  quote_no_reply_48h:\n    \u0027Hola, paso a cerrar el seguimiento de la cotización. Si todavía te interesa, puedo ayudarte a agendar un horario.\u0027,\n\n  interest_nudge_6h:\n    \u0027Hola, quedé atento a tu mensaje anterior. Si quieres, te ayudo a avanzar con la reserva.\u0027,\n\n  appointment_reminder_1d:\n    \u0027Hola, te recuerdo que tienes tu servicio agendado para mañana. Si necesitas reprogramar, avísame por aquí.\u0027,\n\n  appointment_reminder_1h:\n    \u0027Hola, te recuerdo que tu servicio es en aproximadamente 1 hora. Cualquier cosa, me avisas.\u0027,\n\n  post_service_review_24h:\n    \u0027Hola, muchas gracias por confiar en nosotros. Si quedaste conforme con el servicio, ¿nos podrías dejar una reseña? Nos ayuda mucho.\u0027,\n\n  generic_followup:\n    \u0027Hola, te escribo para dar seguimiento a tu solicitud.\u0027\n};\n\nconst followupType = row.followup_type || \u0027generic_followup\u0027;\n\nreturn [{\n  json: {\n    ...row,\n    outbound_message: templates[followupType] || templates.generic_followup,\n    channel: \u0027whatsapp\u0027,\n    message_type: \u0027followup\u0027,\n    source: \u0027followup_scheduler\u0027\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2112,
+                                       -128
+                                   ],
+                      "id":  "d4c87c76-bec3-4bc2-8e3e-3605a780d316",
+                      "name":  "Code_Build_Message"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "qY8gG9AaeBkFmxGn",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/qY8gG9AaeBkFmxGn",
+                                                            "cachedResultName":  "6.1 send_outbound_message"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.lead_id }}",
+                                                                              "followup_id":  "={{ $json.followup_id }}",
+                                                                              "phone":  "={{ $json.phone }}",
+                                                                              "channel":  "={{ $json.channel }}",
+                                                                              "message":  "={{ $json.outbound_message }}",
+                                                                              "message_type":  "={{ $json.message_type }}",
+                                                                              "source":  "={{ $json.source }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "followup_id",
+                                                                                   "displayName":  "followup_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "phone",
+                                                                                   "displayName":  "phone",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "channel",
+                                                                                   "displayName":  "channel",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "message",
+                                                                                   "displayName":  "message",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "message_type",
+                                                                                   "displayName":  "message_type",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "source",
+                                                                                   "displayName":  "source",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+                                                         "waitForSubWorkflow":  true
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       2320,
+                                       -128
+                                   ],
+                      "id":  "c461ff81-6c33-4f8c-ba49-b3db2d22f279",
+                      "name":  "send_outbound_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO messages (\n  lead_id,\n  direction,\n  channel,\n  message_type,\n  content,\n  provider_message_id,\n  provider_status,\n  status,\n  created_at\n)\nVALUES (\n  \u0027{{ $(\"IF_Send_Success\").first().json.lead_id }}\u0027,\n  \u0027outbound\u0027,\n  \u0027whatsapp\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.message_type || \"followup\" }}\u0027,\n  \u0027{{ (($(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\")).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.provider_message_id || \"\" }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.provider_status || \"\" }}\u0027,\n  \u0027sent\u0027,\n  NOW()\n)\nRETURNING id;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3520,
+                                       -176
+                                   ],
+                      "id":  "b756a98f-5db2-4082-b423-e1c61e10ad70",
+                      "name":  "DB_Insert_Message",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE followups\nSET\n  status = \u0027completed\u0027,\n  completed_at = NOW()\nWHERE id = \u0027{{ $(\"IF_Send_Success\").first().json.followup_id }}\u0027;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3056,
+                                       -176
+                                   ],
+                      "id":  "5ce58937-6d8e-4511-a6ac-5856e9c88eaa",
+                      "name":  "DB_Update_Followup_Completed",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $json.lead_id || null }}\u0027,\n  \u0027{{ $json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_skipped\u0027,\n    \u0027followup_id\u0027, \u0027{{ $json.followup_id || null }}\u0027,\n    \u0027reason\u0027, \u0027{{ $json.skip_reason || null }}\u0027,\n    \u0027next_status\u0027, \u0027{{ $json.next_status || null }}\u0027,\n    \u0027source\u0027, \u0027followup_scheduler\u0027\n  ),\n  NOW()\n);",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3536,
+                                       352
+                                   ],
+                      "id":  "ef55a2d6-056d-4c03-a553-392987901f83",
+                      "name":  "DB_Insert_Audit_Skipped",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE followups\nSET\n  status = \u0027pending\u0027,\n  scheduled_for = CASE\n    WHEN (NOW() AT TIME ZONE \u0027America/Santiago\u0027)::time \u003c time \u002709:00\u0027\n    THEN ((NOW() AT TIME ZONE \u0027America/Santiago\u0027)::date + time \u002709:00\u0027) AT TIME ZONE \u0027America/Santiago\u0027\n    ELSE (((NOW() AT TIME ZONE \u0027America/Santiago\u0027)::date + 1) + time \u002709:00\u0027) AT TIME ZONE \u0027America/Santiago\u0027\n  END,\n  skipped_reason = \u0027rescheduled_outside_allowed_hours\u0027\nWHERE id = \u0027{{ $json.followup_id }}\u0027\n  AND \u0027{{ $json.skip_reason }}\u0027 = \u0027outside_allowed_hours\u0027;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2848,
+                                       224
+                                   ],
+                      "id":  "380371ea-b8bf-47e9-860d-1de64619e750",
+                      "name":  "DB_Requeue_Outside_Hours",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE followups\nSET\n  status = \u0027{{ $json.next_status || \"cancelled\" }}\u0027,\n  skipped_reason = \u0027{{ $json.skip_reason }}\u0027,\n  cancelled_at = CASE\n    WHEN \u0027{{ $json.next_status || \"cancelled\" }}\u0027 = \u0027cancelled\u0027 THEN NOW()\n    ELSE cancelled_at\n  END\nWHERE id = \u0027{{ $json.followup_id }}\u0027\n  AND \u0027{{ $json.skip_reason }}\u0027 \u003c\u003e \u0027outside_allowed_hours\u0027;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2864,
+                                       400
+                                   ],
+                      "id":  "11067d05-9743-4829-8006-791c4b94bd32",
+                      "name":  "DB_Cancel_Followup",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "b4122181-7a1d-4fb6-8aed-4329efb25b1f",
+                                                                                   "leftValue":  "={{ $json.success === true }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       2528,
+                                       -128
+                                   ],
+                      "id":  "ac2c0a83-9e22-47e5-b6c4-a984b9ec07d1",
+                      "name":  "IF_Send_Success"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE followups\nSET\n  status = \u0027failed\u0027,\n  skipped_reason = \u0027send_outbound_message_failed\u0027,\n  failed_at = NOW()\nWHERE id = \u0027{{ $json.followup_id }}\u0027;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2896,
+                                       48
+                                   ],
+                      "id":  "07d297a5-26e2-49f5-8c7f-1cc9fbfc5b50",
+                      "name":  "DB_Update_Followup_Failed",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $json.lead_id || null }}\u0027,\n  \u0027{{ $json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_failed\u0027,\n    \u0027followup_id\u0027, \u0027{{ $json.followup_id || null }}\u0027,\n    \u0027reason\u0027, \u0027send_outbound_message_failed\u0027\n  ),\n  NOW()\n);",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3136,
+                                       48
+                                   ],
+                      "id":  "61c8e70a-ad5d-4465-b97c-afdff1663b8c",
+                      "name":  "DB_Insert_Audit_Failed",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const items = $input.all();\n\nlet executed = 0;\nlet skipped = 0;\nlet errors = 0;\n\nfor (const item of items) {\n  const t = item.json.result_type;\n  if (t === \u0027executed\u0027) executed++;\n  else if (t === \u0027skipped\u0027) skipped++;\n  else if (t === \u0027error\u0027) errors++;\n}\n\nreturn [{\n  json: {\n    executed_followups: executed,\n    skipped,\n    errors\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1072,
+                                       -208
+                                   ],
+                      "id":  "e19bafa2-c48b-4829-832b-1c8e187d0237",
+                      "name":  "Code_Build_Output"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "6c5ed12d-e95a-4075-9812-6fbf9f60006e",
+                                                                                   "leftValue":  "={{ $json.skip_reason === \u0027outside_allowed_hours\u0027 }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       2384,
+                                       256
+                                   ],
+                      "id":  "1ffadc7e-11a3-41e3-8787-3970a82e98c3",
+                      "name":  "If (outside hours)"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  json: {\n    raw: $json,\n    followup_id: $json.followup_id,\n    id: $json.id,\n    lead_id: $json.lead_id\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1472,
+                                       -160
+                                   ],
+                      "id":  "908144bf-577d-4bb1-afbe-7e7379f0bf28",
+                      "name":  "Debug_Lock_Output"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.lead_id || null }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_sent\u0027,\n    \u0027followup_id\u0027, \u0027{{ $(\"IF_Send_Success\").first().json.followup_id || null }}\u0027,\n    \u0027message\u0027, \u0027{{ (( $(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\" )).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027source\u0027, \u0027followup_scheduler\u0027\n  ),\n  NOW()\n);",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3280,
+                                       -176
+                                   ],
+                      "id":  "25080ba7-7a73-4d16-9c1d-b34b9208f128",
+                      "name":  "DB_Insert_Audit_Sent",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "raw",
+                                         "jsonOutput":  "={{\n{\n  result_type: \"executed\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       3888,
+                                       -128
+                                   ],
+                      "id":  "429ca7b1-23d8-4c83-ae3d-051937dfe77e",
+                      "name":  "Set_Result_Executed"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "raw",
+                                         "jsonOutput":  "={{\n{\n  result_type: \"error\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       3328,
+                                       48
+                                   ],
+                      "id":  "df624556-64fe-4d76-b0c6-5d835df1c9fe",
+                      "name":  "Set_Result_Error"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "raw",
+                                         "jsonOutput":  "={{\n{\n  result_type: \"skipped\",\n  lead_id: $(\"IF_Should_Send\").first().json.lead_id,\n  followup_id: $(\"IF_Should_Send\").first().json.followup_id,\n  skip_reason: $(\"IF_Should_Send\").first().json.skip_reason\n}\n}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       3776,
+                                       352
+                                   ],
+                      "id":  "d534d037-8eee-4499-aa47-c95309695de3",
+                      "name":  "Set_Result_Skipped"
+                  }
+              ],
+    "connections":  {
+                        "Schedule Trigger":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Set_Config",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Set_Config":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "DB_Get_Due_Followups",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "DB_Get_Due_Followups":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "IF_Has_Items",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "IF_Has_Items":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Loop Over Items",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Loop Over Items":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Code_Build_Output",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "DB_Lock_Followup",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "DB_Lock_Followup":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "IF_Lock_Acquired",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "IF_Lock_Acquired":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Debug_Lock_Output",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Loop Over Items",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "DB_Load_Lead_Context":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Code_Evaluate_Eligibility",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Code_Evaluate_Eligibility":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "IF_Should_Send",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "IF_Should_Send":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Code_Build_Message",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ],
+                                                            [
+                                                                {
+                                                                    "node":  "If (outside hours)",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Code_Build_Message":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "send_outbound_message",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "send_outbound_message":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "IF_Send_Success",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "DB_Insert_Message":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Set_Result_Executed",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "DB_Update_Followup_Completed":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "DB_Insert_Audit_Sent",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "DB_Requeue_Outside_Hours":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "DB_Insert_Audit_Skipped",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "DB_Cancel_Followup":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "DB_Insert_Audit_Skipped",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "IF_Send_Success":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "DB_Update_Followup_Completed",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "DB_Update_Followup_Failed",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "DB_Update_Followup_Failed":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "DB_Insert_Audit_Failed",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "DB_Insert_Audit_Skipped":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Set_Result_Skipped",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "DB_Insert_Audit_Failed":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Set_Result_Error",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Code_Build_Output":  {
+                                                  "main":  [
+                                                               [
+
+                                                               ]
+                                                           ]
+                                              },
+                        "If (outside hours)":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "DB_Requeue_Outside_Hours",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "DB_Cancel_Followup",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Debug_Lock_Output":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "DB_Load_Lead_Context",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "DB_Insert_Audit_Sent":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "DB_Insert_Message",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Set_Result_Executed":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Loop Over Items",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Set_Result_Error":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Loop Over Items",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Set_Result_Skipped":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Loop Over Items",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  {
+                       "node:Schedule Trigger":  {
+                                                     "recurrenceRules":  [
+
+                                                                         ]
+                                                 }
+                   },
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "3f6273a5-040f-4ce2-93e3-706d6e689c5f",
+    "activeVersionId":  "3f6273a5-040f-4ce2-93e3-706d6e689c5f",
+    "versionCounter":  371,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-19T17:54:27.285Z",
+                       "createdAt":  "2026-04-19T17:54:27.285Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "7Hwdia1G3zCgOZNz",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-24T19:39:43.000Z",
+                          "createdAt":  "2026-04-24T19:33:46.945Z",
+                          "versionId":  "3f6273a5-040f-4ce2-93e3-706d6e689c5f",
+                          "workflowId":  "7Hwdia1G3zCgOZNz",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "rule":  {
+                                                                            "interval":  [
+                                                                                             {
+                                                                                                 "field":  "minutes"
+                                                                                             }
+                                                                                         ]
+                                                                        }
+                                                           },
+                                            "type":  "n8n-nodes-base.scheduleTrigger",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ],
+                                            "id":  "3ef75f5a-042a-47d6-a662-5e376072b693",
+                                            "name":  "Schedule Trigger"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "raw",
+                                                               "jsonOutput":  "{\n  \"allowed_start_hour\": 9,\n  \"allowed_end_hour\": 21,\n  \"recent_reply_minutes\": 180,\n  \"batch_size\": 20,\n  \"timezone\": \"America/Santiago\"\n}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.set",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             208,
+                                                             0
+                                                         ],
+                                            "id":  "86e4accb-0524-4831-bc49-22b19e0461d6",
+                                            "name":  "Set_Config"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  f.id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status,\n  f.created_at\nFROM followups f\nWHERE f.status = \u0027pending\u0027\n  AND f.scheduled_for \u003c= NOW()\nORDER BY f.scheduled_for ASC\nLIMIT 100;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             416,
+                                                             0
+                                                         ],
+                                            "id":  "a29f74fc-5bd6-469f-8df5-f9767e9f61dc",
+                                            "name":  "DB_Get_Due_Followups",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "e80066aa-f1e9-439d-8ec5-bff5427ac508",
+                                                                                                         "leftValue":  "={{ $items().length \u003e 0 }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             624,
+                                                             0
+                                                         ],
+                                            "id":  "ffd51ac9-da19-456e-ae92-5820410a2365",
+                                            "name":  "IF_Has_Items"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "batchSize":  20,
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.splitInBatches",
+                                            "typeVersion":  3,
+                                            "position":  [
+                                                             832,
+                                                             -80
+                                                         ],
+                                            "id":  "396929c2-005f-40c6-b3aa-c6db8334939e",
+                                            "name":  "Loop Over Items"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE followups\nSET\n  status = \u0027processing\u0027,\n  processing_started_at = NOW()\nWHERE id = \u0027{{ $json.id }}\u0027\n  AND status = \u0027pending\u0027\nRETURNING\n  id AS followup_id,\n  lead_id,\n  scheduled_for,\n  status;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1040,
+                                                             32
+                                                         ],
+                                            "id":  "8675d2b8-1a9b-47c5-aaff-bccbac7e1d4f",
+                                            "name":  "DB_Lock_Followup",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "5990c29a-823a-4b1c-b86c-b22c94af1455",
+                                                                                                         "leftValue":  "={{ !!$json.followup_id }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1248,
+                                                             32
+                                                         ],
+                                            "id":  "e23c3be4-f1e1-4f62-9050-7e23ed6a5ec0",
+                                            "name":  "IF_Lock_Acquired"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  f.id AS followup_id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status AS followup_status,\n  f.created_at AS followup_created_at,\n  f.followup_type,\n  f.message_template_key,\n  COALESCE(f.metadata, \u0027{}\u0027::jsonb) AS metadata,\n\n  l.id AS lead_db_id,\n  l.phone,\n  l.name,\n  false AS opt_out,\n\n  ls.stage,\n  ls.intent_last,\n  ls.next_goal,\n  COALESCE(ls.human_handoff, false) AS human_handoff,\n  ls.updated_at AS state_updated_at,\n\n  a.id AS appointment_id,\n  a.event_id AS appointment_event_id,\n  a.status AS appointment_status,\n  a.start_at AS appointment_start_at,\n  a.end_at AS appointment_end_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027inbound\u0027\n  ) AS last_inbound_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027outbound\u0027\n  ) AS last_outbound_at,\n\n  (\n    SELECT m.content\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = \u0027outbound\u0027\n    ORDER BY m.created_at DESC\n    LIMIT 1\n  ) AS last_outbound_text\n\nFROM followups f\n\nJOIN leads l\n  ON l.id = f.lead_id\n\nLEFT JOIN lead_state ls\n  ON ls.lead_id = f.lead_id\n\nLEFT JOIN LATERAL (\n  SELECT\n    ap.id,\n    ap.event_id,\n    ap.conversation_id,\n    ap.start_at,\n    ap.end_at,\n    ap.status\n  FROM appointments ap\n  WHERE ap.conversation_id = f.lead_id\n    AND ap.status IN (\u0027confirmed\u0027, \u0027booked\u0027, \u0027completed\u0027)\n    AND (\n      ap.event_id = f.metadata-\u003e\u003e\u0027appointment_event_id\u0027\n      OR f.metadata-\u003e\u003e\u0027appointment_event_id\u0027 IS NULL\n    )\n  ORDER BY ap.start_at ASC\n  LIMIT 1\n) a ON true\n\nWHERE f.id = \u0027{{ $json.followup_id }}\u0027\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1696,
+                                                             -144
+                                                         ],
+                                            "id":  "56cb971d-62cf-43ec-a9a4-d234afea172f",
+                                            "name":  "DB_Load_Lead_Context",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const row = $json;\n\nconst allowedStartHour = 9;\nconst allowedEndHour = 21;\nconst recentReplyMinutes = 180;\n\nconst now = new Date();\nconst scheduledFor = row.scheduled_for ? new Date(row.scheduled_for) : null;\nconst followupCreatedAt = row.followup_created_at\n  ? new Date(row.followup_created_at)\n  : row.created_at\n    ? new Date(row.created_at)\n    : null;\n\nconst lastInboundAt = row.last_inbound_at ? new Date(row.last_inbound_at) : null;\n\nconst currentHour = Number(\n  new Intl.DateTimeFormat(\u0027en-US\u0027, {\n    timeZone: \u0027America/Santiago\u0027,\n    hour: \u00272-digit\u0027,\n    hour12: false\n  }).format(now)\n);\n\nconst followupType = row.followup_type || \u0027generic_followup\u0027;\n\nlet shouldSend = true;\nlet skipReason = null;\nlet nextStatus = null;\n\nfunction cancel(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027cancelled\u0027;\n}\n\nfunction fail(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027failed\u0027;\n}\n\nfunction requeue(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = \u0027pending\u0027;\n}\n\n// 1. scheduled_for válido\nif (!scheduledFor || isNaN(scheduledFor.getTime())) {\n  fail(\u0027missing_or_invalid_scheduled_for\u0027);\n}\n\n// 2. horario permitido\nif (shouldSend \u0026\u0026 (currentHour \u003c allowedStartHour || currentHour \u003e= allowedEndHour)) {\n  requeue(\u0027outside_allowed_hours\u0027);\n}\n\n// 3. opt-out\nif (shouldSend \u0026\u0026 row.opt_out === true) {\n  cancel(\u0027lead_opted_out\u0027);\n}\n\n// 4. handoff humano\nif (shouldSend \u0026\u0026 row.human_handoff === true) {\n  cancel(\u0027human_handoff_active\u0027);\n}\n\n// 5. reglas por tipo de follow-up\nif (shouldSend) {\n  const isQuoteFollowup = [\n    \u0027quote_no_reply_24h\u0027,\n    \u0027quote_no_reply_48h\u0027,\n    \u0027interest_nudge_6h\u0027\n  ].includes(followupType);\n\n  const isAppointmentReminder = [\n    \u0027appointment_reminder_1d\u0027,\n    \u0027appointment_reminder_1h\u0027\n  ].includes(followupType);\n\n  const isPostServiceReview = [\n    \u0027post_service_review_24h\u0027\n  ].includes(followupType);\n\n  // Seguimiento comercial: no enviar si ya reservó o tiene cita\n  if (isQuoteFollowup) {\n    if (row.stage === \u0027booked\u0027) {\n      cancel(\u0027lead_already_booked\u0027);\n    } else if (row.appointment_id) {\n      cancel(\u0027appointment_exists\u0027);\n    } else if (\n      lastInboundAt \u0026\u0026\n      followupCreatedAt \u0026\u0026\n      lastInboundAt \u003e followupCreatedAt\n    ) {\n      cancel(\u0027lead_replied_after_followup_created\u0027);\n    }\n  }\n\n  // Recordatorios de cita: requieren cita existente\n  if (shouldSend \u0026\u0026 isAppointmentReminder) {\n    if (!row.appointment_id) {\n      cancel(\u0027missing_appointment_for_reminder\u0027);\n    } else if (![\u0027confirmed\u0027, \u0027booked\u0027].includes(row.appointment_status)) {\n      cancel(\u0027appointment_not_active\u0027);\n    }\n  }\n\n  // Reseña post-servicio: no enviar si está en problema/handoff\n  if (shouldSend \u0026\u0026 isPostServiceReview) {\n    if (row.stage === \u0027human_handoff\u0027) {\n      cancel(\u0027human_handoff_active\u0027);\n    }\n\n    // Si después manejas status completed, puedes endurecer esta regla:\n    // if (row.appointment_status !== \u0027completed\u0027) cancel(\u0027appointment_not_completed\u0027);\n  }\n}\n\n// 6. respondió muy recientemente\n// Esto aplica para followups comerciales, no para recordatorios de cita\nif (\n  shouldSend \u0026\u0026\n  lastInboundAt \u0026\u0026\n  [\u0027quote_no_reply_24h\u0027, \u0027quote_no_reply_48h\u0027, \u0027interest_nudge_6h\u0027, \u0027generic_followup\u0027].includes(followupType)\n) {\n  const diffMinutes = (now - lastInboundAt) / 1000 / 60;\n\n  if (diffMinutes \u003c= recentReplyMinutes) {\n    cancel(\u0027recent_inbound_reply\u0027);\n  }\n}\n\nreturn [{\n  json: {\n    ...row,\n    should_send: shouldSend,\n    skip_reason: skipReason,\n    next_status: nextStatus\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1648,
+                                                             144
+                                                         ],
+                                            "id":  "e10262a0-8a25-41f1-aa6e-dcafc223b103",
+                                            "name":  "Code_Evaluate_Eligibility"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "91ab2767-4b1d-43cb-b6f5-27a1e5f6ceb4",
+                                                                                                         "leftValue":  "={{ $json.should_send === true }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1952,
+                                                             96
+                                                         ],
+                                            "id":  "eaf78044-fda0-4ee0-8904-f5138809271c",
+                                            "name":  "IF_Should_Send"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const row = $json;\n\nconst templates = {\n  quote_no_reply_24h:\n    \u0027Hola, te escribo para ver si aún te interesa el servicio que cotizamos. Si quieres, puedo ayudarte a revisar un horario disponible.\u0027,\n\n  quote_no_reply_48h:\n    \u0027Hola, paso a cerrar el seguimiento de la cotización. Si todavía te interesa, puedo ayudarte a agendar un horario.\u0027,\n\n  interest_nudge_6h:\n    \u0027Hola, quedé atento a tu mensaje anterior. Si quieres, te ayudo a avanzar con la reserva.\u0027,\n\n  appointment_reminder_1d:\n    \u0027Hola, te recuerdo que tienes tu servicio agendado para mañana. Si necesitas reprogramar, avísame por aquí.\u0027,\n\n  appointment_reminder_1h:\n    \u0027Hola, te recuerdo que tu servicio es en aproximadamente 1 hora. Cualquier cosa, me avisas.\u0027,\n\n  post_service_review_24h:\n    \u0027Hola, muchas gracias por confiar en nosotros. Si quedaste conforme con el servicio, ¿nos podrías dejar una reseña? Nos ayuda mucho.\u0027,\n\n  generic_followup:\n    \u0027Hola, te escribo para dar seguimiento a tu solicitud.\u0027\n};\n\nconst followupType = row.followup_type || \u0027generic_followup\u0027;\n\nreturn [{\n  json: {\n    ...row,\n    outbound_message: templates[followupType] || templates.generic_followup,\n    channel: \u0027whatsapp\u0027,\n    message_type: \u0027followup\u0027,\n    source: \u0027followup_scheduler\u0027\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2112,
+                                                             -128
+                                                         ],
+                                            "id":  "d4c87c76-bec3-4bc2-8e3e-3605a780d316",
+                                            "name":  "Code_Build_Message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "qY8gG9AaeBkFmxGn",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/qY8gG9AaeBkFmxGn",
+                                                                                  "cachedResultName":  "6.1 send_outbound_message"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.lead_id }}",
+                                                                                                    "followup_id":  "={{ $json.followup_id }}",
+                                                                                                    "phone":  "={{ $json.phone }}",
+                                                                                                    "channel":  "={{ $json.channel }}",
+                                                                                                    "message":  "={{ $json.outbound_message }}",
+                                                                                                    "message_type":  "={{ $json.message_type }}",
+                                                                                                    "source":  "={{ $json.source }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "followup_id",
+                                                                                                         "displayName":  "followup_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "phone",
+                                                                                                         "displayName":  "phone",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "channel",
+                                                                                                         "displayName":  "channel",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "message",
+                                                                                                         "displayName":  "message",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "message_type",
+                                                                                                         "displayName":  "message_type",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "source",
+                                                                                                         "displayName":  "source",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+                                                                               "waitForSubWorkflow":  true
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             2320,
+                                                             -128
+                                                         ],
+                                            "id":  "c461ff81-6c33-4f8c-ba49-b3db2d22f279",
+                                            "name":  "send_outbound_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO messages (\n  lead_id,\n  direction,\n  channel,\n  message_type,\n  content,\n  provider_message_id,\n  provider_status,\n  status,\n  created_at\n)\nVALUES (\n  \u0027{{ $(\"IF_Send_Success\").first().json.lead_id }}\u0027,\n  \u0027outbound\u0027,\n  \u0027whatsapp\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.message_type || \"followup\" }}\u0027,\n  \u0027{{ (($(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\")).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.provider_message_id || \"\" }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.provider_status || \"\" }}\u0027,\n  \u0027sent\u0027,\n  NOW()\n)\nRETURNING id;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3520,
+                                                             -176
+                                                         ],
+                                            "id":  "b756a98f-5db2-4082-b423-e1c61e10ad70",
+                                            "name":  "DB_Insert_Message",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE followups\nSET\n  status = \u0027completed\u0027,\n  completed_at = NOW()\nWHERE id = \u0027{{ $(\"IF_Send_Success\").first().json.followup_id }}\u0027;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3056,
+                                                             -176
+                                                         ],
+                                            "id":  "5ce58937-6d8e-4511-a6ac-5856e9c88eaa",
+                                            "name":  "DB_Update_Followup_Completed",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $json.lead_id || null }}\u0027,\n  \u0027{{ $json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_skipped\u0027,\n    \u0027followup_id\u0027, \u0027{{ $json.followup_id || null }}\u0027,\n    \u0027reason\u0027, \u0027{{ $json.skip_reason || null }}\u0027,\n    \u0027next_status\u0027, \u0027{{ $json.next_status || null }}\u0027,\n    \u0027source\u0027, \u0027followup_scheduler\u0027\n  ),\n  NOW()\n);",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3536,
+                                                             352
+                                                         ],
+                                            "id":  "ef55a2d6-056d-4c03-a553-392987901f83",
+                                            "name":  "DB_Insert_Audit_Skipped",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE followups\nSET\n  status = \u0027pending\u0027,\n  scheduled_for = CASE\n    WHEN (NOW() AT TIME ZONE \u0027America/Santiago\u0027)::time \u003c time \u002709:00\u0027\n    THEN ((NOW() AT TIME ZONE \u0027America/Santiago\u0027)::date + time \u002709:00\u0027) AT TIME ZONE \u0027America/Santiago\u0027\n    ELSE (((NOW() AT TIME ZONE \u0027America/Santiago\u0027)::date + 1) + time \u002709:00\u0027) AT TIME ZONE \u0027America/Santiago\u0027\n  END,\n  skipped_reason = \u0027rescheduled_outside_allowed_hours\u0027\nWHERE id = \u0027{{ $json.followup_id }}\u0027\n  AND \u0027{{ $json.skip_reason }}\u0027 = \u0027outside_allowed_hours\u0027;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2848,
+                                                             224
+                                                         ],
+                                            "id":  "380371ea-b8bf-47e9-860d-1de64619e750",
+                                            "name":  "DB_Requeue_Outside_Hours",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE followups\nSET\n  status = \u0027{{ $json.next_status || \"cancelled\" }}\u0027,\n  skipped_reason = \u0027{{ $json.skip_reason }}\u0027,\n  cancelled_at = CASE\n    WHEN \u0027{{ $json.next_status || \"cancelled\" }}\u0027 = \u0027cancelled\u0027 THEN NOW()\n    ELSE cancelled_at\n  END\nWHERE id = \u0027{{ $json.followup_id }}\u0027\n  AND \u0027{{ $json.skip_reason }}\u0027 \u003c\u003e \u0027outside_allowed_hours\u0027;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2864,
+                                                             400
+                                                         ],
+                                            "id":  "11067d05-9743-4829-8006-791c4b94bd32",
+                                            "name":  "DB_Cancel_Followup",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "b4122181-7a1d-4fb6-8aed-4329efb25b1f",
+                                                                                                         "leftValue":  "={{ $json.success === true }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             2528,
+                                                             -128
+                                                         ],
+                                            "id":  "ac2c0a83-9e22-47e5-b6c4-a984b9ec07d1",
+                                            "name":  "IF_Send_Success"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE followups\nSET\n  status = \u0027failed\u0027,\n  skipped_reason = \u0027send_outbound_message_failed\u0027,\n  failed_at = NOW()\nWHERE id = \u0027{{ $json.followup_id }}\u0027;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2896,
+                                                             48
+                                                         ],
+                                            "id":  "07d297a5-26e2-49f5-8c7f-1cc9fbfc5b50",
+                                            "name":  "DB_Update_Followup_Failed",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $json.lead_id || null }}\u0027,\n  \u0027{{ $json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_failed\u0027,\n    \u0027followup_id\u0027, \u0027{{ $json.followup_id || null }}\u0027,\n    \u0027reason\u0027, \u0027send_outbound_message_failed\u0027\n  ),\n  NOW()\n);",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3136,
+                                                             48
+                                                         ],
+                                            "id":  "61c8e70a-ad5d-4465-b97c-afdff1663b8c",
+                                            "name":  "DB_Insert_Audit_Failed",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const items = $input.all();\n\nlet executed = 0;\nlet skipped = 0;\nlet errors = 0;\n\nfor (const item of items) {\n  const t = item.json.result_type;\n  if (t === \u0027executed\u0027) executed++;\n  else if (t === \u0027skipped\u0027) skipped++;\n  else if (t === \u0027error\u0027) errors++;\n}\n\nreturn [{\n  json: {\n    executed_followups: executed,\n    skipped,\n    errors\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1072,
+                                                             -208
+                                                         ],
+                                            "id":  "e19bafa2-c48b-4829-832b-1c8e187d0237",
+                                            "name":  "Code_Build_Output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "6c5ed12d-e95a-4075-9812-6fbf9f60006e",
+                                                                                                         "leftValue":  "={{ $json.skip_reason === \u0027outside_allowed_hours\u0027 }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             2384,
+                                                             256
+                                                         ],
+                                            "id":  "1ffadc7e-11a3-41e3-8787-3970a82e98c3",
+                                            "name":  "If (outside hours)"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  json: {\n    raw: $json,\n    followup_id: $json.followup_id,\n    id: $json.id,\n    lead_id: $json.lead_id\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1472,
+                                                             -160
+                                                         ],
+                                            "id":  "908144bf-577d-4bb1-afbe-7e7379f0bf28",
+                                            "name":  "Debug_Lock_Output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  \u0027followup_scheduler\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.lead_id || null }}\u0027,\n  \u0027{{ $(\"IF_Send_Success\").first().json.channel || null }}\u0027,\n  jsonb_build_object(\n    \u0027type\u0027, \u0027followup_sent\u0027,\n    \u0027followup_id\u0027, \u0027{{ $(\"IF_Send_Success\").first().json.followup_id || null }}\u0027,\n    \u0027message\u0027, \u0027{{ (( $(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\" )).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027source\u0027, \u0027followup_scheduler\u0027\n  ),\n  NOW()\n);",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3280,
+                                                             -176
+                                                         ],
+                                            "id":  "25080ba7-7a73-4d16-9c1d-b34b9208f128",
+                                            "name":  "DB_Insert_Audit_Sent",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "raw",
+                                                               "jsonOutput":  "={{\n{\n  result_type: \"executed\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.set",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             3888,
+                                                             -128
+                                                         ],
+                                            "id":  "429ca7b1-23d8-4c83-ae3d-051937dfe77e",
+                                            "name":  "Set_Result_Executed"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "raw",
+                                                               "jsonOutput":  "={{\n{\n  result_type: \"error\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.set",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             3328,
+                                                             48
+                                                         ],
+                                            "id":  "df624556-64fe-4d76-b0c6-5d835df1c9fe",
+                                            "name":  "Set_Result_Error"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "raw",
+                                                               "jsonOutput":  "={{\n{\n  result_type: \"skipped\",\n  lead_id: $(\"IF_Should_Send\").first().json.lead_id,\n  followup_id: $(\"IF_Should_Send\").first().json.followup_id,\n  skip_reason: $(\"IF_Should_Send\").first().json.skip_reason\n}\n}}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.set",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             3776,
+                                                             352
+                                                         ],
+                                            "id":  "d534d037-8eee-4499-aa47-c95309695de3",
+                                            "name":  "Set_Result_Skipped"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "Schedule Trigger":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Set_Config",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "Set_Config":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "DB_Get_Due_Followups",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                                              "DB_Get_Due_Followups":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "IF_Has_Items",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "IF_Has_Items":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "Loop Over Items",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                                              "Loop Over Items":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "Code_Build_Output",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ],
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "DB_Lock_Followup",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "DB_Lock_Followup":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "IF_Lock_Acquired",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "IF_Lock_Acquired":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Debug_Lock_Output",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ],
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Loop Over Items",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "DB_Load_Lead_Context":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Code_Evaluate_Eligibility",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "Code_Evaluate_Eligibility":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "IF_Should_Send",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "IF_Should_Send":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "Code_Build_Message",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ],
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "If (outside hours)",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "Code_Build_Message":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "send_outbound_message",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "send_outbound_message":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "IF_Send_Success",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "DB_Insert_Message":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Set_Result_Executed",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "DB_Update_Followup_Completed":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "DB_Insert_Audit_Sent",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "DB_Requeue_Outside_Hours":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "DB_Insert_Audit_Skipped",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "DB_Cancel_Followup":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "DB_Insert_Audit_Skipped",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "IF_Send_Success":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "DB_Update_Followup_Completed",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ],
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "DB_Update_Followup_Failed",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "DB_Update_Followup_Failed":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "DB_Insert_Audit_Failed",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "DB_Insert_Audit_Skipped":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "Set_Result_Skipped",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "DB_Insert_Audit_Failed":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "Set_Result_Error",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "Code_Build_Output":  {
+                                                                        "main":  [
+                                                                                     [
+
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "If (outside hours)":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "DB_Requeue_Outside_Hours",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "DB_Cancel_Followup",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Debug_Lock_Output":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "DB_Load_Lead_Context",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "DB_Insert_Audit_Sent":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "DB_Insert_Message",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "Set_Result_Executed":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Loop Over Items",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "Set_Result_Error":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Loop Over Items",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "Set_Result_Skipped":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Loop Over Items",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 3f6273a5",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-24T19:39:43.304Z",
+                                                             "id":  114,
+                                                             "workflowId":  "7Hwdia1G3zCgOZNz",
+                                                             "versionId":  "3f6273a5-040f-4ce2-93e3-706d6e689c5f",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

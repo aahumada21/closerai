@@ -1,0 +1,1575 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:08:00.785Z",
+    "createdAt":  "2026-05-03T20:41:53.895Z",
+    "id":  "cHuu60Y82vF1HGZU",
+    "name":  "9.1.1 qa_run_single_conversation",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "9.1.1 qa_run_single_conversation",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       -1648,
+                                       80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const scenario = $json;\n\nreturn scenario.steps.map((step, index) =\u003e ({\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.id,\n    scenario_name: scenario.name,\n    phone: scenario.phone,\n    step_index: index + 1,\n    total_steps: scenario.steps.length,\n    text: step.text,\n    expect: step.expect || {},\n    wait_ms: step.wait_ms || 3500\n  }\n}));"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -1248,
+                                       240
+                                   ],
+                      "id":  "b3ec8336-c072-4006-8c9a-64588bbff1a4",
+                      "name":  "expand_steps"
+                  },
+                  {
+                      "parameters":  {
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       -1040,
+                                       240
+                                   ],
+                      "id":  "206c108a-65a8-4841-9cab-210627c00d97",
+                      "name":  "loop_steps"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const now = new Date().toISOString();\nconst qaMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: \"text\",\n  attachments: [],\n  source_metadata: {\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  lead: {\n    name: \"Cliente QA\",\n    phone: $json.phone,\n    external_id: $json.phone,\n    channel: \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -848,
+                                       240
+                                   ],
+                      "id":  "d91abac3-fc7b-412b-a6d2-8e898cde1d20",
+                      "name":  "build_inbound_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://n8n.aahumada.com/webhook/qa-whatsapp-normalized",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ $(\"build_inbound_payload\").item.json.inbound_payload }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       -16,
+                                       -48
+                                   ],
+                      "id":  "950ad6d5-688d-4a4d-af98-6efa07d2e6ed",
+                      "name":  "send_to_bot_webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\n   OR external_id = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\nORDER BY created_at DESC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       960,
+                                       -32
+                                   ],
+                      "id":  "195df7f2-7b8c-4c99-aac6-9b02d08055eb",
+                      "name":  "get_lead",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1680,
+                                       -32
+                                   ],
+                      "id":  "8f4f5109-54b9-4fe4-af46-09f64c522121",
+                      "name":  "get_last_outbound_message",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  flow_name,\n  decision,\n  meta,\n  idempotency_key,\n  created_at\nFROM public.audit_logs\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at DESC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1856,
+                                       -32
+                                   ],
+                      "id":  "eac2653d-49a9-4b0d-ae00-87265bd366e3",
+                      "name":  "get_last_audit",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\"build_inbound_payload\").item.json;\n\nconst lead = $(\"get_lead\").item.json || {};\nconst previousState = $(\"get_state_before\").item.json || {};\nconst currentState = $(\"get_state_after\").item.json || {};\nconst lastMessage = $(\"get_last_outbound_message\").item.json || {};\nconst lastAudit = $(\"get_last_audit\").item.json || {};\n\nconst expect = input.expect || {};\nconst errors = [];\n\nfunction normalize(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction includesAll(text, values = []) {\n  const t = normalize(text);\n  return values.every((v) =\u003e t.includes(normalize(v)));\n}\n\nfunction includesAny(text, values = []) {\n  const t = normalize(text);\n  return values.some((v) =\u003e t.includes(normalize(v)));\n}\n\nfunction notIncludesAny(text, values = []) {\n  const t = normalize(text);\n  return values.every((v) =\u003e !t.includes(normalize(v)));\n}\n\nconst responseText = lastMessage.content || \"\";\nconst hasBotResponse = String(responseText || \"\").trim() !== \"\";\n\nconst lastBotAction = currentState.last_bot_action || null;\nconst stage = currentState.stage || null;\nconst nextGoal = currentState.next_goal || null;\n\nconst hasAction = lastBotAction !== null \u0026\u0026 String(lastBotAction).trim() !== \"\";\n\nconst stateChanged =\n  String(previousState.stage || \"\") !== String(currentState.stage || \"\") ||\n  String(previousState.next_goal || \"\") !== String(currentState.next_goal || \"\") ||\n  String(previousState.service_interest || \"\") !== String(currentState.service_interest || \"\") ||\n  String(previousState.vehicle_type || \"\") !== String(currentState.vehicle_type || \"\") ||\n  String(previousState.district || \"\") !== String(currentState.district || \"\");\n\nconst hasAudit =\n  !!lastAudit.flow_name ||\n  !!lastAudit.decision ||\n  !!lastAudit.idempotency_key;\n\n// Reglas duras Prioridad 0\nif (!hasBotResponse) {\n  errors.push(\"bot es null o vacío\");\n}\n\nif (!hasAudit) {\n  errors.push(\"audit vacío: no hay flow_name, decision ni idempotency_key\");\n}\n\nif (!hasBotResponse \u0026\u0026 !hasAction \u0026\u0026 !stateChanged) {\n  errors.push(\"No hubo respuesta, acción ni cambio de estado\");\n}\n\n// Validaciones esperadas del escenario\nif (Array.isArray(expect.last_bot_action_any) \u0026\u0026 expect.last_bot_action_any.length \u003e 0) {\n  if (!expect.last_bot_action_any.includes(lastBotAction)) {\n    errors.push(\n      `last_bot_action esperado: ${expect.last_bot_action_any.join(\", \")} | recibido: ${lastBotAction}`\n    );\n  }\n}\n\nif (Array.isArray(expect.stage_any) \u0026\u0026 expect.stage_any.length \u003e 0) {\n  if (!expect.stage_any.includes(stage)) {\n    errors.push(\n      `stage esperado: ${expect.stage_any.join(\", \")} | recibido: ${stage}`\n    );\n  }\n}\n\nif (Array.isArray(expect.next_goal_any) \u0026\u0026 expect.next_goal_any.length \u003e 0) {\n  if (!expect.next_goal_any.includes(nextGoal)) {\n    errors.push(\n      `next_goal esperado: ${expect.next_goal_any.join(\", \")} | recibido: ${nextGoal}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_includes) \u0026\u0026 expect.response_includes.length \u003e 0) {\n  if (!includesAll(responseText, expect.response_includes)) {\n    errors.push(\n      `respuesta no incluye todos: ${expect.response_includes.join(\", \")}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_includes_any) \u0026\u0026 expect.response_includes_any.length \u003e 0) {\n  if (!includesAny(responseText, expect.response_includes_any)) {\n    errors.push(\n      `respuesta no incluye ninguno de: ${expect.response_includes_any.join(\", \")}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_not_includes) \u0026\u0026 expect.response_not_includes.length \u003e 0) {\n  if (!notIncludesAny(responseText, expect.response_not_includes)) {\n    errors.push(\n      `respuesta contiene texto prohibido: ${expect.response_not_includes.join(\", \")}`\n    );\n  }\n}\n\nconst passed = errors.length === 0;\n\nreturn [\n  {\n    json: {\n      run_id: input.run_id,\n      scenario_id: input.scenario_id,\n      scenario_name: input.scenario_name,\n      step_index: input.step_index,\n      text_sent: input.text,\n      passed,\n      errors,\n\n      lead_id: lead.id || null,\n      bot_response: responseText,\n\n      state_snapshot: {\n        previous: {\n          stage: previousState.stage || null,\n          next_goal: previousState.next_goal || null,\n          last_bot_action: previousState.last_bot_action || null,\n          service_interest: previousState.service_interest || null,\n          vehicle_type: previousState.vehicle_type || null,\n          district: previousState.district || null\n        },\n        current: {\n          stage,\n          next_goal: nextGoal,\n          last_bot_action: lastBotAction,\n          service_interest: currentState.service_interest || null,\n          vehicle_type: currentState.vehicle_type || null,\n          district: currentState.district || null\n        },\n        changed: stateChanged\n      },\n\n      audit_snapshot: {\n        flow_name: lastAudit.flow_name || null,\n        decision: lastAudit.decision || null,\n        idempotency_key: lastAudit.idempotency_key || null,\n        meta: lastAudit.meta || null,\n        created_at: lastAudit.created_at || null\n      },\n\n      qa_checks: {\n        has_bot_response: hasBotResponse,\n        has_action: hasAction,\n        state_changed: stateChanged,\n        has_audit: hasAudit\n      },\n\n      created_at: new Date().toISOString()\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2064,
+                                       128
+                                   ],
+                      "id":  "baeddb92-2bc9-4cfe-a615-3a50ac2ceb19",
+                      "name":  "validate_step_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.qa_test_results (\n  run_id,\n  scenario_id,\n  scenario_name,\n  step_index,\n  text_sent,\n  passed,\n  errors,\n  lead_id,\n  state_snapshot,\n  bot_response,\n  audit_snapshot,\n  created_at\n)\nVALUES (\n  NULLIF(\u0027{{ ($json.run_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  NULLIF(\u0027{{ ($json.scenario_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  NULLIF(\u0027{{ ($json.scenario_name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  {{ Number($json.step_index || 0) }},\n\n  NULLIF(\u0027{{ ($json.text_sent || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  {{ $json.passed === true ? \u0027true\u0027 : \u0027false\u0027 }},\n\n  \u0027{{ JSON.stringify($json.errors || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027)::uuid,\n\n  \u0027{{ JSON.stringify($json.state_snapshot || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NULLIF(\u0027{{ ($json.bot_response || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  \u0027{{ JSON.stringify($json.audit_snapshot || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NOW()\n)\nRETURNING\n  id,\n  run_id,\n  scenario_id,\n  step_index,\n  passed,\n  created_at;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2320,
+                                       176
+                                   ],
+                      "id":  "8aec1aae-b738-470a-bd71-32b26672dff9",
+                      "name":  "insert_qa_result",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH old_leads AS (\n  SELECT id\n  FROM public.leads\n  WHERE phone = \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n     OR external_id = \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n),\n\ndeleted_messages AS (\n  DELETE FROM public.messages m\n  USING old_leads l\n  WHERE m.lead_id::text = l.id::text\n),\n\ndeleted_state AS (\n  DELETE FROM public.lead_state s\n  USING old_leads l\n  WHERE s.lead_id::text = l.id::text\n),\n\ndeleted_audits AS (\n  DELETE FROM public.audit_logs a\n  USING old_leads l\n  WHERE a.lead_id::text = l.id::text\n),\n\ndeleted_quotes AS (\n  DELETE FROM public.offers_or_quotes q\n  USING old_leads l\n  WHERE q.lead_id::text = l.id::text\n),\n\ndeleted_followups AS (\n  DELETE FROM public.followups f\n  USING old_leads l\n  WHERE f.lead_id::text = l.id::text\n),\n\ndeleted_appointments AS (\n  DELETE FROM public.appointments ap\n  USING old_leads l\n  WHERE ap.conversation_id::text = l.id::text\n),\n\ndeleted_leads AS (\n  DELETE FROM public.leads le\n  USING old_leads l\n  WHERE le.id::text = l.id::text\n),\n\nnew_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  VALUES (\n    \u0027whatsapp\u0027,\n    \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027Cliente QA\u0027,\n    NOW(),\n    NOW()\n  )\n  RETURNING id\n),\n\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    \u0027new_lead\u0027,\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    \u0027[]\u0027::jsonb,\n    NULL,\n    \u0027qualify_lead\u0027,\n    false,\n    NOW()\n  FROM new_lead\n  RETURNING lead_id\n)\n\nSELECT\n  \u0027{{ ($json.id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS id,\n  \u0027{{ ($json.name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS name,\n  \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS phone,\n  \u0027{{ ($json.run_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS run_id,\n  \u0027{{ JSON.stringify($json.steps || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -1408,
+                                       80
+                                   ],
+                      "id":  "c4d567a2-84ab-4f94-8d7f-0516ffa9b5d2",
+                      "name":  "prepare_qa_lead",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\n   OR external_id = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\nORDER BY created_at DESC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -608,
+                                       112
+                                   ],
+                      "id":  "f3a7206a-07d2-4383-ad8d-5507a63999f6",
+                      "name":  "get_lead_before",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -400,
+                                       112
+                                   ],
+                      "id":  "daed721f-106a-458e-8abb-1b282aef0e63",
+                      "name":  "get_state_before",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       80,
+                                       240
+                                   ],
+                      "id":  "a52a5e4e-d7f4-4078-9cb0-a1071c486963",
+                      "name":  "get_outbound_attempt_1",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "619eb2fd-e0f5-48a0-ab4a-e47b43f53cf5",
+                                                                                   "leftValue":  "={{ !!$json.content \u0026\u0026 String($json.content).trim() !== \"\" }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       672,
+                                       240
+                                   ],
+                      "id":  "9875618d-1afa-456d-9d08-f75fe22c7394",
+                      "name":  "If outbound_found_1"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1136,
+                                       -32
+                                   ],
+                      "id":  "03f5da3b-a801-47f6-a460-74fce8ee3363",
+                      "name":  "get_state_after",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "amount":  3
+                                     },
+                      "type":  "n8n-nodes-base.wait",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       896,
+                                       256
+                                   ],
+                      "id":  "d469cd7c-8d9b-44ac-b697-000086640cac",
+                      "name":  "Wait 2",
+                      "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "ae09886c-95ae-4c47-aabd-a17742b7da08",
+                                                                                   "leftValue":  "={{ !!$json.content \u0026\u0026 String($json.content).trim() !== \"\" }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1680,
+                                       256
+                                   ],
+                      "id":  "6643ee06-08fb-4e40-be41-ce6fc8f3e1d4",
+                      "name":  "IF outbound_found_2"
+                  },
+                  {
+                      "parameters":  {
+                                         "amount":  3
+                                     },
+                      "type":  "n8n-nodes-base.wait",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       1920,
+                                       352
+                                   ],
+                      "id":  "d7ea3431-f3e4-4665-9107-cfef1eeb2946",
+                      "name":  "Wait 3",
+                      "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2128,
+                                       352
+                                   ],
+                      "id":  "0fdd9ef9-e9c1-4da5-80a0-058626110d22",
+                      "name":  "get_outbound_attempt_3",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "amount":  3
+                                     },
+                      "type":  "n8n-nodes-base.wait",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       176,
+                                       -48
+                                   ],
+                      "id":  "9fbf37c4-fb2c-4ed5-88fa-a9b4033bcb26",
+                      "name":  "Wait 1",
+                      "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1104,
+                                       256
+                                   ],
+                      "id":  "96f72fd2-ac1a-49aa-a69c-6d0391a5ff18",
+                      "name":  "get_outbound_attempt_2",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  }
+              ],
+    "connections":  {
+                        "9.1.1 qa_run_single_conversation":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "prepare_qa_lead",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "expand_steps":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "loop_steps",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "loop_steps":  {
+                                           "main":  [
+                                                        [
+
+                                                        ],
+                                                        [
+                                                            {
+                                                                "node":  "build_inbound_payload",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "build_inbound_payload":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "get_lead_before",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "send_to_bot_webhook":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Wait 1",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "get_lead":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "get_state_after",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     },
+                        "get_last_outbound_message":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "get_last_audit",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "get_last_audit":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "validate_step_result",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "validate_step_result":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "insert_qa_result",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "insert_qa_result":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "loop_steps",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "prepare_qa_lead":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "expand_steps",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "get_lead_before":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "get_state_before",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "get_state_before":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "send_to_bot_webhook",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "get_outbound_attempt_1":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "If outbound_found_1",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "If outbound_found_1":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "get_lead",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Wait 2",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "get_state_after":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "get_last_outbound_message",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Wait 2":  {
+                                       "main":  [
+                                                    [
+                                                        {
+                                                            "node":  "get_outbound_attempt_2",
+                                                            "type":  "main",
+                                                            "index":  0
+                                                        }
+                                                    ]
+                                                ]
+                                   },
+                        "IF outbound_found_2":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "get_lead",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Wait 3",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Wait 3":  {
+                                       "main":  [
+                                                    [
+                                                        {
+                                                            "node":  "get_outbound_attempt_3",
+                                                            "type":  "main",
+                                                            "index":  0
+                                                        }
+                                                    ]
+                                                ]
+                                   },
+                        "get_outbound_attempt_3":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "get_lead",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Wait 1":  {
+                                       "main":  [
+                                                    [
+                                                        {
+                                                            "node":  "get_outbound_attempt_1",
+                                                            "type":  "main",
+                                                            "index":  0
+                                                        }
+                                                    ]
+                                                ]
+                                   },
+                        "get_outbound_attempt_2":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "IF outbound_found_2",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+                    "9.1.1 qa_run_single_conversation":  [
+                                                             {
+                                                                 "json":  {
+                                                                              "run_id":  "QA_SEND_QUOTE_DIRECT_RETEST_2026-05-08_01",
+                                                                              "id":  "QA_SEND_QUOTE_DIRECT_RETEST_001",
+                                                                              "name":  "Cotización directa debe enviar mensaje, actualizar estado y auditar",
+                                                                              "phone":  "569001008001",
+                                                                              "steps":  [
+                                                                                            {
+                                                                                                "text":  "cuánto sale lavado premium para SUV en Huechuraba",
+                                                                                                "wait_ms":  6500,
+                                                                                                "expect":  {
+                                                                                                               "last_bot_action_any":  [
+                                                                                                                                           "send_quote"
+                                                                                                                                       ],
+                                                                                                               "stage_any":  [
+                                                                                                                                 "quoted"
+                                                                                                                             ],
+                                                                                                               "next_goal_any":  [
+                                                                                                                                     "book_appointment"
+                                                                                                                                 ],
+                                                                                                               "response_includes_any":  [
+                                                                                                                                             "$",
+                                                                                                                                             "lavado premium",
+                                                                                                                                             "SUV",
+                                                                                                                                             "Huechuraba",
+                                                                                                                                             "agendar"
+                                                                                                                                         ],
+                                                                                                               "response_not_includes":  [
+                                                                                                                                             "Perfecto. ¿Qué tipo de vehículo tienes?",
+                                                                                                                                             "send_quote_in_progress",
+                                                                                                                                             "send_quote_failed",
+                                                                                                                                             "retry_quote",
+                                                                                                                                             "undefined",
+                                                                                                                                             "null",
+                                                                                                                                             "NaN",
+                                                                                                                                             "lavado_profundo"
+                                                                                                                                         ]
+                                                                                                           }
+                                                                                            }
+                                                                                        ]
+                                                                          }
+                                                             }
+                                                         ]
+                },
+    "versionId":  "d47e4fc0-f8fa-4e71-9a2b-96cf32a1dd33",
+    "activeVersionId":  "d47e4fc0-f8fa-4e71-9a2b-96cf32a1dd33",
+    "versionCounter":  137,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-03T20:41:53.908Z",
+                       "createdAt":  "2026-05-03T20:41:53.908Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "cHuu60Y82vF1HGZU",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-05-12T14:07:45.243Z",
+                     "createdAt":  "2026-05-12T14:07:45.243Z",
+                     "id":  "SWrPpTejQihQMzIq",
+                     "name":  "QA"
+                 },
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-03T21:51:59.000Z",
+                          "createdAt":  "2026-05-03T21:51:41.448Z",
+                          "versionId":  "d47e4fc0-f8fa-4e71-9a2b-96cf32a1dd33",
+                          "workflowId":  "cHuu60Y82vF1HGZU",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "passthrough"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "9.1.1 qa_run_single_conversation",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             -1648,
+                                                             80
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const scenario = $json;\n\nreturn scenario.steps.map((step, index) =\u003e ({\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.id,\n    scenario_name: scenario.name,\n    phone: scenario.phone,\n    step_index: index + 1,\n    total_steps: scenario.steps.length,\n    text: step.text,\n    expect: step.expect || {},\n    wait_ms: step.wait_ms || 3500\n  }\n}));"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             -1248,
+                                                             240
+                                                         ],
+                                            "id":  "b3ec8336-c072-4006-8c9a-64588bbff1a4",
+                                            "name":  "expand_steps"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.splitInBatches",
+                                            "typeVersion":  3,
+                                            "position":  [
+                                                             -1040,
+                                                             240
+                                                         ],
+                                            "id":  "206c108a-65a8-4841-9cab-210627c00d97",
+                                            "name":  "loop_steps"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const now = new Date().toISOString();\nconst qaMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: \"text\",\n  attachments: [],\n  source_metadata: {\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  lead: {\n    name: \"Cliente QA\",\n    phone: $json.phone,\n    external_id: $json.phone,\n    channel: \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             -848,
+                                                             240
+                                                         ],
+                                            "id":  "d91abac3-fc7b-412b-a6d2-8e898cde1d20",
+                                            "name":  "build_inbound_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "https://n8n.aahumada.com/webhook/qa-whatsapp-normalized",
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={{ $(\"build_inbound_payload\").item.json.inbound_payload }}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.4,
+                                            "position":  [
+                                                             -16,
+                                                             -48
+                                                         ],
+                                            "id":  "950ad6d5-688d-4a4d-af98-6efa07d2e6ed",
+                                            "name":  "send_to_bot_webhook"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\n   OR external_id = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\nORDER BY created_at DESC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             960,
+                                                             -32
+                                                         ],
+                                            "id":  "195df7f2-7b8c-4c99-aac6-9b02d08055eb",
+                                            "name":  "get_lead",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1680,
+                                                             -32
+                                                         ],
+                                            "id":  "8f4f5109-54b9-4fe4-af46-09f64c522121",
+                                            "name":  "get_last_outbound_message",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  flow_name,\n  decision,\n  meta,\n  idempotency_key,\n  created_at\nFROM public.audit_logs\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at DESC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1856,
+                                                             -32
+                                                         ],
+                                            "id":  "eac2653d-49a9-4b0d-ae00-87265bd366e3",
+                                            "name":  "get_last_audit",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $(\"build_inbound_payload\").item.json;\n\nconst lead = $(\"get_lead\").item.json || {};\nconst previousState = $(\"get_state_before\").item.json || {};\nconst currentState = $(\"get_state_after\").item.json || {};\nconst lastMessage = $(\"get_last_outbound_message\").item.json || {};\nconst lastAudit = $(\"get_last_audit\").item.json || {};\n\nconst expect = input.expect || {};\nconst errors = [];\n\nfunction normalize(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction includesAll(text, values = []) {\n  const t = normalize(text);\n  return values.every((v) =\u003e t.includes(normalize(v)));\n}\n\nfunction includesAny(text, values = []) {\n  const t = normalize(text);\n  return values.some((v) =\u003e t.includes(normalize(v)));\n}\n\nfunction notIncludesAny(text, values = []) {\n  const t = normalize(text);\n  return values.every((v) =\u003e !t.includes(normalize(v)));\n}\n\nconst responseText = lastMessage.content || \"\";\nconst hasBotResponse = String(responseText || \"\").trim() !== \"\";\n\nconst lastBotAction = currentState.last_bot_action || null;\nconst stage = currentState.stage || null;\nconst nextGoal = currentState.next_goal || null;\n\nconst hasAction = lastBotAction !== null \u0026\u0026 String(lastBotAction).trim() !== \"\";\n\nconst stateChanged =\n  String(previousState.stage || \"\") !== String(currentState.stage || \"\") ||\n  String(previousState.next_goal || \"\") !== String(currentState.next_goal || \"\") ||\n  String(previousState.service_interest || \"\") !== String(currentState.service_interest || \"\") ||\n  String(previousState.vehicle_type || \"\") !== String(currentState.vehicle_type || \"\") ||\n  String(previousState.district || \"\") !== String(currentState.district || \"\");\n\nconst hasAudit =\n  !!lastAudit.flow_name ||\n  !!lastAudit.decision ||\n  !!lastAudit.idempotency_key;\n\n// Reglas duras Prioridad 0\nif (!hasBotResponse) {\n  errors.push(\"bot es null o vacío\");\n}\n\nif (!hasAudit) {\n  errors.push(\"audit vacío: no hay flow_name, decision ni idempotency_key\");\n}\n\nif (!hasBotResponse \u0026\u0026 !hasAction \u0026\u0026 !stateChanged) {\n  errors.push(\"No hubo respuesta, acción ni cambio de estado\");\n}\n\n// Validaciones esperadas del escenario\nif (Array.isArray(expect.last_bot_action_any) \u0026\u0026 expect.last_bot_action_any.length \u003e 0) {\n  if (!expect.last_bot_action_any.includes(lastBotAction)) {\n    errors.push(\n      `last_bot_action esperado: ${expect.last_bot_action_any.join(\", \")} | recibido: ${lastBotAction}`\n    );\n  }\n}\n\nif (Array.isArray(expect.stage_any) \u0026\u0026 expect.stage_any.length \u003e 0) {\n  if (!expect.stage_any.includes(stage)) {\n    errors.push(\n      `stage esperado: ${expect.stage_any.join(\", \")} | recibido: ${stage}`\n    );\n  }\n}\n\nif (Array.isArray(expect.next_goal_any) \u0026\u0026 expect.next_goal_any.length \u003e 0) {\n  if (!expect.next_goal_any.includes(nextGoal)) {\n    errors.push(\n      `next_goal esperado: ${expect.next_goal_any.join(\", \")} | recibido: ${nextGoal}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_includes) \u0026\u0026 expect.response_includes.length \u003e 0) {\n  if (!includesAll(responseText, expect.response_includes)) {\n    errors.push(\n      `respuesta no incluye todos: ${expect.response_includes.join(\", \")}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_includes_any) \u0026\u0026 expect.response_includes_any.length \u003e 0) {\n  if (!includesAny(responseText, expect.response_includes_any)) {\n    errors.push(\n      `respuesta no incluye ninguno de: ${expect.response_includes_any.join(\", \")}`\n    );\n  }\n}\n\nif (Array.isArray(expect.response_not_includes) \u0026\u0026 expect.response_not_includes.length \u003e 0) {\n  if (!notIncludesAny(responseText, expect.response_not_includes)) {\n    errors.push(\n      `respuesta contiene texto prohibido: ${expect.response_not_includes.join(\", \")}`\n    );\n  }\n}\n\nconst passed = errors.length === 0;\n\nreturn [\n  {\n    json: {\n      run_id: input.run_id,\n      scenario_id: input.scenario_id,\n      scenario_name: input.scenario_name,\n      step_index: input.step_index,\n      text_sent: input.text,\n      passed,\n      errors,\n\n      lead_id: lead.id || null,\n      bot_response: responseText,\n\n      state_snapshot: {\n        previous: {\n          stage: previousState.stage || null,\n          next_goal: previousState.next_goal || null,\n          last_bot_action: previousState.last_bot_action || null,\n          service_interest: previousState.service_interest || null,\n          vehicle_type: previousState.vehicle_type || null,\n          district: previousState.district || null\n        },\n        current: {\n          stage,\n          next_goal: nextGoal,\n          last_bot_action: lastBotAction,\n          service_interest: currentState.service_interest || null,\n          vehicle_type: currentState.vehicle_type || null,\n          district: currentState.district || null\n        },\n        changed: stateChanged\n      },\n\n      audit_snapshot: {\n        flow_name: lastAudit.flow_name || null,\n        decision: lastAudit.decision || null,\n        idempotency_key: lastAudit.idempotency_key || null,\n        meta: lastAudit.meta || null,\n        created_at: lastAudit.created_at || null\n      },\n\n      qa_checks: {\n        has_bot_response: hasBotResponse,\n        has_action: hasAction,\n        state_changed: stateChanged,\n        has_audit: hasAudit\n      },\n\n      created_at: new Date().toISOString()\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2064,
+                                                             128
+                                                         ],
+                                            "id":  "baeddb92-2bc9-4cfe-a615-3a50ac2ceb19",
+                                            "name":  "validate_step_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO public.qa_test_results (\n  run_id,\n  scenario_id,\n  scenario_name,\n  step_index,\n  text_sent,\n  passed,\n  errors,\n  lead_id,\n  state_snapshot,\n  bot_response,\n  audit_snapshot,\n  created_at\n)\nVALUES (\n  NULLIF(\u0027{{ ($json.run_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  NULLIF(\u0027{{ ($json.scenario_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  NULLIF(\u0027{{ ($json.scenario_name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  {{ Number($json.step_index || 0) }},\n\n  NULLIF(\u0027{{ ($json.text_sent || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  {{ $json.passed === true ? \u0027true\u0027 : \u0027false\u0027 }},\n\n  \u0027{{ JSON.stringify($json.errors || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027)::uuid,\n\n  \u0027{{ JSON.stringify($json.state_snapshot || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NULLIF(\u0027{{ ($json.bot_response || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  \u0027{{ JSON.stringify($json.audit_snapshot || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  NOW()\n)\nRETURNING\n  id,\n  run_id,\n  scenario_id,\n  step_index,\n  passed,\n  created_at;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2320,
+                                                             176
+                                                         ],
+                                            "id":  "8aec1aae-b738-470a-bd71-32b26672dff9",
+                                            "name":  "insert_qa_result",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "WITH old_leads AS (\n  SELECT id\n  FROM public.leads\n  WHERE phone = \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n     OR external_id = \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n),\n\ndeleted_messages AS (\n  DELETE FROM public.messages m\n  USING old_leads l\n  WHERE m.lead_id::text = l.id::text\n),\n\ndeleted_state AS (\n  DELETE FROM public.lead_state s\n  USING old_leads l\n  WHERE s.lead_id::text = l.id::text\n),\n\ndeleted_audits AS (\n  DELETE FROM public.audit_logs a\n  USING old_leads l\n  WHERE a.lead_id::text = l.id::text\n),\n\ndeleted_quotes AS (\n  DELETE FROM public.offers_or_quotes q\n  USING old_leads l\n  WHERE q.lead_id::text = l.id::text\n),\n\ndeleted_followups AS (\n  DELETE FROM public.followups f\n  USING old_leads l\n  WHERE f.lead_id::text = l.id::text\n),\n\ndeleted_appointments AS (\n  DELETE FROM public.appointments ap\n  USING old_leads l\n  WHERE ap.conversation_id::text = l.id::text\n),\n\ndeleted_leads AS (\n  DELETE FROM public.leads le\n  USING old_leads l\n  WHERE le.id::text = l.id::text\n),\n\nnew_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  VALUES (\n    \u0027whatsapp\u0027,\n    \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n    \u0027Cliente QA\u0027,\n    NOW(),\n    NOW()\n  )\n  RETURNING id\n),\n\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    \u0027new_lead\u0027,\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    \u0027[]\u0027::jsonb,\n    NULL,\n    \u0027qualify_lead\u0027,\n    false,\n    NOW()\n  FROM new_lead\n  RETURNING lead_id\n)\n\nSELECT\n  \u0027{{ ($json.id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS id,\n  \u0027{{ ($json.name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS name,\n  \u0027{{ ($json.phone || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS phone,\n  \u0027{{ ($json.run_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027 AS run_id,\n  \u0027{{ JSON.stringify($json.steps || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             -1408,
+                                                             80
+                                                         ],
+                                            "id":  "c4d567a2-84ab-4f94-8d7f-0516ffa9b5d2",
+                                            "name":  "prepare_qa_lead",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\n   OR external_id = \u0027{{ $(\"build_inbound_payload\").item.json.phone }}\u0027\nORDER BY created_at DESC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             -608,
+                                                             112
+                                                         ],
+                                            "id":  "f3a7206a-07d2-4383-ad8d-5507a63999f6",
+                                            "name":  "get_lead_before",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             -400,
+                                                             112
+                                                         ],
+                                            "id":  "daed721f-106a-458e-8abb-1b282aef0e63",
+                                            "name":  "get_state_before",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             80,
+                                                             240
+                                                         ],
+                                            "id":  "a52a5e4e-d7f4-4078-9cb0-a1071c486963",
+                                            "name":  "get_outbound_attempt_1",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "619eb2fd-e0f5-48a0-ab4a-e47b43f53cf5",
+                                                                                                         "leftValue":  "={{ !!$json.content \u0026\u0026 String($json.content).trim() !== \"\" }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             672,
+                                                             240
+                                                         ],
+                                            "id":  "9875618d-1afa-456d-9d08-f75fe22c7394",
+                                            "name":  "If outbound_found_1"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = \u0027{{ $(\"get_lead\").item.json.id }}\u0027\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1136,
+                                                             -32
+                                                         ],
+                                            "id":  "03f5da3b-a801-47f6-a460-74fce8ee3363",
+                                            "name":  "get_state_after",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "amount":  3
+                                                           },
+                                            "type":  "n8n-nodes-base.wait",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             896,
+                                                             256
+                                                         ],
+                                            "id":  "d469cd7c-8d9b-44ac-b697-000086640cac",
+                                            "name":  "Wait 2",
+                                            "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "ae09886c-95ae-4c47-aabd-a17742b7da08",
+                                                                                                         "leftValue":  "={{ !!$json.content \u0026\u0026 String($json.content).trim() !== \"\" }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1680,
+                                                             256
+                                                         ],
+                                            "id":  "6643ee06-08fb-4e40-be41-ce6fc8f3e1d4",
+                                            "name":  "IF outbound_found_2"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "amount":  3
+                                                           },
+                                            "type":  "n8n-nodes-base.wait",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             1920,
+                                                             352
+                                                         ],
+                                            "id":  "d7ea3431-f3e4-4665-9107-cfef1eeb2946",
+                                            "name":  "Wait 3",
+                                            "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2128,
+                                                             352
+                                                         ],
+                                            "id":  "0fdd9ef9-e9c1-4da5-80a0-058626110d22",
+                                            "name":  "get_outbound_attempt_3",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "amount":  3
+                                                           },
+                                            "type":  "n8n-nodes-base.wait",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             176,
+                                                             -48
+                                                         ],
+                                            "id":  "9fbf37c4-fb2c-4ed5-88fa-a9b4033bcb26",
+                                            "name":  "Wait 1",
+                                            "webhookId":  "c944feeb-9650-402b-9db0-68fe451043e3"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  content,\n  status,\n  provider_status,\n  created_at\nFROM public.messages\nWHERE lead_id::text = \u0027{{ $(\"get_lead_before\").item.json.id }}\u0027\n  AND direction = \u0027outbound\u0027\n  AND created_at \u003e= \u0027{{ $(\"build_inbound_payload\").item.json.sent_at }}\u0027::timestamptz\nORDER BY created_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1104,
+                                                             256
+                                                         ],
+                                            "id":  "96f72fd2-ac1a-49aa-a69c-6d0391a5ff18",
+                                            "name":  "get_outbound_attempt_2",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        }
+                                    ],
+                          "connections":  {
+                                              "9.1.1 qa_run_single_conversation":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "prepare_qa_lead",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "expand_steps":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "loop_steps",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                                              "loop_steps":  {
+                                                                 "main":  [
+                                                                              [
+
+                                                                              ],
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "build_inbound_payload",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                                              "build_inbound_payload":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "get_lead_before",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "send_to_bot_webhook":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Wait 1",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "get_lead":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "get_state_after",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                                              "get_last_outbound_message":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "get_last_audit",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "get_last_audit":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "validate_step_result",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "validate_step_result":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "insert_qa_result",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "insert_qa_result":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "loop_steps",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "prepare_qa_lead":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "expand_steps",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "get_lead_before":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "get_state_before",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "get_state_before":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "send_to_bot_webhook",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "get_outbound_attempt_1":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "If outbound_found_1",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "If outbound_found_1":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "get_lead",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ],
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Wait 2",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "get_state_after":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "get_last_outbound_message",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "Wait 2":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "get_outbound_attempt_2",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                                              "IF outbound_found_2":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "get_lead",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ],
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Wait 3",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "Wait 3":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "get_outbound_attempt_3",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                                              "get_outbound_attempt_3":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "get_lead",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "Wait 1":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "get_outbound_attempt_1",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                                              "get_outbound_attempt_2":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "IF outbound_found_2",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version d47e4fc0",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-03T21:51:59.276Z",
+                                                             "id":  450,
+                                                             "workflowId":  "cHuu60Y82vF1HGZU",
+                                                             "versionId":  "d47e4fc0-f8fa-4e71-9a2b-96cf32a1dd33",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "workflow_contract_base",
+  "version": "0.1.0",
+  "description": "Plantilla base para documentar contratos de entrada/salida de un workflow.",
+  "input_example": {},
+  "output_example": {},
+  "assumptions": [],
+  "idempotency": {
+    "enabled": true,
+    "key_strategy": "lead_id + inbound_message_id + action",
+    "storage": "audit_logs | messages | custom_table"
+  },
+  "observability": {
+    "trace_id_field": "trace_id",
+    "audit_required": true,
+    "reason_codes": []
+  }
+}
+

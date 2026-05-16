@@ -1,0 +1,549 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:08:55.905Z",
+    "createdAt":  "2026-04-28T14:00:30.592Z",
+    "id":  "T1OoEv7HZttTUkf7",
+    "name":  "8.1 reactivate_bot_after_handoff",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"11111111-1111-1111-1111-111111111201\",\n  \"resolved_by\": \"Agustin\",\n  \"resolution_note\": \"Caso resuelto manualmente. Bot reactivado.\",\n  \"resume_stage\": \"closing\",\n  \"next_goal\": \"continue_conversation\"\n}"
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "id":  "2c77ec8e-0f88-49e8-a4b4-90efe2b20551",
+                      "name":  "When Executed by Another Workflow"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nconst uuidRegex =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nif (!input.lead_id || !uuidRegex.test(input.lead_id)) {\n  throw new Error(`Invalid or missing lead_id: ${input.lead_id || \"empty\"}`);\n}\n\nconst resolvedBy = input.resolved_by || \"human_operator\";\nconst resolutionNote =\n  input.resolution_note ||\n  \"Caso resuelto manualmente. Bot reactivado.\";\n\nconst resumeStage = input.resume_stage || \"closing\";\nconst nextGoal = input.next_goal || \"continue_conversation\";\n\nreturn [{\n  lead_id: input.lead_id,\n  resolved_by: resolvedBy,\n  resolution_note: resolutionNote,\n  resume_stage: resumeStage,\n  next_goal: nextGoal,\n  reactivated_at: new Date().toISOString()\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       208,
+                                       0
+                                   ],
+                      "id":  "eebdd358-272c-4b62-846d-6fd299d74f73",
+                      "name":  "validate_reactivation_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.handoff_cases\nSET\n  status = \u0027resolved\u0027,\n  resolved_by = \u0027{{ ($json.resolved_by || \"human_operator\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  resolved_at = NOW(),\n  resolution_note = \u0027{{ ($json.resolution_note || \"Bot reactivado\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  updated_at = NOW()\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\n  AND status = \u0027open\u0027\nRETURNING\n  id,\n  lead_id,\n  status,\n  resolved_by,\n  resolved_at,\n  resolution_note;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       432,
+                                       -112
+                                   ],
+                      "id":  "b473d634-5376-49f1-baa4-f609b2dc7f11",
+                      "name":  "DB_Close_Open_Handoff_Cases",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.lead_state\nSET\n  human_handoff = false,\n  stage = \u0027{{ ($json.resume_stage || \"closing\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  next_goal = \u0027{{ ($json.next_goal || \"continue_conversation\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  last_bot_action = \u0027bot_reactivated_after_handoff\u0027,\n  updated_at = NOW()\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\nRETURNING\n  lead_id,\n  stage,\n  human_handoff,\n  next_goal,\n  last_bot_action,\n  updated_at;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       432,
+                                       96
+                                   ],
+                      "id":  "466c5b07-cccf-4d62-83e2-09a102a9151c",
+                      "name":  "DB_Reactivate_Lead_State",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const originalInput = $(\"validate_reactivation_input\").first().json;\nconst handoffResult = $(\"DB_Close_Open_Handoff_Cases\").first().json || {};\nconst stateResult = $(\"DB_Reactivate_Lead_State\").first().json || {};\n\nconst closedCaseId = handoffResult?.id || null;\n\nreturn [{\n  flow_name: \"reactivate_bot_after_handoff\",\n  lead_id: originalInput.lead_id,\n  channel: \"internal\",\n  stage_before: \"human_handoff\",\n  latest_user_message: null,\n  allowed_actions: [],\n  decision: {\n    action: \"reactivate_bot\",\n    reason: \"Human handoff resolved manually\"\n  },\n  meta: {\n    resolved_by: originalInput.resolved_by,\n    resolution_note: originalInput.resolution_note,\n    closed_handoff_case_id: closedCaseId,\n    handoff_case_closed: !!closedCaseId,\n    new_state: {\n      stage: stateResult.stage || originalInput.resume_stage,\n      human_handoff: stateResult.human_handoff ?? false,\n      next_goal: stateResult.next_goal || originalInput.next_goal,\n      last_bot_action: stateResult.last_bot_action || \"bot_reactivated_after_handoff\"\n    }\n  },\n  llm: null,\n  idempotency_key: `${originalInput.lead_id}__reactivate_bot__${Date.now()}`,\n  created_at: new Date().toISOString()\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       848,
+                                       0
+                                   ],
+                      "id":  "4851b178-5e51-49ca-9ab9-e09db8ba6545",
+                      "name":  "build_reactivation_audit_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  idempotency_key,\n  created_at\n)\nVALUES (\n  \u0027{{ ($json.flow_name || \"reactivate_bot_after_handoff\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  \u0027{{ ($json.channel || \"internal\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.stage_before || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULL,\n  \u0027{{ JSON.stringify($json.allowed_actions || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.decision || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.meta || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  NULL,\n  NULLIF(\u0027{{ ($json.idempotency_key || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NOW()\n)\nRETURNING id;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1056,
+                                       0
+                                   ],
+                      "id":  "3d58a04d-77ec-4866-863d-c8677663bb67",
+                      "name":  "DB_Insert_Reactivation_Audit_Log",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\"validate_reactivation_input\").first().json;\nconst closedCase = $(\"DB_Close_Open_Handoff_Cases\").first().json || {};\nconst state = $(\"DB_Reactivate_Lead_State\").first().json || {};\nconst audit = $json || {};\n\nreturn [{\n  success: true,\n  action: \"reactivate_bot_after_handoff\",\n  lead_id: input.lead_id,\n  bot_reactivated: state?.human_handoff === false,\n  handoff_case_closed: !!closedCase?.id,\n  closed_handoff_case_id: closedCase?.id || null,\n  new_state: {\n    stage: state?.stage || input.resume_stage,\n    human_handoff: state?.human_handoff ?? false,\n    next_goal: state?.next_goal || input.next_goal,\n    last_bot_action: state?.last_bot_action || \"bot_reactivated_after_handoff\"\n  },\n  audit_log_id: audit?.id || null,\n  notes: [\n    closedCase?.id ? \"handoff_case_resolved\" : \"no_open_handoff_case_found\",\n    state?.lead_id ? \"lead_state_reactivated\" : \"lead_state_not_found\",\n    state?.human_handoff === false ? \"bot_can_reply_again\" : \"bot_reactivation_not_confirmed\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1264,
+                                       0
+                                   ],
+                      "id":  "a6bdd12c-6f83-4b1b-b9a9-3611d126bc73",
+                      "name":  "build_reactivation_output"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "numberInputs":  3,
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       672,
+                                       -16
+                                   ],
+                      "id":  "81ba6dc0-c608-4256-a152-9c6396560980",
+                      "name":  "Merge"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "validate_reactivation_input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "validate_reactivation_input":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "DB_Close_Open_Handoff_Cases",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             },
+                                                                             {
+                                                                                 "node":  "DB_Reactivate_Lead_State",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             },
+                                                                             {
+                                                                                 "node":  "Merge",
+                                                                                 "type":  "main",
+                                                                                 "index":  1
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "DB_Close_Open_Handoff_Cases":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Merge",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "DB_Reactivate_Lead_State":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Merge",
+                                                                              "type":  "main",
+                                                                              "index":  2
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "build_reactivation_audit_payload":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "DB_Insert_Reactivation_Audit_Log",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "DB_Insert_Reactivation_Audit_Log":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "build_reactivation_output",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "Merge":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "build_reactivation_audit_payload",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+                    "When Executed by Another Workflow":  [
+                                                              {
+                                                                  "json":  {
+                                                                               "lead_id":  "76329124-66ae-497b-a2a0-e45250ae56cf",
+                                                                               "resolved_by":  "Agustin",
+                                                                               "resolution_note":  "Caso resuelto manualmente. Bot reactivado.",
+                                                                               "resume_stage":  "closing",
+                                                                               "next_goal":  "continue_conversation"
+                                                                           }
+                                                              }
+                                                          ]
+                },
+    "versionId":  "27af41c4-8265-4b25-8e61-fac8d58509df",
+    "activeVersionId":  "27af41c4-8265-4b25-8e61-fac8d58509df",
+    "versionCounter":  58,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-28T14:00:30.616Z",
+                       "createdAt":  "2026-04-28T14:00:30.616Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "T1OoEv7HZttTUkf7",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-12T14:08:53.491Z",
+                     "createdAt":  "2026-05-12T14:08:53.491Z",
+                     "id":  "lEIaFX9FE9GJwQJS",
+                     "name":  "TOOL"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-28T14:06:39.000Z",
+                          "createdAt":  "2026-04-28T14:06:28.277Z",
+                          "versionId":  "27af41c4-8265-4b25-8e61-fac8d58509df",
+                          "workflowId":  "T1OoEv7HZttTUkf7",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"11111111-1111-1111-1111-111111111201\",\n  \"resolved_by\": \"Agustin\",\n  \"resolution_note\": \"Caso resuelto manualmente. Bot reactivado.\",\n  \"resume_stage\": \"closing\",\n  \"next_goal\": \"continue_conversation\"\n}"
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ],
+                                            "id":  "2c77ec8e-0f88-49e8-a4b4-90efe2b20551",
+                                            "name":  "When Executed by Another Workflow"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nconst uuidRegex =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nif (!input.lead_id || !uuidRegex.test(input.lead_id)) {\n  throw new Error(`Invalid or missing lead_id: ${input.lead_id || \"empty\"}`);\n}\n\nconst resolvedBy = input.resolved_by || \"human_operator\";\nconst resolutionNote =\n  input.resolution_note ||\n  \"Caso resuelto manualmente. Bot reactivado.\";\n\nconst resumeStage = input.resume_stage || \"closing\";\nconst nextGoal = input.next_goal || \"continue_conversation\";\n\nreturn [{\n  lead_id: input.lead_id,\n  resolved_by: resolvedBy,\n  resolution_note: resolutionNote,\n  resume_stage: resumeStage,\n  next_goal: nextGoal,\n  reactivated_at: new Date().toISOString()\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             208,
+                                                             0
+                                                         ],
+                                            "id":  "eebdd358-272c-4b62-846d-6fd299d74f73",
+                                            "name":  "validate_reactivation_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.handoff_cases\nSET\n  status = \u0027resolved\u0027,\n  resolved_by = \u0027{{ ($json.resolved_by || \"human_operator\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  resolved_at = NOW(),\n  resolution_note = \u0027{{ ($json.resolution_note || \"Bot reactivado\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  updated_at = NOW()\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\n  AND status = \u0027open\u0027\nRETURNING\n  id,\n  lead_id,\n  status,\n  resolved_by,\n  resolved_at,\n  resolution_note;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             432,
+                                                             -112
+                                                         ],
+                                            "id":  "b473d634-5376-49f1-baa4-f609b2dc7f11",
+                                            "name":  "DB_Close_Open_Handoff_Cases",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.lead_state\nSET\n  human_handoff = false,\n  stage = \u0027{{ ($json.resume_stage || \"closing\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  next_goal = \u0027{{ ($json.next_goal || \"continue_conversation\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  last_bot_action = \u0027bot_reactivated_after_handoff\u0027,\n  updated_at = NOW()\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\nRETURNING\n  lead_id,\n  stage,\n  human_handoff,\n  next_goal,\n  last_bot_action,\n  updated_at;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             432,
+                                                             96
+                                                         ],
+                                            "id":  "466c5b07-cccf-4d62-83e2-09a102a9151c",
+                                            "name":  "DB_Reactivate_Lead_State",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const originalInput = $(\"validate_reactivation_input\").first().json;\nconst handoffResult = $(\"DB_Close_Open_Handoff_Cases\").first().json || {};\nconst stateResult = $(\"DB_Reactivate_Lead_State\").first().json || {};\n\nconst closedCaseId = handoffResult?.id || null;\n\nreturn [{\n  flow_name: \"reactivate_bot_after_handoff\",\n  lead_id: originalInput.lead_id,\n  channel: \"internal\",\n  stage_before: \"human_handoff\",\n  latest_user_message: null,\n  allowed_actions: [],\n  decision: {\n    action: \"reactivate_bot\",\n    reason: \"Human handoff resolved manually\"\n  },\n  meta: {\n    resolved_by: originalInput.resolved_by,\n    resolution_note: originalInput.resolution_note,\n    closed_handoff_case_id: closedCaseId,\n    handoff_case_closed: !!closedCaseId,\n    new_state: {\n      stage: stateResult.stage || originalInput.resume_stage,\n      human_handoff: stateResult.human_handoff ?? false,\n      next_goal: stateResult.next_goal || originalInput.next_goal,\n      last_bot_action: stateResult.last_bot_action || \"bot_reactivated_after_handoff\"\n    }\n  },\n  llm: null,\n  idempotency_key: `${originalInput.lead_id}__reactivate_bot__${Date.now()}`,\n  created_at: new Date().toISOString()\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             848,
+                                                             0
+                                                         ],
+                                            "id":  "4851b178-5e51-49ca-9ab9-e09db8ba6545",
+                                            "name":  "build_reactivation_audit_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  idempotency_key,\n  created_at\n)\nVALUES (\n  \u0027{{ ($json.flow_name || \"reactivate_bot_after_handoff\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  \u0027{{ ($json.channel || \"internal\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.stage_before || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULL,\n  \u0027{{ JSON.stringify($json.allowed_actions || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.decision || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.meta || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  NULL,\n  NULLIF(\u0027{{ ($json.idempotency_key || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NOW()\n)\nRETURNING id;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1056,
+                                                             0
+                                                         ],
+                                            "id":  "3d58a04d-77ec-4866-863d-c8677663bb67",
+                                            "name":  "DB_Insert_Reactivation_Audit_Log",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $(\"validate_reactivation_input\").first().json;\nconst closedCase = $(\"DB_Close_Open_Handoff_Cases\").first().json || {};\nconst state = $(\"DB_Reactivate_Lead_State\").first().json || {};\nconst audit = $json || {};\n\nreturn [{\n  success: true,\n  action: \"reactivate_bot_after_handoff\",\n  lead_id: input.lead_id,\n  bot_reactivated: state?.human_handoff === false,\n  handoff_case_closed: !!closedCase?.id,\n  closed_handoff_case_id: closedCase?.id || null,\n  new_state: {\n    stage: state?.stage || input.resume_stage,\n    human_handoff: state?.human_handoff ?? false,\n    next_goal: state?.next_goal || input.next_goal,\n    last_bot_action: state?.last_bot_action || \"bot_reactivated_after_handoff\"\n  },\n  audit_log_id: audit?.id || null,\n  notes: [\n    closedCase?.id ? \"handoff_case_resolved\" : \"no_open_handoff_case_found\",\n    state?.lead_id ? \"lead_state_reactivated\" : \"lead_state_not_found\",\n    state?.human_handoff === false ? \"bot_can_reply_again\" : \"bot_reactivation_not_confirmed\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1264,
+                                                             0
+                                                         ],
+                                            "id":  "a6bdd12c-6f83-4b1b-b9a9-3611d126bc73",
+                                            "name":  "build_reactivation_output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "numberInputs":  3,
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             672,
+                                                             -16
+                                                         ],
+                                            "id":  "81ba6dc0-c608-4256-a152-9c6396560980",
+                                            "name":  "Merge"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "validate_reactivation_input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "validate_reactivation_input":  {
+                                                                                  "main":  [
+                                                                                               [
+                                                                                                   {
+                                                                                                       "node":  "DB_Close_Open_Handoff_Cases",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   },
+                                                                                                   {
+                                                                                                       "node":  "DB_Reactivate_Lead_State",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   },
+                                                                                                   {
+                                                                                                       "node":  "Merge",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  1
+                                                                                                   }
+                                                                                               ]
+                                                                                           ]
+                                                                              },
+                                              "DB_Close_Open_Handoff_Cases":  {
+                                                                                  "main":  [
+                                                                                               [
+                                                                                                   {
+                                                                                                       "node":  "Merge",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   }
+                                                                                               ]
+                                                                                           ]
+                                                                              },
+                                              "DB_Reactivate_Lead_State":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "Merge",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  2
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "build_reactivation_audit_payload":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "DB_Insert_Reactivation_Audit_Log",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "DB_Insert_Reactivation_Audit_Log":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "build_reactivation_output",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "Merge":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "build_reactivation_audit_payload",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 27af41c4",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-28T14:06:39.688Z",
+                                                             "id":  216,
+                                                             "workflowId":  "T1OoEv7HZttTUkf7",
+                                                             "versionId":  "27af41c4-8265-4b25-8e61-fac8d58509df",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

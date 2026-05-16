@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:36.000Z",
+    "createdAt":  "2026-05-12T18:38:32.574Z",
+    "id":  "GUheiv1qlvzpQObh",
+    "name":  "6.9 answer_question",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "fb002927-696c-4136-9c55-18127d6c01b7",
+                      "name":  "6.9 answer_question",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowanswer_questioninput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "7f63b4d4-556d-4c07-85bc-255605641699",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send: $json.execution_context.message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.execution_context.state_update || {}),\n    last_bot_action: \"answer_question\",\n    missing_fields: Array.isArray($json.execution_context.state_update?.missing_fields)\n      ? $json.execution_context.state_update.missing_fields\n      : []\n  }\n}];"
+                                     },
+                      "id":  "2ce6e0ff-2f4b-41c3-91a4-c9161bb61a78",
+                      "name":  "answer_question",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "answer_question",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            },
+                        "6.9 answer_question":  {
+                                                    "main":  [
+                                                                 {
+                                                                     "node":  "normalize_input",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "34c7f06a-9ad1-4b9b-ae44-66eebdfc99aa",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:32.578Z",
+                       "createdAt":  "2026-05-12T18:38:32.578Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "GUheiv1qlvzpQObh",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:39.000Z",
+    "createdAt":  "2026-05-12T18:38:30.785Z",
+    "id":  "opAL9VLr8qXlfjwG",
+    "name":  "6.23 offer_available_slots",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "4f9a9c9e-b7dd-40d5-bb05-f8b4813682d3",
+                      "name":  "6.23 offer_available_slots",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowoffer_available_slotsinput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "092dd2b5-dd48-4443-84c0-5b12c9af2b2b",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const ctx = $json.execution_context || {};\nconst stateUpdate = ctx.state_update || {};\n\nfunction getAvailabilityConfig(window) {\n  switch (window) {\n    case \"this_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los próximos días\",\n        max_slots: 3\n      };\n\n    case \"next_week\":\n      return {\n        days_ahead: 7,\n        start_offset_days: 7,\n        availability_label: \"la próxima semana\",\n        max_slots: 5\n      };\n\n    case \"next_14_days\":\n      return {\n        days_ahead: 14,\n        start_offset_days: 0,\n        availability_label: \"las próximas dos semanas\",\n        max_slots: 6\n      };\n\n    case \"next_30_days\":\n      return {\n        days_ahead: 30,\n        start_offset_days: 0,\n        availability_label: \"las próximas semanas\",\n        max_slots: 8\n      };\n\n    default:\n      return {\n        days_ahead: 7,\n        start_offset_days: 0,\n        availability_label: \"los próximos días\",\n        max_slots: 3\n      };\n  }\n}\n\nconst bookingDate = ctx.booking_date || stateUpdate.booking_date || null;\nconst bookingTime = ctx.booking_time || stateUpdate.booking_time || null;\nconst slotId = ctx.slot_id || stateUpdate.slot_id || (\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst isSpecificSlotCheck =\n  ctx.next_goal === \"check_specific_slot_availability\" ||\n  stateUpdate.next_goal === \"check_specific_slot_availability\" ||\n  (\n    !!bookingDate \u0026\u0026\n    !!bookingTime \u0026\u0026\n    ctx.availability_confirmed !== true \u0026\u0026\n    stateUpdate.availability_confirmed !== true\n  );\n\nconst config = getAvailabilityConfig(ctx.availability_window || stateUpdate.availability_window || \"this_week\");\n\nreturn [{\n  ...$json,\n  db_operations: [\"messages\", \"lead_state\"],\n\n  availability_request: {\n    lead_id: ctx.lead_id,\n    service_interest: ctx.service_interest,\n    vehicle_type: ctx.vehicle_type,\n    district: ctx.district,\n    duration_minutes: ctx.duration_minutes || 120,\n    calendar_id: ctx.calendar_id || \"primary\",\n\n    check_type: isSpecificSlotCheck ? \"specific_slot\" : \"list_slots\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    days_ahead: Number(ctx.days_ahead || stateUpdate.days_ahead || config.days_ahead),\n    start_offset_days: Number(ctx.start_offset_days || stateUpdate.start_offset_days || config.start_offset_days),\n    max_slots: Number(ctx.max_slots || stateUpdate.max_slots || config.max_slots)\n  },\n\n  state_update: {\n    ...(ctx.state_update || {}),\n\n    stage: \"booking_selection\",\n    intent_last: isSpecificSlotCheck ? \"manual_slot_requested\" : \"availability_requested\",\n    next_goal: isSpecificSlotCheck ? \"check_specific_slot_availability\" : \"show_available_slots\",\n    last_bot_action: \"offer_available_slots_in_progress\",\n\n    booking_date: bookingDate,\n    booking_time: bookingTime,\n    slot_id: slotId,\n    availability_confirmed: false,\n\n    availability_window: ctx.availability_window || stateUpdate.availability_window || \"this_week\",\n    availability_label: ctx.availability_label || stateUpdate.availability_label || config.availability_label,\n\n    missing_fields: []\n  }\n}];"
+                                     },
+                      "id":  "fc1050d0-8e58-4b86-aa95-45ba7ab4cd69",
+                      "name":  "offer_available_slots",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "6.23 offer_available_slots":  {
+                                                           "main":  [
+                                                                        {
+                                                                            "node":  "normalize_input",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                       },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "offer_available_slots",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "60f45d6f-78cb-4fce-a5ee-46aba1ccad5e",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:30.790Z",
+                       "createdAt":  "2026-05-12T18:38:30.790Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "opAL9VLr8qXlfjwG",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

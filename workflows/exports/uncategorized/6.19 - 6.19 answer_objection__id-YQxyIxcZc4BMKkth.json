@@ -1,0 +1,201 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:03:33.305Z",
+    "createdAt":  "2026-05-13T14:03:09.254Z",
+    "id":  "YQxyIxcZc4BMKkth",
+    "name":  "6.19 answer_objection",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                     },
+                      "id":  "de1c9a7c-c015-4ffc-b2d0-c85a96f56b55",
+                      "name":  "6.19 answer_objection",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowanswer_objectioninput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "4e45767a-bda4-4186-b781-4f8496c8b8ca",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       224,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const msg = (\n  $json.execution_context?.message ||\n  $json.decision?.message ||\n  \"\"\n).trim();\n\nconst isWillThink = (() =\u003e {\n  const t = String($json.context_packet?.conversation?.latest_user_message || \"\").toLowerCase();\n  return t.includes(\"lo voy a pensar\") || t.includes(\"lo pensare\") || t.includes(\"lo pensar\") || t.includes(\"despues veo\") || t.includes(\"después veo\");\n})();\n\nconst fallback = isWillThink\n  ? \"Perfecto, tómate tu tiempo. Cualquier cosa me dices y te ayudo feliz. Si te parece, puedo enviarte los horarios disponibles o agendar cuando te acomode. ¿Qué prefieres?\"\n  : \"Perfecto. Cualquier cosa me dices y te ayudo feliz. ¿Qué te gustaría revisar?\";\n\nreturn [\n  {\n    json: {\n      ...$json,\n      message_to_send: msg || fallback,\n      db_operations: [\"messages\", \"lead_state\"],\n      state_update: {\n        ...($json.execution_context?.state_update || {}),\n        stage: \"closing\",\n        intent_last: \"objection_answered\",\n        next_goal: \"book_appointment\",\n        last_bot_action: \"answer_objection\",\n        missing_fields: []\n      }\n    }\n  }\n];"
+                                     },
+                      "id":  "f6e74b62-4567-4a2b-9722-744ec0ea12bc",
+                      "name":  "answer_objection",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       448,
+                                       0
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "6.19 answer_objection":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "normalize_input",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "answer_objection",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "4c7051a8-fac5-4242-aeca-3317e4513f45",
+    "activeVersionId":  "4c7051a8-fac5-4242-aeca-3317e4513f45",
+    "versionCounter":  7,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:03:09.260Z",
+                       "createdAt":  "2026-05-13T14:03:09.260Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "YQxyIxcZc4BMKkth",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:03:19.000Z",
+                          "createdAt":  "2026-05-13T14:03:18.619Z",
+                          "versionId":  "4c7051a8-fac5-4242-aeca-3317e4513f45",
+                          "workflowId":  "YQxyIxcZc4BMKkth",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                                           },
+                                            "id":  "de1c9a7c-c015-4ffc-b2d0-c85a96f56b55",
+                                            "name":  "6.19 answer_objection",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowanswer_objectioninput_normalized\"\n  ]\n}];"
+                                                           },
+                                            "id":  "4e45767a-bda4-4186-b781-4f8496c8b8ca",
+                                            "name":  "normalize_input",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             224,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const msg = (\n  $json.execution_context?.message ||\n  $json.decision?.message ||\n  \"\"\n).trim();\n\nconst isWillThink = (() =\u003e {\n  const t = String($json.context_packet?.conversation?.latest_user_message || \"\").toLowerCase();\n  return t.includes(\"lo voy a pensar\") || t.includes(\"lo pensare\") || t.includes(\"lo pensar\") || t.includes(\"despues veo\") || t.includes(\"después veo\");\n})();\n\nconst fallback = isWillThink\n  ? \"Perfecto, tómate tu tiempo. Cualquier cosa me dices y te ayudo feliz. Si te parece, puedo enviarte los horarios disponibles o agendar cuando te acomode. ¿Qué prefieres?\"\n  : \"Perfecto. Cualquier cosa me dices y te ayudo feliz. ¿Qué te gustaría revisar?\";\n\nreturn [\n  {\n    json: {\n      ...$json,\n      message_to_send: msg || fallback,\n      db_operations: [\"messages\", \"lead_state\"],\n      state_update: {\n        ...($json.execution_context?.state_update || {}),\n        stage: \"closing\",\n        intent_last: \"objection_answered\",\n        next_goal: \"book_appointment\",\n        last_bot_action: \"answer_objection\",\n        missing_fields: []\n      }\n    }\n  }\n];"
+                                                           },
+                                            "id":  "f6e74b62-4567-4a2b-9722-744ec0ea12bc",
+                                            "name":  "answer_objection",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             448,
+                                                             0
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.19 answer_objection":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "normalize_input",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "answer_objection",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 4c7051a8",
+                          "description":  "",
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:03:19.871Z",
+                                                             "id":  569,
+                                                             "workflowId":  "YQxyIxcZc4BMKkth",
+                                                             "versionId":  "4c7051a8-fac5-4242-aeca-3317e4513f45",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

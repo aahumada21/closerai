@@ -1,0 +1,250 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:11:47.120Z",
+    "createdAt":  "2026-04-30T14:27:42.873Z",
+    "id":  "gwG5SWl2JociD2dq",
+    "name":  "6.16 request_referral",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"referral_message\": \"={{ $json.referral_message }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "6.16 request_referral",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in request_referral\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_referral\");\n}\n\nreturn [{\n  lead_id,\n  phone,\n  channel,\n\n  calendar_id: $json.calendar_id || execution_context.calendar_id || context_packet?.state?.calendar_id || null,\n\n  service_interest:\n    $json.service_interest ||\n    execution_context.service_interest ||\n    context_packet?.state?.service_interest ||\n    null,\n\n  vehicle_type:\n    $json.vehicle_type ||\n    execution_context.vehicle_type ||\n    context_packet?.state?.vehicle_type ||\n    null,\n\n  district:\n    $json.district ||\n    execution_context.district ||\n    context_packet?.state?.district ||\n    null,\n\n  booking_date:\n    $json.booking_date ||\n    execution_context.booking_date ||\n    context_packet?.state?.booking_date ||\n    null,\n\n  booking_time:\n    $json.booking_time ||\n    execution_context.booking_time ||\n    context_packet?.state?.booking_time ||\n    null,\n\n  slot_id:\n    $json.slot_id ||\n    execution_context.slot_id ||\n    context_packet?.state?.slot_id ||\n    null,\n\n  referral_message:\n    $json.referral_message ||\n    decision.referral_message ||\n    decision.message ||\n    \"\",\n\n  execution_context: {\n    ...execution_context,\n    lead_id,\n    phone,\n    channel,\n    action: \"request_referral\"\n  },\n\n  context_packet,\n  decision,\n  state_update,\n  execution_meta,\n\n  notes: [\n    ...($json.notes || []),\n    \"request_referral_input_normalized\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "6fe8d2e4-c454-4e9f-8a80-46efd9369a73",
+                      "name":  "normalize_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const customMessage = $json.referral_message;\n\nconst defaultMessage =\n  \"Si conoces a alguien que también quiera dejar su auto impecable, feliz nos puedes recomendar. Trabajamos a domicilio y coordinamos por WhatsApp.\";\n\nconst message = customMessage \u0026\u0026 customMessage.trim() !== \"\"\n  ? customMessage.trim()\n  : defaultMessage;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  message_type: \"text\",\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"post_service\",\n    next_goal: \"reactivation_or_referral_tracking\",\n    last_bot_action: \"request_referral\",\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"referral_message_built\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "605db978-94eb-4a07-b2c8-ef8c56b88403",
+                      "name":  "build_referral_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n\n  lead_id: $json.lead_id,\n  phone: $json.phone,\n  channel: $json.channel,\n\n  message: $json.message_to_send,\n  message_type: $json.message_type || \"text\",\n\n  source: \"request_referral\"\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "9acbe70b-31d3-4855-9eed-11376039e1ad",
+                      "name":  "build_outbound_payload"
+                  }
+              ],
+    "connections":  {
+                        "6.16 request_referral":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "normalize_input",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "build_referral_message",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "build_referral_message":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "build_outbound_payload",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "8807d43c-279c-4c89-897f-516f77b5e004",
+    "activeVersionId":  "8807d43c-279c-4c89-897f-516f77b5e004",
+    "versionCounter":  22,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-30T14:27:42.877Z",
+                       "createdAt":  "2026-04-30T14:27:42.877Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "gwG5SWl2JociD2dq",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-30T14:32:52.000Z",
+                          "createdAt":  "2026-04-30T14:32:45.883Z",
+                          "versionId":  "8807d43c-279c-4c89-897f-516f77b5e004",
+                          "workflowId":  "gwG5SWl2JociD2dq",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"referral_message\": \"={{ $json.referral_message }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "6.16 request_referral",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in request_referral\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_referral\");\n}\n\nreturn [{\n  lead_id,\n  phone,\n  channel,\n\n  calendar_id: $json.calendar_id || execution_context.calendar_id || context_packet?.state?.calendar_id || null,\n\n  service_interest:\n    $json.service_interest ||\n    execution_context.service_interest ||\n    context_packet?.state?.service_interest ||\n    null,\n\n  vehicle_type:\n    $json.vehicle_type ||\n    execution_context.vehicle_type ||\n    context_packet?.state?.vehicle_type ||\n    null,\n\n  district:\n    $json.district ||\n    execution_context.district ||\n    context_packet?.state?.district ||\n    null,\n\n  booking_date:\n    $json.booking_date ||\n    execution_context.booking_date ||\n    context_packet?.state?.booking_date ||\n    null,\n\n  booking_time:\n    $json.booking_time ||\n    execution_context.booking_time ||\n    context_packet?.state?.booking_time ||\n    null,\n\n  slot_id:\n    $json.slot_id ||\n    execution_context.slot_id ||\n    context_packet?.state?.slot_id ||\n    null,\n\n  referral_message:\n    $json.referral_message ||\n    decision.referral_message ||\n    decision.message ||\n    \"\",\n\n  execution_context: {\n    ...execution_context,\n    lead_id,\n    phone,\n    channel,\n    action: \"request_referral\"\n  },\n\n  context_packet,\n  decision,\n  state_update,\n  execution_meta,\n\n  notes: [\n    ...($json.notes || []),\n    \"request_referral_input_normalized\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "6fe8d2e4-c454-4e9f-8a80-46efd9369a73",
+                                            "name":  "normalize_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const customMessage = $json.referral_message;\n\nconst defaultMessage =\n  \"Si conoces a alguien que también quiera dejar su auto impecable, feliz nos puedes recomendar. Trabajamos a domicilio y coordinamos por WhatsApp.\";\n\nconst message = customMessage \u0026\u0026 customMessage.trim() !== \"\"\n  ? customMessage.trim()\n  : defaultMessage;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  message_type: \"text\",\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"post_service\",\n    next_goal: \"reactivation_or_referral_tracking\",\n    last_bot_action: \"request_referral\",\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"referral_message_built\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "605db978-94eb-4a07-b2c8-ef8c56b88403",
+                                            "name":  "build_referral_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n\n  lead_id: $json.lead_id,\n  phone: $json.phone,\n  channel: $json.channel,\n\n  message: $json.message_to_send,\n  message_type: $json.message_type || \"text\",\n\n  source: \"request_referral\"\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "9acbe70b-31d3-4855-9eed-11376039e1ad",
+                                            "name":  "build_outbound_payload"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.16 request_referral":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "normalize_input",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "build_referral_message",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "build_referral_message":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "build_outbound_payload",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 8807d43c",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-30T14:32:52.478Z",
+                                                             "id":  315,
+                                                             "workflowId":  "gwG5SWl2JociD2dq",
+                                                             "versionId":  "8807d43c-279c-4c89-897f-516f77b5e004",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

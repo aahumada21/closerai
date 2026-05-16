@@ -1,0 +1,444 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:10:28.667Z",
+    "createdAt":  "2026-04-15T15:36:31.576Z",
+    "id":  "qY8gG9AaeBkFmxGn",
+    "name":  "6.1 send_outbound_message",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"uuid\",\n  \"followup_id\": \"uuid\",\n  \"phone\": \"56900000000\",\n  \"channel\": \"whatsapp\",\n  \"message\": \"Hola, mensaje de ejemplo\",\n  \"message_type\": \"followup\",\n  \"source\": \"followup_scheduler\",\n   \"chat_session_id\": \"session_del_chat_n8n\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "send_outbound_message",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nconst allowedChannels = [\u0027whatsapp\u0027, \u0027n8n_chat\u0027];\n\nif (!input.channel) {\n  throw new Error(\"Missing channel\");\n}\n\nif (!allowedChannels.includes(input.channel)) {\n  throw new Error(`Unsupported channel: ${input.channel}`);\n}\n\nif (!input.phone) {\n  throw new Error(\"Missing phone\");\n}\n\nif (!input.message || typeof input.message !== \"string\" || input.message.trim() === \"\") {\n  throw new Error(\"Invalid message\");\n}\n\n// Normalizar teléfono\nconst phone = input.phone.toString().replace(/\\D/g, \u0027\u0027);\n\nif (!phone.startsWith(\"56\")) {\n  throw new Error(\"Phone must be Chile format (56...)\");\n}\n\nreturn [{\n  json: {\n    ...input,\n    phone\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "44b8194f-27ab-4a53-a5c8-f708b2e66d5b",
+                      "name":  "validate_outbound_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "expression",
+                                         "numberOutputs":  2,
+                                         "output":  "={{\n({\n  whatsapp: 0,\n  n8n_chat: 1\n})[$json.channel] ?? -1\n}}"
+                                     },
+                      "type":  "n8n-nodes-base.switch",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "d7b88e07-b575-4442-bdbc-3899fa2ba3e1",
+                      "name":  "channel_router",
+                      "notes":  "Whatsapp Buisness = 0"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const providerResponse = $json;\nconst originalInput = $(\u0027send_outbound_message\u0027).first().json;\n\nconst hasError = providerResponse.error !== undefined;\n\nreturn [{\n  json: {\n    ...originalInput,   // 👈 ESTO ES CRÍTICO\n    success: !hasError,\n    message_sent: !hasError,\n    provider_message_id: providerResponse.messages?.[0]?.id || null,\n    provider_status: hasError ? \"failed\" : \"accepted\",\n    provider_error: hasError ? providerResponse.error : null,\n    provider_raw_response: providerResponse,\n    message_type: originalInput.message_type || \"text\"\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1120,
+                                       224
+                                   ],
+                      "id":  "02791725-9e0e-47e8-a40e-7b4c45622191",
+                      "name":  "normalize_provider_response"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "send",
+                                         "phoneNumberId":  "1024332077436840",
+                                         "recipientPhoneNumber":  "={{$json.phone}}",
+                                         "textBody":  "={{$json.message}}",
+                                         "additionalFields":  {
+
+                                                              }
+                                     },
+                      "type":  "n8n-nodes-base.whatsApp",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       912,
+                                       272
+                                   ],
+                      "id":  "1fd3b6ff-7de6-40d7-8a34-69508cfaf118",
+                      "name":  "WB Send",
+                      "webhookId":  "b12031f6-9743-49ec-b9f6-0551b2cf302b",
+                      "credentials":  {
+                                          "whatsAppApi":  {
+                                                              "id":  "lHyvwqasIbVP59b8",
+                                                              "name":  "WhatsApp account"
+                                                          }
+                                      },
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const originalInput = $(\u0027send_outbound_message\u0027).first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `n8n_chat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"n8n_chat\",\n        simulated_delivery: true,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       896,
+                                       448
+                                   ],
+                      "id":  "ebd24374-ef60-4a8c-bded-699fdbc02175",
+                      "name":  "build_n8n_chat_response"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [\n  {\n    json: {\n      ...$json,\n      outbound_completed: true\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       448
+                                   ],
+                      "id":  "6dd24022-10dd-4a6d-83de-039c84664132",
+                      "name":  "final_outbound_result"
+                  }
+              ],
+    "connections":  {
+                        "send_outbound_message":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "validate_outbound_input",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "validate_outbound_input":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "channel_router",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "channel_router":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "WB Send",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ],
+                                                            [
+                                                                {
+                                                                    "node":  "build_n8n_chat_response",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "WB Send":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "normalize_provider_response",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "normalize_provider_response":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "final_outbound_result",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "build_n8n_chat_response":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "final_outbound_result",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "dada26fa-e9c5-44fb-8721-13b4dd4407a4",
+    "activeVersionId":  "dada26fa-e9c5-44fb-8721-13b4dd4407a4",
+    "versionCounter":  137,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-15T15:36:31.583Z",
+                       "createdAt":  "2026-04-15T15:36:31.583Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "qY8gG9AaeBkFmxGn",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-02T18:46:51.000Z",
+                          "createdAt":  "2026-05-02T18:44:57.268Z",
+                          "versionId":  "dada26fa-e9c5-44fb-8721-13b4dd4407a4",
+                          "workflowId":  "qY8gG9AaeBkFmxGn",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"uuid\",\n  \"followup_id\": \"uuid\",\n  \"phone\": \"56900000000\",\n  \"channel\": \"whatsapp\",\n  \"message\": \"Hola, mensaje de ejemplo\",\n  \"message_type\": \"followup\",\n  \"source\": \"followup_scheduler\",\n   \"chat_session_id\": \"session_del_chat_n8n\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "send_outbound_message",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nconst allowedChannels = [\u0027whatsapp\u0027, \u0027n8n_chat\u0027];\n\nif (!input.channel) {\n  throw new Error(\"Missing channel\");\n}\n\nif (!allowedChannels.includes(input.channel)) {\n  throw new Error(`Unsupported channel: ${input.channel}`);\n}\n\nif (!input.phone) {\n  throw new Error(\"Missing phone\");\n}\n\nif (!input.message || typeof input.message !== \"string\" || input.message.trim() === \"\") {\n  throw new Error(\"Invalid message\");\n}\n\n// Normalizar teléfono\nconst phone = input.phone.toString().replace(/\\D/g, \u0027\u0027);\n\nif (!phone.startsWith(\"56\")) {\n  throw new Error(\"Phone must be Chile format (56...)\");\n}\n\nreturn [{\n  json: {\n    ...input,\n    phone\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "44b8194f-27ab-4a53-a5c8-f708b2e66d5b",
+                                            "name":  "validate_outbound_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "expression",
+                                                               "numberOutputs":  2,
+                                                               "output":  "={{\n({\n  whatsapp: 0,\n  n8n_chat: 1\n})[$json.channel] ?? -1\n}}"
+                                                           },
+                                            "type":  "n8n-nodes-base.switch",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "d7b88e07-b575-4442-bdbc-3899fa2ba3e1",
+                                            "name":  "channel_router",
+                                            "notes":  "Whatsapp Buisness = 0"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const providerResponse = $json;\nconst originalInput = $(\u0027send_outbound_message\u0027).first().json;\n\nconst hasError = providerResponse.error !== undefined;\n\nreturn [{\n  json: {\n    ...originalInput,   // 👈 ESTO ES CRÍTICO\n    success: !hasError,\n    message_sent: !hasError,\n    provider_message_id: providerResponse.messages?.[0]?.id || null,\n    provider_status: hasError ? \"failed\" : \"accepted\",\n    provider_error: hasError ? providerResponse.error : null,\n    provider_raw_response: providerResponse,\n    message_type: originalInput.message_type || \"text\"\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1120,
+                                                             224
+                                                         ],
+                                            "id":  "02791725-9e0e-47e8-a40e-7b4c45622191",
+                                            "name":  "normalize_provider_response"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "send",
+                                                               "phoneNumberId":  "1024332077436840",
+                                                               "recipientPhoneNumber":  "={{$json.phone}}",
+                                                               "textBody":  "={{$json.message}}",
+                                                               "additionalFields":  {
+
+                                                                                    }
+                                                           },
+                                            "type":  "n8n-nodes-base.whatsApp",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             912,
+                                                             272
+                                                         ],
+                                            "id":  "1fd3b6ff-7de6-40d7-8a34-69508cfaf118",
+                                            "name":  "WB Send",
+                                            "webhookId":  "b12031f6-9743-49ec-b9f6-0551b2cf302b",
+                                            "credentials":  {
+                                                                "whatsAppApi":  {
+                                                                                    "id":  "lHyvwqasIbVP59b8",
+                                                                                    "name":  "WhatsApp account"
+                                                                                }
+                                                            },
+                                            "onError":  "continueRegularOutput"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const originalInput = $(\u0027send_outbound_message\u0027).first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `n8n_chat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"n8n_chat\",\n        simulated_delivery: true,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             896,
+                                                             448
+                                                         ],
+                                            "id":  "ebd24374-ef60-4a8c-bded-699fdbc02175",
+                                            "name":  "build_n8n_chat_response"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [\n  {\n    json: {\n      ...$json,\n      outbound_completed: true\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             448
+                                                         ],
+                                            "id":  "6dd24022-10dd-4a6d-83de-039c84664132",
+                                            "name":  "final_outbound_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "send_outbound_message":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "validate_outbound_input",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "validate_outbound_input":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "channel_router",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "channel_router":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "WB Send",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ],
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "build_n8n_chat_response",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "WB Send":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "normalize_provider_response",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                                              "normalize_provider_response":  {
+                                                                                  "main":  [
+                                                                                               [
+                                                                                                   {
+                                                                                                       "node":  "final_outbound_result",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   }
+                                                                                               ]
+                                                                                           ]
+                                                                              },
+                                              "build_n8n_chat_response":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "final_outbound_result",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version dada26fa",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-02T18:46:51.665Z",
+                                                             "id":  382,
+                                                             "workflowId":  "qY8gG9AaeBkFmxGn",
+                                                             "versionId":  "dada26fa-e9c5-44fb-8721-13b4dd4407a4",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

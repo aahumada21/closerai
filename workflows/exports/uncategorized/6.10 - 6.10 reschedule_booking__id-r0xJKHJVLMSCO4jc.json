@@ -1,0 +1,2034 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:28:47.422Z",
+    "createdAt":  "2026-04-29T14:41:33.670Z",
+    "id":  "r0xJKHJVLMSCO4jc",
+    "name":  "6.10 reschedule_booking",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"duration_minutes\": \"={{ String($json.duration_minutes || 120) }}\",\n\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n\n  \"availability_window\": \"={{ $json.availability_window }}\",\n  \"availability_label\": \"={{ $json.availability_label }}\",\n  \"days_ahead\": \"={{ String($json.days_ahead || 7) }}\",\n  \"start_offset_days\": \"={{ String($json.start_offset_days || 0) }}\",\n  \"max_slots\": \"={{ String($json.max_slots || 3) }}\",\n\n  \"reschedule_reason\": \"={{ $json.reschedule_reason }}\",\n\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       48,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\n\nconst executionContext = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in reschedule_booking\");\n}\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  calendar_id:\n    input.calendar_id ||\n    executionContext.calendar_id ||\n    state.calendar_id ||\n    \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n\n  booking_date:\n    input.booking_date ||\n    executionContext.booking_date ||\n    state.booking_date ||\n    null,\n\n  booking_time:\n    input.booking_time ||\n    executionContext.booking_time ||\n    state.booking_time ||\n    null,\n\n  slot_id:\n    input.slot_id ||\n    executionContext.slot_id ||\n    state.slot_id ||\n    null,\n\n  duration_minutes: Number(\n    input.duration_minutes ||\n    executionContext.duration_minutes ||\n    state.duration_minutes ||\n    120\n  ),\n\n  service_interest:\n    input.service_interest ||\n    executionContext.service_interest ||\n    state.service_interest ||\n    null,\n\n  vehicle_type:\n    input.vehicle_type ||\n    executionContext.vehicle_type ||\n    state.vehicle_type ||\n    null,\n\n  district:\n    input.district ||\n    executionContext.district ||\n    state.district ||\n    null,\n\n  availability_window:\n    input.availability_window ||\n    executionContext.availability_window ||\n    state.availability_window ||\n    \"this_week\",\n\n  availability_label:\n    input.availability_label ||\n    executionContext.availability_label ||\n    state.availability_label ||\n    \"los próximos días\",\n\n  days_ahead: Number(\n    input.days_ahead ||\n    executionContext.days_ahead ||\n    state.days_ahead ||\n    7\n  ),\n\n  start_offset_days: Number(\n    input.start_offset_days ||\n    executionContext.start_offset_days ||\n    state.start_offset_days ||\n    0\n  ),\n\n  max_slots: Number(\n    input.max_slots ||\n    executionContext.max_slots ||\n    state.max_slots ||\n    3\n  ),\n\n  reschedule_reason:\n    input.reschedule_reason ||\n    executionContext.reschedule_reason ||\n    input.decision?.reason ||\n    \"user_requested_reschedule\",\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"reschedule_booking\"\n  },\n\n  context_packet: contextPacket,\n  state_update: input.state_update || {},\n  decision: input.decision || {},\n  execution_meta: input.execution_meta || {},\n\n  notes: [\n    ...(input.notes || []),\n    \"reschedule_input_normalized\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       256,
+                                       352
+                                   ],
+                      "id":  "7c34c307-8ce2-4cce-9e3b-944266c2f127",
+                      "name":  "normalize_reschedule_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  service_address,\n  address_reference\nFROM public.appointments\nWHERE conversation_id = NULLIF(\u0027{{ $json.lead_id }}\u0027, \u0027\u0027)::uuid\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       464,
+                                       352
+                                   ],
+                      "id":  "bff835c2-68e4-449c-af66-4982749789ae",
+                      "name":  "DB_Check_Active_Appointment_For_Reschedule",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = $(\"normalize_reschedule_input\").first().json;\n\nconst activeAppointment = $json.id\n  ? {\n      id: $json.id,\n      event_id: $json.event_id,\n      conversation_id: $json.conversation_id,\n      start_at: $json.start_at,\n      end_at: $json.end_at,\n      summary: $json.summary,\n      description: $json.description,\n      status: $json.status,\n      service_address: $json.service_address,\n      address_reference: $json.address_reference\n    }\n  : null;\n\nreturn [{\n  ...original,\n  active_appointment: activeAppointment,\n  notes: [\n    ...(original.notes || []),\n    activeAppointment ? \"active_appointment_found\" : \"no_active_appointment_found\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "f1a06a06-a23c-4fc4-a3c4-f91b70632734",
+                      "name":  "attach_active_appointment"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "35a8574e-74db-466d-923f-58b3f930f51c",
+                                                                                   "leftValue":  "={{ !!$json.active_appointment?.id }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1104,
+                                       352
+                                   ],
+                      "id":  "220464b7-66a4-4702-9e0e-aa424cb6c7b0",
+                      "name":  "IF active_appointment_exists"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send:\n    \"No encontré una reserva activa para reprogramar. Si quieres, puedo ayudarte a agendar una nueva.\",\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    last_bot_action: \"reschedule_no_active_appointment\",\n    next_goal: \"offer_booking\",\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_blocked_no_active_appointment\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1328,
+                                       528
+                                   ],
+                      "id":  "d248f02e-8eb6-4e66-bdb2-b01f24f9fdd4",
+                      "name":  "build_reschedule_no_active_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "1ec8d01f-cc71-40f1-bc1b-741d5ea4498e",
+                                                                                   "leftValue":  "={{ !!$json.booking_date \u0026\u0026 !!$json.booking_time }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1312,
+                                       336
+                                   ],
+                      "id":  "2742a3b1-1d77-4675-88af-ca63f8f1a5a7",
+                      "name":  "IF has_new_slot"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "SWHJNhMwBbbNsZiU",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/SWHJNhMwBbbNsZiU",
+                                                            "cachedResultName":  "6.4 list_available_slots"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.lead_id }}",
+                                                                              "calendar_id":  "={{ $json.calendar_id }}\"",
+                                                                              "duration_minutes":  "={{ String($json.duration_minutes || 120) }}",
+                                                                              "days_ahead":  "={{ String($json.days_ahead || 7) }}",
+                                                                              "max_slots":  "={{ String($json.max_slots || 3) }}",
+                                                                              "service_interest":  "={{ $json.service_interest }}",
+                                                                              "vehicle_type":  "={{ $json.vehicle_type }}",
+                                                                              "district":  "={{ $json.district }}",
+                                                                              "availability_window":  "={{ $json.availability_window || \u0027this_week\u0027 }}",
+                                                                              "availability_label":  "={{ String($json.start_offset_days || 0) }}\"",
+                                                                              "start_offset_days":  "={{ $json.availability_label || \u0027los próximos días\u0027 }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "calendar_id",
+                                                                                   "displayName":  "calendar_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "duration_minutes",
+                                                                                   "displayName":  "duration_minutes",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "days_ahead",
+                                                                                   "displayName":  "days_ahead",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "max_slots",
+                                                                                   "displayName":  "max_slots",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "service_interest",
+                                                                                   "displayName":  "service_interest",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "vehicle_type",
+                                                                                   "displayName":  "vehicle_type",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "district",
+                                                                                   "displayName":  "district",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "availability_window",
+                                                                                   "displayName":  "availability_window",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "availability_label",
+                                                                                   "displayName":  "availability_label",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               },
+                                                                               {
+                                                                                   "id":  "start_offset_days",
+                                                                                   "displayName":  "start_offset_days",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string"
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1520,
+                                       416
+                                   ],
+                      "id":  "45927bdf-ed58-42e6-9e3a-b71669943ab5",
+                      "name":  "6.4 list_available_slots"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1744,
+                                       400
+                                   ],
+                      "id":  "15d0ff8e-95a3-46c3-9c98-5106d739f820",
+                      "name":  "merge_reschedule_slots_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const slots = Array.isArray($json.slots) ? $json.slots : [];\nconst availabilityLabel = $json.availability_label || \"los próximos días\";\n\nfunction formatSlot(slot) {\n  const start = new Date(slot.slot_start_at);\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  const hora = start.toLocaleTimeString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n\n  return `${fecha} a las ${hora}`;\n}\n\nif (slots.length === 0) {\n  return [{\n    ...$json,\n    message_to_send:\n      `Claro, podemos reprogramar, pero por ahora no encontré horarios disponibles para ${availabilityLabel}. Te puedo ayudar a revisar otra alternativa.`,\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"reschedule\",\n      next_goal: \"manual_availability_review\",\n      last_bot_action: \"reschedule_no_slots_found\",\n      missing_fields: [],\n      booking_options: []\n    },\n    notes: [\n      ...($json.notes || []),\n      \"reschedule_no_available_slots\"\n    ]\n  }];\n}\n\nconst lines = slots.map((slot, index) =\u003e {\n  return `${index + 1}. ${formatSlot(slot)}`;\n});\n\nconst optionNumbers = slots.map((_, index) =\u003e index + 1).join(\", \");\n\nreturn [{\n  ...$json,\n  message_to_send:\n    `Claro, podemos reprogramar. Tengo estos horarios disponibles para ${availabilityLabel}:\\n\\n` +\n    `${lines.join(\"\\n\")}\\n\\n` +\n    `¿Cuál te acomoda? Puedes responder con ${optionNumbers}.`,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"reschedule\",\n    intent_last: \"reschedule_requested\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_reschedule_slots\",\n    missing_fields: [],\n    booking_options: slots,\n    availability_window: $json.availability_window || \"this_week\",\n    availability_label: availabilityLabel\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_slots_sent\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1952,
+                                       400
+                                   ],
+                      "id":  "293041cd-0f10-473e-988f-4159f5cc487e",
+                      "name":  "build_reschedule_slots_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "EI0cTkMum1UCKHbN",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/EI0cTkMum1UCKHbN",
+                                                            "cachedResultName":  "6.2 check_calendar_slot"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{ $json.lead_id }}",
+                                                                              "booking_date":  "={{ $json.booking_date }}",
+                                                                              "booking_time":  "={{ $json.booking_time }}",
+                                                                              "slot_id":  "={{ $json.slot_id }}",
+                                                                              "duration_minutes":  "={{ String($json.duration_minutes || 120) }}",
+                                                                              "calendar_id":  "={{ $json.calendar_id }}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "booking_date",
+                                                                                   "displayName":  "booking_date",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "booking_time",
+                                                                                   "displayName":  "booking_time",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "slot_id",
+                                                                                   "displayName":  "slot_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "duration_minutes",
+                                                                                   "displayName":  "duration_minutes",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "calendar_id",
+                                                                                   "displayName":  "calendar_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1520,
+                                       240
+                                   ],
+                      "id":  "29db7c41-40c7-4cd9-a1da-6e3e63e617e2",
+                      "name":  "Call \u00276.2 check_calendar_slot\u0027"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1744,
+                                       224
+                                   ],
+                      "id":  "4164833a-4b42-401b-81e4-5b45146935e7",
+                      "name":  "merge_slot_check_with_context"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "cf70be9d-3cbf-46d1-acf5-24f632b436e8",
+                                                                                   "leftValue":  "={{ $json.slot_available === true || $json.availability_confirmed === true }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1952,
+                                       224
+                                   ],
+                      "id":  "9e376aed-33e5-418c-b2ed-ad18e20a8d80",
+                      "name":  "IF slot_available"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  message_to_send:\n    \"Ese horario ya no está disponible. Te puedo proponer otro horario para reprogramar.\",\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"reschedule\",\n    next_goal: \"collect_new_slot\",\n    last_bot_action: \"reschedule_slot_unavailable\",\n    availability_confirmed: false,\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_slot_unavailable\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2224,
+                                       336
+                                   ],
+                      "id":  "650e47a5-04c0-40c2-be89-38f8f462f167",
+                      "name":  "build_reschedule_slot_unavailable_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "update",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "={{ $json.calendar_id }}",
+                                                          "mode":  "id"
+                                                      },
+                                         "eventId":  "={{ $json.active_appointment.event_id }}",
+                                         "updateFields":  {
+                                                              "description":  "={{ $json.active_appointment.description || \"\" }}",
+                                                              "end":  "={{ $json.slot_end_at }}",
+                                                              "start":  "={{ $json.slot_start_at }}",
+                                                              "summary":  "={{ $json.active_appointment.summary || \"Servicio Ahumada Detailing\" }}"
+                                                          }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       2224,
+                                       160
+                                   ],
+                      "id":  "23f7cd0a-ece3-4cda-ae1f-c815a1fb3f57",
+                      "name":  "Google Calendar — Update Event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "mpmI0f0dGSSsN1Rj",
+                                                                          "name":  "Google Calendar account"
+                                                                      }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = $(\"merge_slot_check_with_context\").first().json;\n\nreturn [{\n  ...original,\n  calendar_rescheduled: true,\n  calendar_event_id:\n    $json.id ||\n    original.active_appointment?.event_id ||\n    null,\n  calendar_result: $json,\n  notes: [\n    ...(original.notes || []),\n    \"calendar_event_rescheduled\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2432,
+                                       160
+                                   ],
+                      "id":  "f6b07317-3aa5-44a6-a057-ed67294ddab1",
+                      "name":  "normalize_calendar_reschedule_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.appointments\nSET\n  start_at = \u0027{{ $json.slot_start_at }}\u0027::timestamptz,\n  end_at = \u0027{{ $json.slot_end_at }}\u0027::timestamptz,\n  status = \u0027confirmed\u0027,\n  rescheduled_at = NOW(),\n  rescheduled_from_event_id = COALESCE(rescheduled_from_event_id, event_id)\nWHERE id = {{ $json.active_appointment.id }}\nRETURNING *;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2640,
+                                       160
+                                   ],
+                      "id":  "8a91f158-379c-45da-a967-78be1be9c1e3",
+                      "name":  "Execute a SQL query",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = $(\"normalize_calendar_reschedule_result\").first().json;\n\nreturn [{\n  ...original,\n  new_appointment: $json,\n  notes: [\n    ...(original.notes || []),\n    \"appointment_updated_after_reschedule\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2880,
+                                       160
+                                   ],
+                      "id":  "35237e7a-5e3f-4238-999e-36f493736267",
+                      "name":  "attach_new_appointment"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.followups\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  skipped_reason = \u0027appointment_rescheduled\u0027\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\n  AND status = \u0027pending\u0027\n  AND metadata-\u003e\u003e\u0027appointment_event_id\u0027 = \u0027{{ $json.active_appointment.event_id }}\u0027;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3184,
+                                       64
+                                   ],
+                      "id":  "0f0e713f-b4b0-45e8-a83a-6e60f669fe0e",
+                      "name":  "DB_Cancel_Old_Appointment_Followups",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.followups (\n  lead_id,\n  followup_type,\n  message_template_key,\n  scheduled_for,\n  status,\n  metadata,\n  dedupe_key,\n  created_at\n)\nVALUES\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027pre_service_instructions_24h\u0027,\n  \u0027pre_service_instructions_24h\u0027,\n  \u0027{{ $json.slot_start_at }}\u0027::timestamptz - interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__pre_service_instructions_24h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027appointment_reminder_1h\u0027,\n  \u0027appointment_reminder_1h\u0027,\n  \u0027{{ $json.slot_start_at }}\u0027::timestamptz - interval \u00271 hour\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__appointment_reminder_1h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027post_service_review_24h\u0027,\n  \u0027post_service_review_24h\u0027,\n  \u0027{{ $json.slot_end_at }}\u0027::timestamptz + interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__post_service_review_24h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n)\nON CONFLICT (dedupe_key) DO NOTHING;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       3184,
+                                       240
+                                   ],
+                      "id":  "e1c5fb12-b445-4c82-a7cf-ae4fdb8b4d2c",
+                      "name":  "DB_Create_Rescheduled_Appointment_Followups",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "numberInputs":  3,
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       3440,
+                                       160
+                                   ],
+                      "id":  "568c2ae1-b3fb-483f-a1ff-6e48e5ae2d7f",
+                      "name":  "Merge"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service = serviceLabel($json.service_interest);\n\nreturn [{\n  ...$json,\n  message_to_send: `Listo, tu ${service} quedó reprogramado para el ${fecha} a las ${hora}.`,\n  db_operations: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"booked\",\n    intent_last: \"reschedule_confirmed\",\n    next_goal: \"pre_service_reminder\",\n    last_bot_action: \"reschedule_booking\",\n    booking_date: null,\n    booking_time: null,\n    slot_id: null,\n    availability_confirmed: null,\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"booking_rescheduled\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3648,
+                                       160
+                                   ],
+                      "id":  "b035905c-b7d7-4e9d-bc5e-c2401e9ed6a7",
+                      "name":  "build_reschedule_success_message"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       672,
+                                       352
+                                   ],
+                      "id":  "79aa9d9b-9790-44d0-9e73-02dd3833c6b6",
+                      "name":  "Merge1"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"reschedule_booking\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  decision: $json.decision || original.decision || {}\n};\n\nconst outcome =\n  data.outcome ||\n  data.execution_result?.outcome ||\n  data.result?.outcome ||\n  (\n    data.active_appointment_found === false ||\n    data.active_appointment === null ||\n    data.appointment === null\n      ? \"no_active_appointment\"\n      : \"active_appointment_found\"\n  );\n\nconst finalMessage =\n  data.message_to_send ||\n  data.message ||\n  (\n    outcome === \"no_active_appointment\"\n      ? \"Revisé y no encontré una reserva activa asociada a este número. Si quieres, puedo ayudarte a agendar una nueva hora.\"\n      : \"Perfecto, te ayudo a reprogramar tu reserva. Te mostraré los horarios disponibles.\"\n  );\n\nreturn [{\n  ...data,\n\n  action: \"reschedule_booking\",\n  outcome,\n\n  message_to_send: finalMessage,\n  message: finalMessage,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: outcome === \"active_appointment_found\"\n      ? \"reschedule\"\n      : data.context_packet?.state?.stage,\n    intent_last: outcome,\n    next_goal: outcome === \"no_active_appointment\"\n      ? \"book_appointment\"\n      : \"show_available_slots\",\n    last_bot_action: outcome === \"no_active_appointment\"\n      ? \"reschedule_no_active_appointment\"\n      : \"reschedule_booking\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    ...(data.execution_result || {}),\n    success: true,\n    action: \"reschedule_booking\",\n    outcome,\n    bot: finalMessage\n  },\n\n  notes: [\n    ...(data.notes || []),\n    `reschedule_booking_outcome_${outcome}`\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       4048,
+                                       384
+                                   ],
+                      "id":  "4b764dc0-2100-4b36-9f0d-304a9067c7b4",
+                      "name":  "normalize_reschedule_booking_result"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "normalize_reschedule_input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "normalize_reschedule_input":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "DB_Check_Active_Appointment_For_Reschedule",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            },
+                                                                            {
+                                                                                "node":  "Merge1",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "DB_Check_Active_Appointment_For_Reschedule":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Merge1",
+                                                                                                "type":  "main",
+                                                                                                "index":  1
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                        "attach_active_appointment":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "IF active_appointment_exists",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "IF active_appointment_exists":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "IF has_new_slot",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "node":  "build_reschedule_no_active_message",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "IF has_new_slot":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Call \u00276.2 check_calendar_slot\u0027",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 },
+                                                                 {
+                                                                     "node":  "merge_slot_check_with_context",
+                                                                     "type":  "main",
+                                                                     "index":  1
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "merge_reschedule_slots_with_context",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 },
+                                                                 {
+                                                                     "node":  "6.4 list_available_slots",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "6.4 list_available_slots":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "merge_reschedule_slots_with_context",
+                                                                              "type":  "main",
+                                                                              "index":  1
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "merge_reschedule_slots_with_context":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "build_reschedule_slots_message",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                },
+                        "Call \u00276.2 check_calendar_slot\u0027":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "merge_slot_check_with_context",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                        "merge_slot_check_with_context":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "IF slot_available",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "IF slot_available":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Google Calendar — Update Event",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "build_reschedule_slot_unavailable_message",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Google Calendar — Update Event":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "normalize_calendar_reschedule_result",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "normalize_calendar_reschedule_result":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "Execute a SQL query",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                        "Execute a SQL query":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "attach_new_appointment",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "attach_new_appointment":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "DB_Cancel_Old_Appointment_Followups",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        },
+                                                                        {
+                                                                            "node":  "DB_Create_Rescheduled_Appointment_Followups",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        },
+                                                                        {
+                                                                            "node":  "Merge",
+                                                                            "type":  "main",
+                                                                            "index":  1
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "DB_Cancel_Old_Appointment_Followups":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Merge",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                },
+                        "DB_Create_Rescheduled_Appointment_Followups":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "Merge",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  2
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                        "Merge":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "build_reschedule_success_message",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  },
+                        "Merge1":  {
+                                       "main":  [
+                                                    [
+                                                        {
+                                                            "node":  "attach_active_appointment",
+                                                            "type":  "main",
+                                                            "index":  0
+                                                        }
+                                                    ]
+                                                ]
+                                   },
+                        "build_reschedule_no_active_message":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "normalize_reschedule_booking_result",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                        "build_reschedule_slot_unavailable_message":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "normalize_reschedule_booking_result",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                        "build_reschedule_slots_message":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "normalize_reschedule_booking_result",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "build_reschedule_success_message":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "normalize_reschedule_booking_result",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "9db0a64f-8a23-4d76-aeb9-933c50f9b664",
+    "activeVersionId":  "9db0a64f-8a23-4d76-aeb9-933c50f9b664",
+    "versionCounter":  175,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-29T14:41:33.688Z",
+                       "createdAt":  "2026-04-29T14:41:33.688Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "r0xJKHJVLMSCO4jc",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:28:49.000Z",
+                          "createdAt":  "2026-05-13T14:28:47.425Z",
+                          "versionId":  "9db0a64f-8a23-4d76-aeb9-933c50f9b664",
+                          "workflowId":  "r0xJKHJVLMSCO4jc",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"duration_minutes\": \"={{ String($json.duration_minutes || 120) }}\",\n\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n\n  \"availability_window\": \"={{ $json.availability_window }}\",\n  \"availability_label\": \"={{ $json.availability_label }}\",\n  \"days_ahead\": \"={{ String($json.days_ahead || 7) }}\",\n  \"start_offset_days\": \"={{ String($json.start_offset_days || 0) }}\",\n  \"max_slots\": \"={{ String($json.max_slots || 3) }}\",\n\n  \"reschedule_reason\": \"={{ $json.reschedule_reason }}\",\n\n  \"execution_context\": \"={{ $json.execution_context || {} }}\",\n  \"context_packet\": \"={{ $json.context_packet || {} }}\",\n  \"decision\": \"={{ $json.decision || {} }}\",\n  \"state_update\": \"={{ $json.state_update || {} }}\",\n  \"execution_meta\": \"={{ $json.execution_meta || {} }}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             48,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\n\nconst executionContext = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in reschedule_booking\");\n}\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  calendar_id:\n    input.calendar_id ||\n    executionContext.calendar_id ||\n    state.calendar_id ||\n    \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n\n  booking_date:\n    input.booking_date ||\n    executionContext.booking_date ||\n    state.booking_date ||\n    null,\n\n  booking_time:\n    input.booking_time ||\n    executionContext.booking_time ||\n    state.booking_time ||\n    null,\n\n  slot_id:\n    input.slot_id ||\n    executionContext.slot_id ||\n    state.slot_id ||\n    null,\n\n  duration_minutes: Number(\n    input.duration_minutes ||\n    executionContext.duration_minutes ||\n    state.duration_minutes ||\n    120\n  ),\n\n  service_interest:\n    input.service_interest ||\n    executionContext.service_interest ||\n    state.service_interest ||\n    null,\n\n  vehicle_type:\n    input.vehicle_type ||\n    executionContext.vehicle_type ||\n    state.vehicle_type ||\n    null,\n\n  district:\n    input.district ||\n    executionContext.district ||\n    state.district ||\n    null,\n\n  availability_window:\n    input.availability_window ||\n    executionContext.availability_window ||\n    state.availability_window ||\n    \"this_week\",\n\n  availability_label:\n    input.availability_label ||\n    executionContext.availability_label ||\n    state.availability_label ||\n    \"los próximos días\",\n\n  days_ahead: Number(\n    input.days_ahead ||\n    executionContext.days_ahead ||\n    state.days_ahead ||\n    7\n  ),\n\n  start_offset_days: Number(\n    input.start_offset_days ||\n    executionContext.start_offset_days ||\n    state.start_offset_days ||\n    0\n  ),\n\n  max_slots: Number(\n    input.max_slots ||\n    executionContext.max_slots ||\n    state.max_slots ||\n    3\n  ),\n\n  reschedule_reason:\n    input.reschedule_reason ||\n    executionContext.reschedule_reason ||\n    input.decision?.reason ||\n    \"user_requested_reschedule\",\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"reschedule_booking\"\n  },\n\n  context_packet: contextPacket,\n  state_update: input.state_update || {},\n  decision: input.decision || {},\n  execution_meta: input.execution_meta || {},\n\n  notes: [\n    ...(input.notes || []),\n    \"reschedule_input_normalized\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             256,
+                                                             352
+                                                         ],
+                                            "id":  "7c34c307-8ce2-4cce-9e3b-944266c2f127",
+                                            "name":  "normalize_reschedule_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT\n  id,\n  event_id,\n  conversation_id,\n  start_at,\n  end_at,\n  summary,\n  description,\n  status,\n  service_address,\n  address_reference\nFROM public.appointments\nWHERE conversation_id = NULLIF(\u0027{{ $json.lead_id }}\u0027, \u0027\u0027)::uuid\n  AND status IN (\u0027confirmed\u0027, \u0027pending\u0027)\n  AND start_at \u003e= NOW()\nORDER BY start_at ASC\nLIMIT 1;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             464,
+                                                             352
+                                                         ],
+                                            "id":  "bff835c2-68e4-449c-af66-4982749789ae",
+                                            "name":  "DB_Check_Active_Appointment_For_Reschedule",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = $(\"normalize_reschedule_input\").first().json;\n\nconst activeAppointment = $json.id\n  ? {\n      id: $json.id,\n      event_id: $json.event_id,\n      conversation_id: $json.conversation_id,\n      start_at: $json.start_at,\n      end_at: $json.end_at,\n      summary: $json.summary,\n      description: $json.description,\n      status: $json.status,\n      service_address: $json.service_address,\n      address_reference: $json.address_reference\n    }\n  : null;\n\nreturn [{\n  ...original,\n  active_appointment: activeAppointment,\n  notes: [\n    ...(original.notes || []),\n    activeAppointment ? \"active_appointment_found\" : \"no_active_appointment_found\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "f1a06a06-a23c-4fc4-a3c4-f91b70632734",
+                                            "name":  "attach_active_appointment"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "35a8574e-74db-466d-923f-58b3f930f51c",
+                                                                                                         "leftValue":  "={{ !!$json.active_appointment?.id }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1104,
+                                                             352
+                                                         ],
+                                            "id":  "220464b7-66a4-4702-9e0e-aa424cb6c7b0",
+                                            "name":  "IF active_appointment_exists"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n  message_to_send:\n    \"No encontré una reserva activa para reprogramar. Si quieres, puedo ayudarte a agendar una nueva.\",\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    last_bot_action: \"reschedule_no_active_appointment\",\n    next_goal: \"offer_booking\",\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_blocked_no_active_appointment\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1328,
+                                                             528
+                                                         ],
+                                            "id":  "d248f02e-8eb6-4e66-bdb2-b01f24f9fdd4",
+                                            "name":  "build_reschedule_no_active_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "1ec8d01f-cc71-40f1-bc1b-741d5ea4498e",
+                                                                                                         "leftValue":  "={{ !!$json.booking_date \u0026\u0026 !!$json.booking_time }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1312,
+                                                             336
+                                                         ],
+                                            "id":  "2742a3b1-1d77-4675-88af-ca63f8f1a5a7",
+                                            "name":  "IF has_new_slot"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "SWHJNhMwBbbNsZiU",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/SWHJNhMwBbbNsZiU",
+                                                                                  "cachedResultName":  "6.4 list_available_slots"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.lead_id }}",
+                                                                                                    "calendar_id":  "={{ $json.calendar_id }}\"",
+                                                                                                    "duration_minutes":  "={{ String($json.duration_minutes || 120) }}",
+                                                                                                    "days_ahead":  "={{ String($json.days_ahead || 7) }}",
+                                                                                                    "max_slots":  "={{ String($json.max_slots || 3) }}",
+                                                                                                    "service_interest":  "={{ $json.service_interest }}",
+                                                                                                    "vehicle_type":  "={{ $json.vehicle_type }}",
+                                                                                                    "district":  "={{ $json.district }}",
+                                                                                                    "availability_window":  "={{ $json.availability_window || \u0027this_week\u0027 }}",
+                                                                                                    "availability_label":  "={{ String($json.start_offset_days || 0) }}\"",
+                                                                                                    "start_offset_days":  "={{ $json.availability_label || \u0027los próximos días\u0027 }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "calendar_id",
+                                                                                                         "displayName":  "calendar_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "duration_minutes",
+                                                                                                         "displayName":  "duration_minutes",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "days_ahead",
+                                                                                                         "displayName":  "days_ahead",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "max_slots",
+                                                                                                         "displayName":  "max_slots",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "service_interest",
+                                                                                                         "displayName":  "service_interest",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "vehicle_type",
+                                                                                                         "displayName":  "vehicle_type",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "district",
+                                                                                                         "displayName":  "district",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "availability_window",
+                                                                                                         "displayName":  "availability_window",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "availability_label",
+                                                                                                         "displayName":  "availability_label",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "start_offset_days",
+                                                                                                         "displayName":  "start_offset_days",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string"
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1520,
+                                                             416
+                                                         ],
+                                            "id":  "45927bdf-ed58-42e6-9e3a-b71669943ab5",
+                                            "name":  "6.4 list_available_slots"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1744,
+                                                             400
+                                                         ],
+                                            "id":  "15d0ff8e-95a3-46c3-9c98-5106d739f820",
+                                            "name":  "merge_reschedule_slots_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const slots = Array.isArray($json.slots) ? $json.slots : [];\nconst availabilityLabel = $json.availability_label || \"los próximos días\";\n\nfunction formatSlot(slot) {\n  const start = new Date(slot.slot_start_at);\n\n  const fecha = start.toLocaleDateString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    weekday: \"long\",\n    day: \"2-digit\",\n    month: \"long\"\n  });\n\n  const hora = start.toLocaleTimeString(\"es-CL\", {\n    timeZone: \"America/Santiago\",\n    hour: \"2-digit\",\n    minute: \"2-digit\"\n  });\n\n  return `${fecha} a las ${hora}`;\n}\n\nif (slots.length === 0) {\n  return [{\n    ...$json,\n    message_to_send:\n      `Claro, podemos reprogramar, pero por ahora no encontré horarios disponibles para ${availabilityLabel}. Te puedo ayudar a revisar otra alternativa.`,\n    db_operations: [\"messages\", \"lead_state\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"reschedule\",\n      next_goal: \"manual_availability_review\",\n      last_bot_action: \"reschedule_no_slots_found\",\n      missing_fields: [],\n      booking_options: []\n    },\n    notes: [\n      ...($json.notes || []),\n      \"reschedule_no_available_slots\"\n    ]\n  }];\n}\n\nconst lines = slots.map((slot, index) =\u003e {\n  return `${index + 1}. ${formatSlot(slot)}`;\n});\n\nconst optionNumbers = slots.map((_, index) =\u003e index + 1).join(\", \");\n\nreturn [{\n  ...$json,\n  message_to_send:\n    `Claro, podemos reprogramar. Tengo estos horarios disponibles para ${availabilityLabel}:\\n\\n` +\n    `${lines.join(\"\\n\")}\\n\\n` +\n    `¿Cuál te acomoda? Puedes responder con ${optionNumbers}.`,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"reschedule\",\n    intent_last: \"reschedule_requested\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_reschedule_slots\",\n    missing_fields: [],\n    booking_options: slots,\n    availability_window: $json.availability_window || \"this_week\",\n    availability_label: availabilityLabel\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_slots_sent\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1952,
+                                                             400
+                                                         ],
+                                            "id":  "293041cd-0f10-473e-988f-4159f5cc487e",
+                                            "name":  "build_reschedule_slots_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "EI0cTkMum1UCKHbN",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/EI0cTkMum1UCKHbN",
+                                                                                  "cachedResultName":  "6.2 check_calendar_slot"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{ $json.lead_id }}",
+                                                                                                    "booking_date":  "={{ $json.booking_date }}",
+                                                                                                    "booking_time":  "={{ $json.booking_time }}",
+                                                                                                    "slot_id":  "={{ $json.slot_id }}",
+                                                                                                    "duration_minutes":  "={{ String($json.duration_minutes || 120) }}",
+                                                                                                    "calendar_id":  "={{ $json.calendar_id }}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "booking_date",
+                                                                                                         "displayName":  "booking_date",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "booking_time",
+                                                                                                         "displayName":  "booking_time",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "slot_id",
+                                                                                                         "displayName":  "slot_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "duration_minutes",
+                                                                                                         "displayName":  "duration_minutes",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "calendar_id",
+                                                                                                         "displayName":  "calendar_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1520,
+                                                             240
+                                                         ],
+                                            "id":  "29db7c41-40c7-4cd9-a1da-6e3e63e617e2",
+                                            "name":  "Call \u00276.2 check_calendar_slot\u0027"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1744,
+                                                             224
+                                                         ],
+                                            "id":  "4164833a-4b42-401b-81e4-5b45146935e7",
+                                            "name":  "merge_slot_check_with_context"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "cf70be9d-3cbf-46d1-acf5-24f632b436e8",
+                                                                                                         "leftValue":  "={{ $json.slot_available === true || $json.availability_confirmed === true }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1952,
+                                                             224
+                                                         ],
+                                            "id":  "9e376aed-33e5-418c-b2ed-ad18e20a8d80",
+                                            "name":  "IF slot_available"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n  message_to_send:\n    \"Ese horario ya no está disponible. Te puedo proponer otro horario para reprogramar.\",\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"reschedule\",\n    next_goal: \"collect_new_slot\",\n    last_bot_action: \"reschedule_slot_unavailable\",\n    availability_confirmed: false,\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"reschedule_slot_unavailable\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2224,
+                                                             336
+                                                         ],
+                                            "id":  "650e47a5-04c0-40c2-be89-38f8f462f167",
+                                            "name":  "build_reschedule_slot_unavailable_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "update",
+                                                               "calendar":  {
+                                                                                "__rl":  true,
+                                                                                "value":  "={{ $json.calendar_id }}",
+                                                                                "mode":  "id"
+                                                                            },
+                                                               "eventId":  "={{ $json.active_appointment.event_id }}",
+                                                               "updateFields":  {
+                                                                                    "description":  "={{ $json.active_appointment.description || \"\" }}",
+                                                                                    "end":  "={{ $json.slot_end_at }}",
+                                                                                    "start":  "={{ $json.slot_start_at }}",
+                                                                                    "summary":  "={{ $json.active_appointment.summary || \"Servicio Ahumada Detailing\" }}"
+                                                                                }
+                                                           },
+                                            "type":  "n8n-nodes-base.googleCalendar",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             2224,
+                                                             160
+                                                         ],
+                                            "id":  "23f7cd0a-ece3-4cda-ae1f-c815a1fb3f57",
+                                            "name":  "Google Calendar — Update Event",
+                                            "credentials":  {
+                                                                "googleCalendarOAuth2Api":  {
+                                                                                                "id":  "mpmI0f0dGSSsN1Rj",
+                                                                                                "name":  "Google Calendar account"
+                                                                                            }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = $(\"merge_slot_check_with_context\").first().json;\n\nreturn [{\n  ...original,\n  calendar_rescheduled: true,\n  calendar_event_id:\n    $json.id ||\n    original.active_appointment?.event_id ||\n    null,\n  calendar_result: $json,\n  notes: [\n    ...(original.notes || []),\n    \"calendar_event_rescheduled\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2432,
+                                                             160
+                                                         ],
+                                            "id":  "f6b07317-3aa5-44a6-a057-ed67294ddab1",
+                                            "name":  "normalize_calendar_reschedule_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.appointments\nSET\n  start_at = \u0027{{ $json.slot_start_at }}\u0027::timestamptz,\n  end_at = \u0027{{ $json.slot_end_at }}\u0027::timestamptz,\n  status = \u0027confirmed\u0027,\n  rescheduled_at = NOW(),\n  rescheduled_from_event_id = COALESCE(rescheduled_from_event_id, event_id)\nWHERE id = {{ $json.active_appointment.id }}\nRETURNING *;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2640,
+                                                             160
+                                                         ],
+                                            "id":  "8a91f158-379c-45da-a967-78be1be9c1e3",
+                                            "name":  "Execute a SQL query",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = $(\"normalize_calendar_reschedule_result\").first().json;\n\nreturn [{\n  ...original,\n  new_appointment: $json,\n  notes: [\n    ...(original.notes || []),\n    \"appointment_updated_after_reschedule\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2880,
+                                                             160
+                                                         ],
+                                            "id":  "35237e7a-5e3f-4238-999e-36f493736267",
+                                            "name":  "attach_new_appointment"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.followups\nSET\n  status = \u0027cancelled\u0027,\n  cancelled_at = NOW(),\n  skipped_reason = \u0027appointment_rescheduled\u0027\nWHERE lead_id = \u0027{{ $json.lead_id }}\u0027::uuid\n  AND status = \u0027pending\u0027\n  AND metadata-\u003e\u003e\u0027appointment_event_id\u0027 = \u0027{{ $json.active_appointment.event_id }}\u0027;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3184,
+                                                             64
+                                                         ],
+                                            "id":  "0f0e713f-b4b0-45e8-a83a-6e60f669fe0e",
+                                            "name":  "DB_Cancel_Old_Appointment_Followups",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO public.followups (\n  lead_id,\n  followup_type,\n  message_template_key,\n  scheduled_for,\n  status,\n  metadata,\n  dedupe_key,\n  created_at\n)\nVALUES\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027pre_service_instructions_24h\u0027,\n  \u0027pre_service_instructions_24h\u0027,\n  \u0027{{ $json.slot_start_at }}\u0027::timestamptz - interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__pre_service_instructions_24h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027appointment_reminder_1h\u0027,\n  \u0027appointment_reminder_1h\u0027,\n  \u0027{{ $json.slot_start_at }}\u0027::timestamptz - interval \u00271 hour\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__appointment_reminder_1h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.lead_id }}\u0027::uuid,\n  \u0027post_service_review_24h\u0027,\n  \u0027post_service_review_24h\u0027,\n  \u0027{{ $json.slot_end_at }}\u0027::timestamptz + interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027reschedule_booking\u0027,\n    \u0027appointment_event_id\u0027, \u0027{{ $json.active_appointment.event_id }}\u0027\n  ),\n  \u0027{{ $json.lead_id }}__post_service_review_24h__{{ $json.active_appointment.event_id }}__rescheduled\u0027,\n  NOW()\n)\nON CONFLICT (dedupe_key) DO NOTHING;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             3184,
+                                                             240
+                                                         ],
+                                            "id":  "e1c5fb12-b445-4c82-a7cf-ae4fdb8b4d2c",
+                                            "name":  "DB_Create_Rescheduled_Appointment_Followups",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "numberInputs":  3,
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             3440,
+                                                             160
+                                                         ],
+                                            "id":  "568c2ae1-b3fb-483f-a1ff-6e48e5ae2d7f",
+                                            "name":  "Merge"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado básico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado básico\",\n  };\n\n  return map[service] || \"el servicio\";\n}\n\nconst service = serviceLabel($json.service_interest);\n\nreturn [{\n  ...$json,\n  message_to_send: `Listo, tu ${service} quedó reprogramado para el ${fecha} a las ${hora}.`,\n  db_operations: [\"appointments\", \"followups\", \"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"booked\",\n    intent_last: \"reschedule_confirmed\",\n    next_goal: \"pre_service_reminder\",\n    last_bot_action: \"reschedule_booking\",\n    booking_date: null,\n    booking_time: null,\n    slot_id: null,\n    availability_confirmed: null,\n    missing_fields: []\n  },\n  notes: [\n    ...($json.notes || []),\n    \"booking_rescheduled\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             3648,
+                                                             160
+                                                         ],
+                                            "id":  "b035905c-b7d7-4e9d-bc5e-c2401e9ed6a7",
+                                            "name":  "build_reschedule_success_message"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             672,
+                                                             352
+                                                         ],
+                                            "id":  "79aa9d9b-9790-44d0-9e73-02dd3833c6b6",
+                                            "name":  "Merge1"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"reschedule_booking\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  decision: $json.decision || original.decision || {}\n};\n\nconst outcome =\n  data.outcome ||\n  data.execution_result?.outcome ||\n  data.result?.outcome ||\n  (\n    data.active_appointment_found === false ||\n    data.active_appointment === null ||\n    data.appointment === null\n      ? \"no_active_appointment\"\n      : \"active_appointment_found\"\n  );\n\nconst finalMessage =\n  data.message_to_send ||\n  data.message ||\n  (\n    outcome === \"no_active_appointment\"\n      ? \"Revisé y no encontré una reserva activa asociada a este número. Si quieres, puedo ayudarte a agendar una nueva hora.\"\n      : \"Perfecto, te ayudo a reprogramar tu reserva. Te mostraré los horarios disponibles.\"\n  );\n\nreturn [{\n  ...data,\n\n  action: \"reschedule_booking\",\n  outcome,\n\n  message_to_send: finalMessage,\n  message: finalMessage,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: outcome === \"active_appointment_found\"\n      ? \"reschedule\"\n      : data.context_packet?.state?.stage,\n    intent_last: outcome,\n    next_goal: outcome === \"no_active_appointment\"\n      ? \"book_appointment\"\n      : \"show_available_slots\",\n    last_bot_action: outcome === \"no_active_appointment\"\n      ? \"reschedule_no_active_appointment\"\n      : \"reschedule_booking\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    ...(data.execution_result || {}),\n    success: true,\n    action: \"reschedule_booking\",\n    outcome,\n    bot: finalMessage\n  },\n\n  notes: [\n    ...(data.notes || []),\n    `reschedule_booking_outcome_${outcome}`\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             4048,
+                                                             384
+                                                         ],
+                                            "id":  "4b764dc0-2100-4b36-9f0d-304a9067c7b4",
+                                            "name":  "normalize_reschedule_booking_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "normalize_reschedule_input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "normalize_reschedule_input":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "DB_Check_Active_Appointment_For_Reschedule",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "node":  "Merge1",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                              "DB_Check_Active_Appointment_For_Reschedule":  {
+                                                                                                 "main":  [
+                                                                                                              [
+                                                                                                                  {
+                                                                                                                      "node":  "Merge1",
+                                                                                                                      "type":  "main",
+                                                                                                                      "index":  1
+                                                                                                                  }
+                                                                                                              ]
+                                                                                                          ]
+                                                                                             },
+                                              "attach_active_appointment":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "IF active_appointment_exists",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "IF active_appointment_exists":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "IF has_new_slot",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ],
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "build_reschedule_no_active_message",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "IF has_new_slot":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "Call \u00276.2 check_calendar_slot\u0027",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       },
+                                                                                       {
+                                                                                           "node":  "merge_slot_check_with_context",
+                                                                                           "type":  "main",
+                                                                                           "index":  1
+                                                                                       }
+                                                                                   ],
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "merge_reschedule_slots_with_context",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       },
+                                                                                       {
+                                                                                           "node":  "6.4 list_available_slots",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "6.4 list_available_slots":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "merge_reschedule_slots_with_context",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  1
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "merge_reschedule_slots_with_context":  {
+                                                                                          "main":  [
+                                                                                                       [
+                                                                                                           {
+                                                                                                               "node":  "build_reschedule_slots_message",
+                                                                                                               "type":  "main",
+                                                                                                               "index":  0
+                                                                                                           }
+                                                                                                       ]
+                                                                                                   ]
+                                                                                      },
+                                              "Call \u00276.2 check_calendar_slot\u0027":  {
+                                                                                               "main":  [
+                                                                                                            [
+                                                                                                                {
+                                                                                                                    "node":  "merge_slot_check_with_context",
+                                                                                                                    "type":  "main",
+                                                                                                                    "index":  0
+                                                                                                                }
+                                                                                                            ]
+                                                                                                        ]
+                                                                                           },
+                                              "merge_slot_check_with_context":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "IF slot_available",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "IF slot_available":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Google Calendar — Update Event",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ],
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_reschedule_slot_unavailable_message",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Google Calendar — Update Event":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "normalize_calendar_reschedule_result",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "normalize_calendar_reschedule_result":  {
+                                                                                           "main":  [
+                                                                                                        [
+                                                                                                            {
+                                                                                                                "node":  "Execute a SQL query",
+                                                                                                                "type":  "main",
+                                                                                                                "index":  0
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    ]
+                                                                                       },
+                                              "Execute a SQL query":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "attach_new_appointment",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "attach_new_appointment":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "DB_Cancel_Old_Appointment_Followups",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              },
+                                                                                              {
+                                                                                                  "node":  "DB_Create_Rescheduled_Appointment_Followups",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              },
+                                                                                              {
+                                                                                                  "node":  "Merge",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  1
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "DB_Cancel_Old_Appointment_Followups":  {
+                                                                                          "main":  [
+                                                                                                       [
+                                                                                                           {
+                                                                                                               "node":  "Merge",
+                                                                                                               "type":  "main",
+                                                                                                               "index":  0
+                                                                                                           }
+                                                                                                       ]
+                                                                                                   ]
+                                                                                      },
+                                              "DB_Create_Rescheduled_Appointment_Followups":  {
+                                                                                                  "main":  [
+                                                                                                               [
+                                                                                                                   {
+                                                                                                                       "node":  "Merge",
+                                                                                                                       "type":  "main",
+                                                                                                                       "index":  2
+                                                                                                                   }
+                                                                                                               ]
+                                                                                                           ]
+                                                                                              },
+                                              "Merge":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "build_reschedule_success_message",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                                              "Merge1":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "attach_active_appointment",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                                              "build_reschedule_no_active_message":  {
+                                                                                         "main":  [
+                                                                                                      [
+                                                                                                          {
+                                                                                                              "node":  "normalize_reschedule_booking_result",
+                                                                                                              "type":  "main",
+                                                                                                              "index":  0
+                                                                                                          }
+                                                                                                      ]
+                                                                                                  ]
+                                                                                     },
+                                              "build_reschedule_slot_unavailable_message":  {
+                                                                                                "main":  [
+                                                                                                             [
+                                                                                                                 {
+                                                                                                                     "node":  "normalize_reschedule_booking_result",
+                                                                                                                     "type":  "main",
+                                                                                                                     "index":  0
+                                                                                                                 }
+                                                                                                             ]
+                                                                                                         ]
+                                                                                            },
+                                              "build_reschedule_slots_message":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "normalize_reschedule_booking_result",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "build_reschedule_success_message":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "normalize_reschedule_booking_result",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 9db0a64f",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:28:49.426Z",
+                                                             "id":  584,
+                                                             "workflowId":  "r0xJKHJVLMSCO4jc",
+                                                             "versionId":  "9db0a64f-8a23-4d76-aeb9-933c50f9b664",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

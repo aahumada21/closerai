@@ -1,0 +1,438 @@
+﻿{
+    "updatedAt":  "2026-05-06T15:13:52.284Z",
+    "createdAt":  "2026-04-13T16:54:28.902Z",
+    "id":  "KPlLCK7DDIxh7Fnn",
+    "name":  "2 lead_loader",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const event = $json;\n\nif (!event.channel) {\n  throw new Error(\u0027Missing required field: channel\u0027);\n}\n\nif (!event.lead_id) {\n  throw new Error(\u0027Missing required field: lead_id\u0027);\n}\n\nif (!event.timestamp) {\n  throw new Error(\u0027Missing required field: timestamp\u0027);\n}\n\nconst phone = event.contact?.wa_id || event.lead_id || null;\nconst name = event.contact?.name || null;\n\nreturn [\n  {\n    json: {\n      event,\n      lookup: {\n        channel: String(event.channel),\n        external_id: String(event.lead_id),\n        phone: phone ? String(phone) : null,\n        name: name || null,\n      },\n      meta: {\n        loader_version: \u00271.1.0\u0027\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "d64ae593-0d4e-4846-8599-1c03d501c97e",
+                      "name":  "code_prepare_lookup"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const prepared = $items(\"code_prepare_lookup\", 0, 0)[0].json;\nconst lead = $items(\"db_upsert_lead\", 0, 0)[0].json;\nconst leadState = $items(\"db_upsert_lead_state\", 0, 0)[0].json;\n\nfunction parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch {\n      return [];\n    }\n  }\n\n  return [];\n}\n\nfunction boolOrNull(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return null;\n}\n\nfunction boolOrFalse(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return false;\n}\n\nreturn [\n  {\n    json: {\n      event: prepared.event,\n\n      lead: {\n        id: lead.id,\n        channel: lead.channel,\n        external_id: lead.external_id,\n        phone: lead.phone,\n        name: lead.name,\n        created_at: lead.created_at,\n        updated_at: lead.updated_at\n      },\n\n      lead_state: {\n        lead_id: leadState.lead_id,\n\n        stage: leadState.stage,\n        intent_last: leadState.intent_last,\n        interest_score: leadState.interest_score,\n\nservice_interest: leadState.service_interest,\n\nvehicle_type: leadState.vehicle_type,\ndistrict: leadState.district,\n\nmentioned_vehicle_type: leadState.mentioned_vehicle_type || null,\nconfirmed_vehicle_type: leadState.confirmed_vehicle_type || leadState.vehicle_type || null,\n\nmentioned_district: leadState.mentioned_district || null,\nconfirmed_district: leadState.confirmed_district || leadState.district || null,\n\n        missing_fields: parseJsonArray(leadState.missing_fields),\n        last_bot_action: leadState.last_bot_action,\n        next_goal: leadState.next_goal,\n        human_handoff: boolOrFalse(leadState.human_handoff),\n\n        booking_options: parseJsonArray(leadState.booking_options),\n        booking_date: leadState.booking_date,\n        booking_time: leadState.booking_time,\n        slot_id: leadState.slot_id,\n        availability_confirmed: boolOrNull(leadState.availability_confirmed),\n\n        availability_window: leadState.availability_window,\n        availability_label: leadState.availability_label,\n        calendar_id: leadState.calendar_id,\n        duration_minutes: leadState.duration_minutes ?? 120,\n        days_ahead: leadState.days_ahead,\n        start_offset_days: leadState.start_offset_days,\n        max_slots: leadState.max_slots,\n\n      service_address: leadState.service_address || null,\n      address_reference: leadState.address_reference || null,\n      address_confirmed: boolOrFalse(leadState.address_confirmed),\n      address_confirmed_at: leadState.address_confirmed_at || null,\n      \n      cancellation_reason: leadState.cancellation_reason || null,\n      reschedule_reason: leadState.reschedule_reason || null,\n      last_appointment_event_id: leadState.last_appointment_event_id || null,\n      \n      updated_at: leadState.updated_at\n      },\n\n      meta: prepared.meta\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1152,
+                                       368
+                                   ],
+                      "id":  "6ea31662-1211-4635-a0ba-ae1546775b7c",
+                      "name":  "code_build_output"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "insert into lead_state (\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  mentioned_vehicle_type,\n  confirmed_vehicle_type,\n  mentioned_district,\n  confirmed_district,\n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n\n   service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n\n  updated_at\n)\nvalues (\n  $1,\n  \u0027new_lead\u0027,\n  null,\n  0,\n  null,\n  null,\n  null,\n  null,\nnull,\nnull,\nnull,\n  \u0027[]\u0027::jsonb,\n  \u0027none\u0027,\n  \u0027identify_intent\u0027,\n  false,\n\n  \u0027[]\u0027::jsonb,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  120,\n  null,\n  null,\n  null,\n\n    null,\n  null,\n  false,\n  null,\n\n  null,\n  null,\n  null,\n\n  now()\n)\non conflict (lead_id)\ndo update set\n  updated_at = lead_state.updated_at\nreturning\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  mentioned_vehicle_type,\nconfirmed_vehicle_type,\nmentioned_district,\nconfirmed_district,\n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n\n    service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n\n  updated_at;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{$node[\"db_upsert_lead\"].json[\"id\"]}}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       912,
+                                       336
+                                   ],
+                      "id":  "d69e0396-42bf-4bde-bd04-3a7c7b26139e",
+                      "name":  "db_upsert_lead_state",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "insert into leads (\n  channel,\n  external_id,\n  phone,\n  name,\n  created_at,\n  updated_at\n)\nvalues (\n  $1,\n  $2,\n  $3,\n  $4,\n  now(),\n  now()\n)\non conflict (channel, external_id)\ndo update set\n  phone = coalesce(excluded.phone, leads.phone),\n  name = coalesce(excluded.name, leads.name),\n  updated_at = now()\nreturning\n  id,\n  channel,\n  external_id,\n  phone,\n  name,\n  created_at,\n  updated_at;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{$json.lookup.channel}}, {{$json.lookup.external_id}}, {{$json.lookup.phone}}, {{$json.lookup.name}}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "c6aa856e-1b73-4e17-ae3a-666b46433e13",
+                      "name":  "db_upsert_lead",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "18wQ5p9YxUW7tHRX",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/18wQ5p9YxUW7tHRX",
+                                                            "cachedResultName":  "3 rules_engine"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       1360,
+                                       368
+                                   ],
+                      "id":  "e425805d-60e9-43d1-b4e9-ba886a02bf5d",
+                      "name":  "Rules Engine"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "code_prepare_lookup",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "code_prepare_lookup":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "db_upsert_lead",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "db_upsert_lead_state":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "code_build_output",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "db_upsert_lead":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "db_upsert_lead_state",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "code_build_output":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Rules Engine",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "4a0917d8-034c-423a-912b-da9321faf34c",
+    "activeVersionId":  "4a0917d8-034c-423a-912b-da9321faf34c",
+    "versionCounter":  154,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-13T16:54:28.909Z",
+                       "createdAt":  "2026-04-13T16:54:28.909Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "KPlLCK7DDIxh7Fnn",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-01T18:11:35.425Z",
+                     "createdAt":  "2026-05-01T18:11:35.425Z",
+                     "id":  "kESwVa42vzrEr7Y3",
+                     "name":  "main"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-06T15:13:59.000Z",
+                          "createdAt":  "2026-05-06T15:13:52.286Z",
+                          "versionId":  "4a0917d8-034c-423a-912b-da9321faf34c",
+                          "workflowId":  "KPlLCK7DDIxh7Fnn",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "passthrough"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const event = $json;\n\nif (!event.channel) {\n  throw new Error(\u0027Missing required field: channel\u0027);\n}\n\nif (!event.lead_id) {\n  throw new Error(\u0027Missing required field: lead_id\u0027);\n}\n\nif (!event.timestamp) {\n  throw new Error(\u0027Missing required field: timestamp\u0027);\n}\n\nconst phone = event.contact?.wa_id || event.lead_id || null;\nconst name = event.contact?.name || null;\n\nreturn [\n  {\n    json: {\n      event,\n      lookup: {\n        channel: String(event.channel),\n        external_id: String(event.lead_id),\n        phone: phone ? String(phone) : null,\n        name: name || null,\n      },\n      meta: {\n        loader_version: \u00271.1.0\u0027\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "d64ae593-0d4e-4846-8599-1c03d501c97e",
+                                            "name":  "code_prepare_lookup"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const prepared = $items(\"code_prepare_lookup\", 0, 0)[0].json;\nconst lead = $items(\"db_upsert_lead\", 0, 0)[0].json;\nconst leadState = $items(\"db_upsert_lead_state\", 0, 0)[0].json;\n\nfunction parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch {\n      return [];\n    }\n  }\n\n  return [];\n}\n\nfunction boolOrNull(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return null;\n}\n\nfunction boolOrFalse(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return false;\n}\n\nreturn [\n  {\n    json: {\n      event: prepared.event,\n\n      lead: {\n        id: lead.id,\n        channel: lead.channel,\n        external_id: lead.external_id,\n        phone: lead.phone,\n        name: lead.name,\n        created_at: lead.created_at,\n        updated_at: lead.updated_at\n      },\n\n      lead_state: {\n        lead_id: leadState.lead_id,\n\n        stage: leadState.stage,\n        intent_last: leadState.intent_last,\n        interest_score: leadState.interest_score,\n\nservice_interest: leadState.service_interest,\n\nvehicle_type: leadState.vehicle_type,\ndistrict: leadState.district,\n\nmentioned_vehicle_type: leadState.mentioned_vehicle_type || null,\nconfirmed_vehicle_type: leadState.confirmed_vehicle_type || leadState.vehicle_type || null,\n\nmentioned_district: leadState.mentioned_district || null,\nconfirmed_district: leadState.confirmed_district || leadState.district || null,\n\n        missing_fields: parseJsonArray(leadState.missing_fields),\n        last_bot_action: leadState.last_bot_action,\n        next_goal: leadState.next_goal,\n        human_handoff: boolOrFalse(leadState.human_handoff),\n\n        booking_options: parseJsonArray(leadState.booking_options),\n        booking_date: leadState.booking_date,\n        booking_time: leadState.booking_time,\n        slot_id: leadState.slot_id,\n        availability_confirmed: boolOrNull(leadState.availability_confirmed),\n\n        availability_window: leadState.availability_window,\n        availability_label: leadState.availability_label,\n        calendar_id: leadState.calendar_id,\n        duration_minutes: leadState.duration_minutes ?? 120,\n        days_ahead: leadState.days_ahead,\n        start_offset_days: leadState.start_offset_days,\n        max_slots: leadState.max_slots,\n\n      service_address: leadState.service_address || null,\n      address_reference: leadState.address_reference || null,\n      address_confirmed: boolOrFalse(leadState.address_confirmed),\n      address_confirmed_at: leadState.address_confirmed_at || null,\n      \n      cancellation_reason: leadState.cancellation_reason || null,\n      reschedule_reason: leadState.reschedule_reason || null,\n      last_appointment_event_id: leadState.last_appointment_event_id || null,\n      \n      updated_at: leadState.updated_at\n      },\n\n      meta: prepared.meta\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1152,
+                                                             368
+                                                         ],
+                                            "id":  "6ea31662-1211-4635-a0ba-ae1546775b7c",
+                                            "name":  "code_build_output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "insert into lead_state (\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  mentioned_vehicle_type,\n  confirmed_vehicle_type,\n  mentioned_district,\n  confirmed_district,\n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n\n   service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n\n  updated_at\n)\nvalues (\n  $1,\n  \u0027new_lead\u0027,\n  null,\n  0,\n  null,\n  null,\n  null,\n  null,\nnull,\nnull,\nnull,\n  \u0027[]\u0027::jsonb,\n  \u0027none\u0027,\n  \u0027identify_intent\u0027,\n  false,\n\n  \u0027[]\u0027::jsonb,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  null,\n  120,\n  null,\n  null,\n  null,\n\n    null,\n  null,\n  false,\n  null,\n\n  null,\n  null,\n  null,\n\n  now()\n)\non conflict (lead_id)\ndo update set\n  updated_at = lead_state.updated_at\nreturning\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  mentioned_vehicle_type,\nconfirmed_vehicle_type,\nmentioned_district,\nconfirmed_district,\n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n\n    service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n\n  updated_at;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{$node[\"db_upsert_lead\"].json[\"id\"]}}"
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             912,
+                                                             336
+                                                         ],
+                                            "id":  "d69e0396-42bf-4bde-bd04-3a7c7b26139e",
+                                            "name":  "db_upsert_lead_state",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "insert into leads (\n  channel,\n  external_id,\n  phone,\n  name,\n  created_at,\n  updated_at\n)\nvalues (\n  $1,\n  $2,\n  $3,\n  $4,\n  now(),\n  now()\n)\non conflict (channel, external_id)\ndo update set\n  phone = coalesce(excluded.phone, leads.phone),\n  name = coalesce(excluded.name, leads.name),\n  updated_at = now()\nreturning\n  id,\n  channel,\n  external_id,\n  phone,\n  name,\n  created_at,\n  updated_at;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{$json.lookup.channel}}, {{$json.lookup.external_id}}, {{$json.lookup.phone}}, {{$json.lookup.name}}"
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "c6aa856e-1b73-4e17-ae3a-666b46433e13",
+                                            "name":  "db_upsert_lead",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "18wQ5p9YxUW7tHRX",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/18wQ5p9YxUW7tHRX",
+                                                                                  "cachedResultName":  "3 rules_engine"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             1360,
+                                                             368
+                                                         ],
+                                            "id":  "e425805d-60e9-43d1-b4e9-ba886a02bf5d",
+                                            "name":  "Rules Engine"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "code_prepare_lookup",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "code_prepare_lookup":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "db_upsert_lead",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "db_upsert_lead_state":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "code_build_output",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "db_upsert_lead":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "db_upsert_lead_state",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "code_build_output":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Rules Engine",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 4a0917d8",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-06T15:13:59.000Z",
+                                                             "id":  504,
+                                                             "workflowId":  "KPlLCK7DDIxh7Fnn",
+                                                             "versionId":  "4a0917d8-034c-423a-912b-da9321faf34c",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

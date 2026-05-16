@@ -1,0 +1,1102 @@
+﻿{
+    "updatedAt":  "2026-05-08T14:45:02.107Z",
+    "createdAt":  "2026-04-23T17:42:32.874Z",
+    "id":  "xvmK0kUsHy6KIu1k",
+    "name":  "8.0 human_handof",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{$json.handoff_case.lead_id}}\",\n  \"reason\": \"={{$json.handoff_case.reason}}\",\n  \"summary\": \"={{$json.handoff_case.summary}}\",\n  \"lead\": \"={{$json.handoff_case.lead}}\",\n  \"state\": \"={{$json.handoff_case.state}}\",\n  \"conversation\": \"={{$json.handoff_case.conversation}}\",\n  \"metadata\": \"={{$json.handoff_case.metadata}}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "8.0 human_handof",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback) {\n  if (value === null || value === undefined) return fallback;\n  if (typeof value === \"object\") return value;\n\n  if (typeof value === \"string\") {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return fallback;\n    }\n  }\n\n  return fallback;\n}\n\nconst input = $json;\n\nconst lead = parseMaybeJson(input.lead, {});\nconst state = parseMaybeJson(input.state, {});\nconst conversation = parseMaybeJson(input.conversation, {});\nconst metadata = parseMaybeJson(input.metadata, {});\n\nif (!input.lead_id) {\n  throw new Error(\"Missing lead_id\");\n}\n\nif (!input.reason) {\n  throw new Error(\"Missing handoff reason\");\n}\n\nreturn [\n  {\n    ...input,\n    lead,\n    state,\n    conversation,\n    metadata,\n    validated_at: new Date().toISOString()\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "c79e892c-83ec-41a4-82d9-859694157290",
+                      "name":  "validate_handoff_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lead = $json.lead || {};\nconst state = $json.state || {};\n\nlet assigned_to = \"contacto@aahumada.com\";\nlet assigned_team = \"ventas\";\nlet priority = \"normal\";\n\nif (($json.reason || \"\").toLowerCase().includes(\"reclamo\")) {\n  assigned_team = \"soporte\";\n  priority = \"high\";\n}\n\nif (state.stage === \"closing\" || state.stage === \"quoted\") {\n  assigned_team = \"ventas\";\n}\n\nreturn [{\n  ...$json,\n  assigned_to,\n  assigned_team,\n  priority\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "3114c3fe-aa55-4c13-af3c-17c298de10da",
+                      "name":  "assign_handoff_owner"
+                  },
+                  {
+                      "parameters":  {
+                                         "schema":  {
+                                                        "__rl":  true,
+                                                        "mode":  "list",
+                                                        "value":  "public"
+                                                    },
+                                         "table":  {
+                                                       "__rl":  true,
+                                                       "value":  "handoff_cases",
+                                                       "mode":  "list",
+                                                       "cachedResultName":  "handoff_cases"
+                                                   },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "lead_id":  "={{$json.lead_id}}",
+                                                                       "reason":  "={{$json.reason}}",
+                                                                       "status":  "open",
+                                                                       "summary":  "={{$json.summary}}",
+                                                                       "priority":  "={{$json.priority}}",
+                                                                       "assigned_to":  "={{$json.assigned_to}}",
+                                                                       "assigned_team":  "={{$json.assigned_team}}",
+                                                                       "source_flow":  "action_executor",
+                                                                       "metadata":  "={{ $json.metadata || {} }}",
+                                                                       "created_at":  "={{new Date().toISOString()}}",
+                                                                       "updated_at":  "={{new Date().toISOString()}}",
+                                                                       "notification_sent":  false,
+                                                                       "notification_channel":  "email"
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "id"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "id",
+                                                                            "displayName":  "id",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  true,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "lead_id",
+                                                                            "displayName":  "lead_id",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "status",
+                                                                            "displayName":  "status",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "reason",
+                                                                            "displayName":  "reason",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "summary",
+                                                                            "displayName":  "summary",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "priority",
+                                                                            "displayName":  "priority",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "assigned_to",
+                                                                            "displayName":  "assigned_to",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "assigned_team",
+                                                                            "displayName":  "assigned_team",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "source_flow",
+                                                                            "displayName":  "source_flow",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "notified_at",
+                                                                            "displayName":  "notified_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "taken_by",
+                                                                            "displayName":  "taken_by",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "taken_at",
+                                                                            "displayName":  "taken_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "resolved_by",
+                                                                            "displayName":  "resolved_by",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "resolved_at",
+                                                                            "displayName":  "resolved_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "resolution_note",
+                                                                            "displayName":  "resolution_note",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "metadata",
+                                                                            "displayName":  "metadata",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "object",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "created_at",
+                                                                            "displayName":  "created_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "updated_at",
+                                                                            "displayName":  "updated_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "notification_sent",
+                                                                            "displayName":  "notification_sent",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "boolean",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "notification_channel",
+                                                                            "displayName":  "notification_channel",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "notification_error",
+                                                                            "displayName":  "notification_error",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "notification_sent_at",
+                                                                            "displayName":  "notification_sent_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "closed_at",
+                                                                            "displayName":  "closed_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "close_reason",
+                                                                            "displayName":  "close_reason",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       928,
+                                       352
+                                   ],
+                      "id":  "b552d214-c29b-435f-a621-62b0244a85b9",
+                      "name":  "insert_handoff_case",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lead = $json.lead || {};\nconst state = $json.state || {};\nconst conversation = $json.conversation || {};\n\nconst text = [\n  `Nuevo handoff humano`,\n  `Caso ID: ${$json.id || \"sin_id\"}`,\n  `Lead ID: ${lead.id || $json.lead_id}`,\n  `Nombre: ${lead.name || \"Sin nombre\"}`,\n  `Teléfono: ${lead.phone || \"Sin teléfono\"}`,\n  `Etapa: ${state.stage || \"sin_stage\"}`,\n  `Razón: ${$json.reason || \"sin razón\"}`,\n  `Resumen: ${$json.summary || \"sin resumen\"}`,\n  `Último mensaje: ${conversation.latest_user_message || \"sin mensaje\"}`,\n  `Servicio: ${state.service_interest || \"N/D\"}`,\n  `Vehículo: ${state.vehicle_type || \"N/D\"}`,\n  `Comuna: ${state.district || \"N/D\"}`,\n  `Asignado a: ${$json.assigned_to || \"N/D\"}`\n].join(\u0027\\n\u0027);\n\nreturn [{\n  ...$json,\n  notification_text: text\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       352
+                                   ],
+                      "id":  "4f70101c-48dd-4361-a505-53528694ff14",
+                      "name":  "build_internal_notification"
+                  },
+                  {
+                      "parameters":  {
+                                         "sendTo":  "={{$json.assigned_to}}",
+                                         "subject":  "=Nuevo handoff humano - {{$json.lead_id}}",
+                                         "emailType":  "text",
+                                         "message":  "={{$json.notification_text}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.gmail",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1312,
+                                       352
+                                   ],
+                      "id":  "6ef0800c-e6c5-46c9-a85c-7e6bccec2e45",
+                      "name":  "Send a message",
+                      "webhookId":  "1328732b-95a8-4249-88f1-d32066443d2c",
+                      "credentials":  {
+                                          "gmailOAuth2":  {
+                                                              "id":  "zUoBCnhrJ6eHgy6h",
+                                                              "name":  "Gmail account"
+                                                          }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const caseRow = (() =\u003e {\n  try {\n    return $(\"update_handoff_notification_status\").first().json;\n  } catch {\n    try {\n      return $(\"insert_handoff_case\").first().json;\n    } catch {\n      return {};\n    }\n  }\n})();\n\nconst owner = (() =\u003e {\n  try {\n    return $(\"assign_handoff_owner\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst notificationSent =\n  caseRow.notification_sent === true ||\n  !!caseRow.notification_sent_at ||\n  !!caseRow.notified_at;\n\nreturn [\n  {\n    handoff: true,\n\n    handoff_case_id: caseRow.id || null,\n    lead_id: caseRow.lead_id || owner.lead_id || $json.lead_id || null,\n\n    assigned_to: caseRow.assigned_to || owner.assigned_to || null,\n    assigned_team: caseRow.assigned_team || owner.assigned_team || null,\n    priority: caseRow.priority || owner.priority || \"normal\",\n\n    notification_sent: notificationSent,\n    notification_channel: caseRow.notification_channel || \"email\",\n    notification_sent_at:\n      caseRow.notification_sent_at ||\n      caseRow.notified_at ||\n      null,\n\n    summary: caseRow.summary || owner.summary || null,\n    reason: caseRow.reason || owner.reason || null,\n\n    handoff_operational: {\n      human_handoff: true,\n      handoff_case_created: !!caseRow.id,\n      assigned: !!(caseRow.assigned_to || owner.assigned_to),\n      notification_sent: notificationSent\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1904,
+                                       320
+                                   ],
+                      "id":  "09eb4d5d-4262-440f-9b71-dd76b73ba76f",
+                      "name":  "build_handoff_output"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.handoff_cases\nSET\n  notification_sent = true,\n  notification_sent_at = NOW(),\n  notified_at = NOW(),\n  notification_channel = \u0027email\u0027,\n  updated_at = NOW()\nWHERE id = \u0027{{ $(\"insert_handoff_case\").first().json.id }}\u0027\nRETURNING *;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1536,
+                                       192
+                                   ],
+                      "id":  "51899faa-1b96-41f8-8b2e-35773ebd2f5f",
+                      "name":  "update_handoff_notification_status",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1728,
+                                       288
+                                   ],
+                      "id":  "75925d2e-9ad9-4e67-904d-77bfb67691a1",
+                      "name":  "Merge"
+                  }
+              ],
+    "connections":  {
+                        "8.0 human_handof":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "validate_handoff_input",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "validate_handoff_input":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "assign_handoff_owner",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "assign_handoff_owner":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "insert_handoff_case",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "insert_handoff_case":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "build_internal_notification",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "build_internal_notification":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Send a message",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Send a message":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "update_handoff_notification_status",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                },
+                                                                {
+                                                                    "node":  "Merge",
+                                                                    "type":  "main",
+                                                                    "index":  1
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "update_handoff_notification_status":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "Merge",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                        "Merge":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "build_handoff_output",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "791b4ed0-b7ea-4923-ab11-115181852995",
+    "activeVersionId":  "791b4ed0-b7ea-4923-ab11-115181852995",
+    "versionCounter":  95,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-23T17:42:32.880Z",
+                       "createdAt":  "2026-04-23T17:42:32.880Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "xvmK0kUsHy6KIu1k",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-08T14:45:03.000Z",
+                          "createdAt":  "2026-05-08T14:45:02.113Z",
+                          "versionId":  "791b4ed0-b7ea-4923-ab11-115181852995",
+                          "workflowId":  "xvmK0kUsHy6KIu1k",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{$json.handoff_case.lead_id}}\",\n  \"reason\": \"={{$json.handoff_case.reason}}\",\n  \"summary\": \"={{$json.handoff_case.summary}}\",\n  \"lead\": \"={{$json.handoff_case.lead}}\",\n  \"state\": \"={{$json.handoff_case.state}}\",\n  \"conversation\": \"={{$json.handoff_case.conversation}}\",\n  \"metadata\": \"={{$json.handoff_case.metadata}}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "8.0 human_handof",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback) {\n  if (value === null || value === undefined) return fallback;\n  if (typeof value === \"object\") return value;\n\n  if (typeof value === \"string\") {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return fallback;\n    }\n  }\n\n  return fallback;\n}\n\nconst input = $json;\n\nconst lead = parseMaybeJson(input.lead, {});\nconst state = parseMaybeJson(input.state, {});\nconst conversation = parseMaybeJson(input.conversation, {});\nconst metadata = parseMaybeJson(input.metadata, {});\n\nif (!input.lead_id) {\n  throw new Error(\"Missing lead_id\");\n}\n\nif (!input.reason) {\n  throw new Error(\"Missing handoff reason\");\n}\n\nreturn [\n  {\n    ...input,\n    lead,\n    state,\n    conversation,\n    metadata,\n    validated_at: new Date().toISOString()\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "c79e892c-83ec-41a4-82d9-859694157290",
+                                            "name":  "validate_handoff_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const lead = $json.lead || {};\nconst state = $json.state || {};\n\nlet assigned_to = \"contacto@aahumada.com\";\nlet assigned_team = \"ventas\";\nlet priority = \"normal\";\n\nif (($json.reason || \"\").toLowerCase().includes(\"reclamo\")) {\n  assigned_team = \"soporte\";\n  priority = \"high\";\n}\n\nif (state.stage === \"closing\" || state.stage === \"quoted\") {\n  assigned_team = \"ventas\";\n}\n\nreturn [{\n  ...$json,\n  assigned_to,\n  assigned_team,\n  priority\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "3114c3fe-aa55-4c13-af3c-17c298de10da",
+                                            "name":  "assign_handoff_owner"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "schema":  {
+                                                                              "__rl":  true,
+                                                                              "mode":  "list",
+                                                                              "value":  "public"
+                                                                          },
+                                                               "table":  {
+                                                                             "__rl":  true,
+                                                                             "value":  "handoff_cases",
+                                                                             "mode":  "list",
+                                                                             "cachedResultName":  "handoff_cases"
+                                                                         },
+                                                               "columns":  {
+                                                                               "mappingMode":  "defineBelow",
+                                                                               "value":  {
+                                                                                             "lead_id":  "={{$json.lead_id}}",
+                                                                                             "reason":  "={{$json.reason}}",
+                                                                                             "status":  "open",
+                                                                                             "summary":  "={{$json.summary}}",
+                                                                                             "priority":  "={{$json.priority}}",
+                                                                                             "assigned_to":  "={{$json.assigned_to}}",
+                                                                                             "assigned_team":  "={{$json.assigned_team}}",
+                                                                                             "source_flow":  "action_executor",
+                                                                                             "metadata":  "={{ $json.metadata || {} }}",
+                                                                                             "created_at":  "={{new Date().toISOString()}}",
+                                                                                             "updated_at":  "={{new Date().toISOString()}}",
+                                                                                             "notification_sent":  false,
+                                                                                             "notification_channel":  "email"
+                                                                                         },
+                                                                               "matchingColumns":  [
+                                                                                                       "id"
+                                                                                                   ],
+                                                                               "schema":  [
+                                                                                              {
+                                                                                                  "id":  "id",
+                                                                                                  "displayName":  "id",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  true,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "lead_id",
+                                                                                                  "displayName":  "lead_id",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "status",
+                                                                                                  "displayName":  "status",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "reason",
+                                                                                                  "displayName":  "reason",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "summary",
+                                                                                                  "displayName":  "summary",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "priority",
+                                                                                                  "displayName":  "priority",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "assigned_to",
+                                                                                                  "displayName":  "assigned_to",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "assigned_team",
+                                                                                                  "displayName":  "assigned_team",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "source_flow",
+                                                                                                  "displayName":  "source_flow",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "notified_at",
+                                                                                                  "displayName":  "notified_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "taken_by",
+                                                                                                  "displayName":  "taken_by",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "taken_at",
+                                                                                                  "displayName":  "taken_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "resolved_by",
+                                                                                                  "displayName":  "resolved_by",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "resolved_at",
+                                                                                                  "displayName":  "resolved_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "resolution_note",
+                                                                                                  "displayName":  "resolution_note",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "metadata",
+                                                                                                  "displayName":  "metadata",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "object",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "created_at",
+                                                                                                  "displayName":  "created_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "updated_at",
+                                                                                                  "displayName":  "updated_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "notification_sent",
+                                                                                                  "displayName":  "notification_sent",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "boolean",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "notification_channel",
+                                                                                                  "displayName":  "notification_channel",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "notification_error",
+                                                                                                  "displayName":  "notification_error",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "notification_sent_at",
+                                                                                                  "displayName":  "notification_sent_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "closed_at",
+                                                                                                  "displayName":  "closed_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "close_reason",
+                                                                                                  "displayName":  "close_reason",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              }
+                                                                                          ],
+                                                                               "attemptToConvertTypes":  false,
+                                                                               "convertFieldsToString":  false
+                                                                           },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             928,
+                                                             352
+                                                         ],
+                                            "id":  "b552d214-c29b-435f-a621-62b0244a85b9",
+                                            "name":  "insert_handoff_case",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const lead = $json.lead || {};\nconst state = $json.state || {};\nconst conversation = $json.conversation || {};\n\nconst text = [\n  `Nuevo handoff humano`,\n  `Caso ID: ${$json.id || \"sin_id\"}`,\n  `Lead ID: ${lead.id || $json.lead_id}`,\n  `Nombre: ${lead.name || \"Sin nombre\"}`,\n  `Teléfono: ${lead.phone || \"Sin teléfono\"}`,\n  `Etapa: ${state.stage || \"sin_stage\"}`,\n  `Razón: ${$json.reason || \"sin razón\"}`,\n  `Resumen: ${$json.summary || \"sin resumen\"}`,\n  `Último mensaje: ${conversation.latest_user_message || \"sin mensaje\"}`,\n  `Servicio: ${state.service_interest || \"N/D\"}`,\n  `Vehículo: ${state.vehicle_type || \"N/D\"}`,\n  `Comuna: ${state.district || \"N/D\"}`,\n  `Asignado a: ${$json.assigned_to || \"N/D\"}`\n].join(\u0027\\n\u0027);\n\nreturn [{\n  ...$json,\n  notification_text: text\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             352
+                                                         ],
+                                            "id":  "4f70101c-48dd-4361-a505-53528694ff14",
+                                            "name":  "build_internal_notification"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "sendTo":  "={{$json.assigned_to}}",
+                                                               "subject":  "=Nuevo handoff humano - {{$json.lead_id}}",
+                                                               "emailType":  "text",
+                                                               "message":  "={{$json.notification_text}}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.gmail",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             1312,
+                                                             352
+                                                         ],
+                                            "id":  "6ef0800c-e6c5-46c9-a85c-7e6bccec2e45",
+                                            "name":  "Send a message",
+                                            "webhookId":  "1328732b-95a8-4249-88f1-d32066443d2c",
+                                            "credentials":  {
+                                                                "gmailOAuth2":  {
+                                                                                    "id":  "zUoBCnhrJ6eHgy6h",
+                                                                                    "name":  "Gmail account"
+                                                                                }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const caseRow = (() =\u003e {\n  try {\n    return $(\"update_handoff_notification_status\").first().json;\n  } catch {\n    try {\n      return $(\"insert_handoff_case\").first().json;\n    } catch {\n      return {};\n    }\n  }\n})();\n\nconst owner = (() =\u003e {\n  try {\n    return $(\"assign_handoff_owner\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst notificationSent =\n  caseRow.notification_sent === true ||\n  !!caseRow.notification_sent_at ||\n  !!caseRow.notified_at;\n\nreturn [\n  {\n    handoff: true,\n\n    handoff_case_id: caseRow.id || null,\n    lead_id: caseRow.lead_id || owner.lead_id || $json.lead_id || null,\n\n    assigned_to: caseRow.assigned_to || owner.assigned_to || null,\n    assigned_team: caseRow.assigned_team || owner.assigned_team || null,\n    priority: caseRow.priority || owner.priority || \"normal\",\n\n    notification_sent: notificationSent,\n    notification_channel: caseRow.notification_channel || \"email\",\n    notification_sent_at:\n      caseRow.notification_sent_at ||\n      caseRow.notified_at ||\n      null,\n\n    summary: caseRow.summary || owner.summary || null,\n    reason: caseRow.reason || owner.reason || null,\n\n    handoff_operational: {\n      human_handoff: true,\n      handoff_case_created: !!caseRow.id,\n      assigned: !!(caseRow.assigned_to || owner.assigned_to),\n      notification_sent: notificationSent\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1904,
+                                                             320
+                                                         ],
+                                            "id":  "09eb4d5d-4262-440f-9b71-dd76b73ba76f",
+                                            "name":  "build_handoff_output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE public.handoff_cases\nSET\n  notification_sent = true,\n  notification_sent_at = NOW(),\n  notified_at = NOW(),\n  notification_channel = \u0027email\u0027,\n  updated_at = NOW()\nWHERE id = \u0027{{ $(\"insert_handoff_case\").first().json.id }}\u0027\nRETURNING *;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             1536,
+                                                             192
+                                                         ],
+                                            "id":  "51899faa-1b96-41f8-8b2e-35773ebd2f5f",
+                                            "name":  "update_handoff_notification_status",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1728,
+                                                             288
+                                                         ],
+                                            "id":  "75925d2e-9ad9-4e67-904d-77bfb67691a1",
+                                            "name":  "Merge"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "8.0 human_handof":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "validate_handoff_input",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "validate_handoff_input":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "assign_handoff_owner",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "assign_handoff_owner":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "insert_handoff_case",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "insert_handoff_case":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "build_internal_notification",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "build_internal_notification":  {
+                                                                                  "main":  [
+                                                                                               [
+                                                                                                   {
+                                                                                                       "node":  "Send a message",
+                                                                                                       "type":  "main",
+                                                                                                       "index":  0
+                                                                                                   }
+                                                                                               ]
+                                                                                           ]
+                                                                              },
+                                              "Send a message":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "update_handoff_notification_status",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      },
+                                                                                      {
+                                                                                          "node":  "Merge",
+                                                                                          "type":  "main",
+                                                                                          "index":  1
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "update_handoff_notification_status":  {
+                                                                                         "main":  [
+                                                                                                      [
+                                                                                                          {
+                                                                                                              "node":  "Merge",
+                                                                                                              "type":  "main",
+                                                                                                              "index":  0
+                                                                                                          }
+                                                                                                      ]
+                                                                                                  ]
+                                                                                     },
+                                              "Merge":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "build_handoff_output",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 791b4ed0",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-08T14:45:03.888Z",
+                                                             "id":  540,
+                                                             "workflowId":  "xvmK0kUsHy6KIu1k",
+                                                             "versionId":  "791b4ed0-b7ea-4923-ab11-115181852995",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

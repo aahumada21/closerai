@@ -1,0 +1,154 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:10:38.564Z",
+    "createdAt":  "2026-04-29T20:53:01.475Z",
+    "id":  "BWNJr3izXUIQDVxK",
+    "name":  "6.11 collect_address",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"phone\": \"56949186386\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"76329124-66ae-497b-a2a0-e45250ae56cf__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, $json.execution_context || {});\nconst context_packet = parseMaybeJson($json.context_packet, $json.context_packet || {});\nconst decision = parseMaybeJson($json.decision, $json.decision || {});\nconst state_update_input = parseMaybeJson($json.state_update, $json.state_update || {});\nconst execution_meta = parseMaybeJson($json.execution_meta, $json.execution_meta || {});\n\nconst state = context_packet.state || {};\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet.lead?.id ||\n  null;\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet.lead?.phone ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet.lead?.channel ||\n  \"whatsapp\";\n\nconst district =\n  $json.district ||\n  execution_context.district ||\n  state.district ||\n  null;\n\nlet message = \"Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\";\n\nif (district) {\n  message = `Perfecto. Para dejar la reserva bien registrada en ${district}, ¿me puedes enviar la dirección exacta donde sería el servicio?`;\n}\n\nreturn [{\n  lead_id,\n  phone,\n  channel,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  execution_context: {\n    ...execution_context,\n    lead_id,\n    phone,\n    channel,\n    action: \"collect_address\"\n  },\n\n  context_packet,\n  decision,\n  execution_meta,\n\n  state_update: {\n    ...state_update_input,\n    stage: \"collecting_address\",\n    missing_fields: [\"address\"],\n    next_goal: \"collect_address\",\n    last_bot_action: \"collect_address\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"collect_address\",\n    message_sent: false,\n    state_updated: false,\n    db_records_created: [],\n    notes: [\n      \"collect_address_message_prepared\"\n    ]\n  },\n\n  notes: [\n    ...($json.notes || []),\n    \"collect_address_message_prepared\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "7bd26d12-56db-440a-9779-622726b7dc49",
+                      "name":  "build_collect_address_result"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "build_collect_address_result",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "9b641cdb-b5cb-42c2-b103-42982f152d0a",
+    "activeVersionId":  "9b641cdb-b5cb-42c2-b103-42982f152d0a",
+    "versionCounter":  11,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-29T20:53:01.484Z",
+                       "createdAt":  "2026-04-29T20:53:01.484Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "BWNJr3izXUIQDVxK",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-30T13:42:11.000Z",
+                          "createdAt":  "2026-04-30T13:42:09.056Z",
+                          "versionId":  "9b641cdb-b5cb-42c2-b103-42982f152d0a",
+                          "workflowId":  "BWNJr3izXUIQDVxK",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"phone\": \"56949186386\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"76329124-66ae-497b-a2a0-e45250ae56cf__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, $json.execution_context || {});\nconst context_packet = parseMaybeJson($json.context_packet, $json.context_packet || {});\nconst decision = parseMaybeJson($json.decision, $json.decision || {});\nconst state_update_input = parseMaybeJson($json.state_update, $json.state_update || {});\nconst execution_meta = parseMaybeJson($json.execution_meta, $json.execution_meta || {});\n\nconst state = context_packet.state || {};\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet.lead?.id ||\n  null;\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet.lead?.phone ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet.lead?.channel ||\n  \"whatsapp\";\n\nconst district =\n  $json.district ||\n  execution_context.district ||\n  state.district ||\n  null;\n\nlet message = \"Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\";\n\nif (district) {\n  message = `Perfecto. Para dejar la reserva bien registrada en ${district}, ¿me puedes enviar la dirección exacta donde sería el servicio?`;\n}\n\nreturn [{\n  lead_id,\n  phone,\n  channel,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  execution_context: {\n    ...execution_context,\n    lead_id,\n    phone,\n    channel,\n    action: \"collect_address\"\n  },\n\n  context_packet,\n  decision,\n  execution_meta,\n\n  state_update: {\n    ...state_update_input,\n    stage: \"collecting_address\",\n    missing_fields: [\"address\"],\n    next_goal: \"collect_address\",\n    last_bot_action: \"collect_address\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"collect_address\",\n    message_sent: false,\n    state_updated: false,\n    db_records_created: [],\n    notes: [\n      \"collect_address_message_prepared\"\n    ]\n  },\n\n  notes: [\n    ...($json.notes || []),\n    \"collect_address_message_prepared\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "7bd26d12-56db-440a-9779-622726b7dc49",
+                                            "name":  "build_collect_address_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "build_collect_address_result",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 9b641cdb",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-30T13:42:11.740Z",
+                                                             "id":  290,
+                                                             "workflowId":  "BWNJr3izXUIQDVxK",
+                                                             "versionId":  "9b641cdb-b5cb-42c2-b103-42982f152d0a",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

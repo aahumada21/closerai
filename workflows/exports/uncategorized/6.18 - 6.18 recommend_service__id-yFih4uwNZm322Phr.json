@@ -1,0 +1,202 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:11:27.854Z",
+    "createdAt":  "2026-05-01T15:17:30.866Z",
+    "id":  "yFih4uwNZm322Phr",
+    "name":  "6.18 recommend_service",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"recommend_service\\\",\\\"vehicle_type\\\":\\\"SUV\\\",\\\"district\\\":\\\"Huechuraba\\\"},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustín\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"service_discovery\\\",\\\"vehicle_type\\\":\\\"SUV\\\",\\\"district\\\":\\\"Huechuraba\\\"},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Qué me recomiendas?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"recommend_service\\\",\\\"state_update\\\":{}}}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst conversation = contextPacket.conversation || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in recommend_service\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in recommend_service\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"recommend_service\",\n\n  service_interest: firstValue(\n    ctx.service_interest,\n    decisionStateUpdate.service_interest,\n    inputStateUpdate.service_interest,\n    state.service_interest\n  ),\n\n  vehicle_type: firstValue(\n    ctx.vehicle_type,\n    decisionStateUpdate.vehicle_type,\n    inputStateUpdate.vehicle_type,\n    state.vehicle_type\n  ),\n\n  district: firstValue(\n    ctx.district,\n    decisionStateUpdate.district,\n    inputStateUpdate.district,\n    state.district\n  ),\n\n  customer_need: firstValue(\n    ctx.customer_need,\n    decision.customer_need,\n    decisionStateUpdate.customer_need,\n    inputStateUpdate.customer_need,\n    conversation.latest_user_message\n  )\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       608,
+                                       352
+                                   ],
+                      "id":  "8f19f4ee-3127-434e-bee4-5e672d9b8846",
+                      "name":  "normalize_recommend_service_input"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\nconst conversation = data.context_packet?.conversation || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return String(value).trim();\n    }\n  }\n  return null;\n}\n\nfunction normalizeText(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_esencial: \"lavado de mantención\",\n    lavado_profundo: \"lavado profundo\",\n    lavado_premium: \"lavado premium\"\n  };\n\n  return map[service] || service || \"servicio\";\n}\n\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst latestMessage = firstValue(\n  ctx.customer_need,\n  conversation.latest_user_message,\n  data.decision?.message,\n  \"\"\n);\n\nconst normalized = normalizeText(latestMessage);\n\nconst missingFields = [];\n\nif (!vehicleType) missingFields.push(\"vehicle_type\");\nif (!district) missingFields.push(\"district\");\n\nfunction inferRecommendedService(text) {\n  const premiumSignals = [\n    \"premium\",\n    \"completo\",\n    \"lo mejor\",\n    \"full\",\n    \"detallado\",\n    \"impecable\",\n    \"muy sucio\",\n    \"demasiado sucio\",\n    \"manchado\",\n    \"manchas\",\n    \"olor\",\n    \"mas completo\",\n    \"más completo\",\n    \"dejarlo como nuevo\",\n    \"vender el auto\",\n    \"regalo\",\n    \"especial\"\n  ];\n\n  const deepSignals = [\n    \"profundo\",\n    \"bien limpio\",\n    \"harto tiempo\",\n    \"mucho tiempo\",\n    \"sucio\",\n    \"interior\",\n    \"aspirado\",\n    \"normal pero bueno\",\n    \"algo bueno\",\n    \"terminacion buena\",\n    \"terminación buena\"\n  ];\n\n  const basicSignals = [\n    \"barato\",\n    \"economico\",\n    \"económico\",\n    \"mantencion\",\n    \"mantención\",\n    \"rapido\",\n    \"rápido\",\n    \"simple\",\n    \"basico\",\n    \"básico\",\n    \"por fuera\",\n    \"mantener\"\n  ];\n\n  if (premiumSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_premium\";\n  }\n\n  if (deepSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_profundo\";\n  }\n\n  if (basicSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_esencial\";\n  }\n\n  return \"lavado_profundo\";\n}\n\nconst recommendedService = inferRecommendedService(normalized);\n\nlet message = \"\";\n\nif (missingFields.length \u003e 0) {\n  message =\n    \"Sí, te puedo recomendar el servicio más conveniente. Para hacerlo bien, necesito dos datos: qué tipo de vehículo tienes y en qué comuna sería el servicio.\\n\\n\" +\n    \"Con eso te digo si te conviene más el lavado de mantención, el lavado profundo o el lavado premium.\";\n\n  return [{\n    ...data,\n\n    message_to_send: message,\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...(data.state_update || {}),\n\n      stage: \"service_discovery\",\n      intent_last: \"service_recommendation_requested\",\n      next_goal: \"collect_vehicle_and_district\",\n      last_bot_action: \"recommend_service\",\n\n      vehicle_type: vehicleType || null,\n      district: district || null,\n      missing_fields: missingFields\n    },\n\n    execution_context: {\n      ...ctx,\n      action: \"recommend_service\"\n    },\n\n    execution_result: {\n      success: true,\n      action: \"recommend_service\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"recommendation_needs_vehicle_or_district\"]\n    },\n\n    notes: [\"recommendation_needs_vehicle_or_district\"]\n  }];\n}\n\nconst reasonByService = {\n  lavado_esencial:\n    \"porque sirve bien cuando buscas una limpieza de mantención, rápida y práctica, sin entrar en una limpieza tan detallada.\",\n\n  lavado_profundo:\n    \"porque es un punto medio muy conveniente: limpia mejor que una mantención básica y sirve cuando el auto necesita una limpieza más completa por dentro y por fuera.\",\n\n  lavado_premium:\n    \"porque es la opción más completa, pensada para cuando quieres una terminación más cuidada y un resultado más detallado.\"\n};\n\nmessage =\n  `Para tu ${vehicleType} en ${district}, te recomendaría el ${serviceLabel(recommendedService)}, ` +\n  `${reasonByService[recommendedService]}\\n\\n` +\n  \"Si quieres, ahora puedo darte el valor o revisar los horarios disponibles para agendar.\";\n\nreturn [{\n  ...data,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: \"qualified\",\n    intent_last: \"service_recommendation_requested\",\n    next_goal: \"quote_or_offer_slots\",\n    last_bot_action: \"recommend_service\",\n\n    service_interest: recommendedService,\n    vehicle_type: vehicleType,\n    district: district,\n\n    missing_fields: []\n  },\n\n  execution_context: {\n    ...ctx,\n    action: \"recommend_service\",\n    service_interest: recommendedService,\n    vehicle_type: vehicleType,\n    district: district\n  },\n\n  recommendation: {\n    recommended_service: recommendedService,\n    vehicle_type: vehicleType,\n    district: district,\n    source: \"rule_based_recommendation\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"recommend_service\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_recommendation_sent\"]\n  },\n\n  notes: [\"service_recommendation_sent\"]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       816,
+                                       352
+                                   ],
+                      "id":  "d1ee475d-8f6a-469e-9f19-413a3f7bdc81",
+                      "name":  "build_recommend_service_result"
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "normalize_recommend_service_input",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "normalize_recommend_service_input":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "build_recommend_service_result",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "a4ee0ae3-cc26-4e6d-8d58-bb81996751dc",
+    "activeVersionId":  "a4ee0ae3-cc26-4e6d-8d58-bb81996751dc",
+    "versionCounter":  15,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-01T15:17:30.871Z",
+                       "createdAt":  "2026-05-01T15:17:30.871Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "yFih4uwNZm322Phr",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-01T15:18:55.000Z",
+                          "createdAt":  "2026-05-01T15:18:41.788Z",
+                          "versionId":  "a4ee0ae3-cc26-4e6d-8d58-bb81996751dc",
+                          "workflowId":  "yFih4uwNZm322Phr",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"recommend_service\\\",\\\"vehicle_type\\\":\\\"SUV\\\",\\\"district\\\":\\\"Huechuraba\\\"},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustín\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"service_discovery\\\",\\\"vehicle_type\\\":\\\"SUV\\\",\\\"district\\\":\\\"Huechuraba\\\"},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Qué me recomiendas?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"recommend_service\\\",\\\"state_update\\\":{}}}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst conversation = contextPacket.conversation || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in recommend_service\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in recommend_service\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"recommend_service\",\n\n  service_interest: firstValue(\n    ctx.service_interest,\n    decisionStateUpdate.service_interest,\n    inputStateUpdate.service_interest,\n    state.service_interest\n  ),\n\n  vehicle_type: firstValue(\n    ctx.vehicle_type,\n    decisionStateUpdate.vehicle_type,\n    inputStateUpdate.vehicle_type,\n    state.vehicle_type\n  ),\n\n  district: firstValue(\n    ctx.district,\n    decisionStateUpdate.district,\n    inputStateUpdate.district,\n    state.district\n  ),\n\n  customer_need: firstValue(\n    ctx.customer_need,\n    decision.customer_need,\n    decisionStateUpdate.customer_need,\n    inputStateUpdate.customer_need,\n    conversation.latest_user_message\n  )\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             608,
+                                                             352
+                                                         ],
+                                            "id":  "8f19f4ee-3127-434e-bee4-5e672d9b8846",
+                                            "name":  "normalize_recommend_service_input"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\nconst conversation = data.context_packet?.conversation || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined \u0026\u0026 value !== null \u0026\u0026 String(value).trim() !== \"\") {\n      return String(value).trim();\n    }\n  }\n  return null;\n}\n\nfunction normalizeText(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_esencial: \"lavado de mantención\",\n    lavado_profundo: \"lavado profundo\",\n    lavado_premium: \"lavado premium\"\n  };\n\n  return map[service] || service || \"servicio\";\n}\n\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst latestMessage = firstValue(\n  ctx.customer_need,\n  conversation.latest_user_message,\n  data.decision?.message,\n  \"\"\n);\n\nconst normalized = normalizeText(latestMessage);\n\nconst missingFields = [];\n\nif (!vehicleType) missingFields.push(\"vehicle_type\");\nif (!district) missingFields.push(\"district\");\n\nfunction inferRecommendedService(text) {\n  const premiumSignals = [\n    \"premium\",\n    \"completo\",\n    \"lo mejor\",\n    \"full\",\n    \"detallado\",\n    \"impecable\",\n    \"muy sucio\",\n    \"demasiado sucio\",\n    \"manchado\",\n    \"manchas\",\n    \"olor\",\n    \"mas completo\",\n    \"más completo\",\n    \"dejarlo como nuevo\",\n    \"vender el auto\",\n    \"regalo\",\n    \"especial\"\n  ];\n\n  const deepSignals = [\n    \"profundo\",\n    \"bien limpio\",\n    \"harto tiempo\",\n    \"mucho tiempo\",\n    \"sucio\",\n    \"interior\",\n    \"aspirado\",\n    \"normal pero bueno\",\n    \"algo bueno\",\n    \"terminacion buena\",\n    \"terminación buena\"\n  ];\n\n  const basicSignals = [\n    \"barato\",\n    \"economico\",\n    \"económico\",\n    \"mantencion\",\n    \"mantención\",\n    \"rapido\",\n    \"rápido\",\n    \"simple\",\n    \"basico\",\n    \"básico\",\n    \"por fuera\",\n    \"mantener\"\n  ];\n\n  if (premiumSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_premium\";\n  }\n\n  if (deepSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_profundo\";\n  }\n\n  if (basicSignals.some(signal =\u003e text.includes(normalizeText(signal)))) {\n    return \"lavado_esencial\";\n  }\n\n  return \"lavado_profundo\";\n}\n\nconst recommendedService = inferRecommendedService(normalized);\n\nlet message = \"\";\n\nif (missingFields.length \u003e 0) {\n  message =\n    \"Sí, te puedo recomendar el servicio más conveniente. Para hacerlo bien, necesito dos datos: qué tipo de vehículo tienes y en qué comuna sería el servicio.\\n\\n\" +\n    \"Con eso te digo si te conviene más el lavado de mantención, el lavado profundo o el lavado premium.\";\n\n  return [{\n    ...data,\n\n    message_to_send: message,\n\n    db_operations: [\"messages\", \"lead_state\"],\n\n    state_update: {\n      ...(data.state_update || {}),\n\n      stage: \"service_discovery\",\n      intent_last: \"service_recommendation_requested\",\n      next_goal: \"collect_vehicle_and_district\",\n      last_bot_action: \"recommend_service\",\n\n      vehicle_type: vehicleType || null,\n      district: district || null,\n      missing_fields: missingFields\n    },\n\n    execution_context: {\n      ...ctx,\n      action: \"recommend_service\"\n    },\n\n    execution_result: {\n      success: true,\n      action: \"recommend_service\",\n      message_sent: false,\n      state_updated: true,\n      db_records_created: [\"messages\", \"lead_state\"],\n      notes: [\"recommendation_needs_vehicle_or_district\"]\n    },\n\n    notes: [\"recommendation_needs_vehicle_or_district\"]\n  }];\n}\n\nconst reasonByService = {\n  lavado_esencial:\n    \"porque sirve bien cuando buscas una limpieza de mantención, rápida y práctica, sin entrar en una limpieza tan detallada.\",\n\n  lavado_profundo:\n    \"porque es un punto medio muy conveniente: limpia mejor que una mantención básica y sirve cuando el auto necesita una limpieza más completa por dentro y por fuera.\",\n\n  lavado_premium:\n    \"porque es la opción más completa, pensada para cuando quieres una terminación más cuidada y un resultado más detallado.\"\n};\n\nmessage =\n  `Para tu ${vehicleType} en ${district}, te recomendaría el ${serviceLabel(recommendedService)}, ` +\n  `${reasonByService[recommendedService]}\\n\\n` +\n  \"Si quieres, ahora puedo darte el valor o revisar los horarios disponibles para agendar.\";\n\nreturn [{\n  ...data,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: \"qualified\",\n    intent_last: \"service_recommendation_requested\",\n    next_goal: \"quote_or_offer_slots\",\n    last_bot_action: \"recommend_service\",\n\n    service_interest: recommendedService,\n    vehicle_type: vehicleType,\n    district: district,\n\n    missing_fields: []\n  },\n\n  execution_context: {\n    ...ctx,\n    action: \"recommend_service\",\n    service_interest: recommendedService,\n    vehicle_type: vehicleType,\n    district: district\n  },\n\n  recommendation: {\n    recommended_service: recommendedService,\n    vehicle_type: vehicleType,\n    district: district,\n    source: \"rule_based_recommendation\"\n  },\n\n  execution_result: {\n    success: true,\n    action: \"recommend_service\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_recommendation_sent\"]\n  },\n\n  notes: [\"service_recommendation_sent\"]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             816,
+                                                             352
+                                                         ],
+                                            "id":  "d1ee475d-8f6a-469e-9f19-413a3f7bdc81",
+                                            "name":  "build_recommend_service_result"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "normalize_recommend_service_input",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "normalize_recommend_service_input":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "build_recommend_service_result",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version a4ee0ae3",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-01T15:18:55.472Z",
+                                                             "id":  357,
+                                                             "workflowId":  "yFih4uwNZm322Phr",
+                                                             "versionId":  "a4ee0ae3-cc26-4e6d-8d58-bb81996751dc",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

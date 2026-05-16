@@ -1,0 +1,907 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:06:59.871Z",
+    "createdAt":  "2026-04-14T15:15:10.248Z",
+    "id":  "Li3qmQHIKbjqWY15",
+    "name":  "5 llm_decision",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "IN context_builder",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\nconst contextPacket = input.context_packet;\n\nif (!contextPacket || typeof contextPacket !== \u0027object\u0027) {\n  throw new Error(\u0027context_packet missing or invalid\u0027);\n}\n\nconst allowedActions = Array.isArray(contextPacket.allowed_actions)\n  ? contextPacket.allowed_actions.filter(a =\u003e typeof a === \u0027string\u0027 \u0026\u0026 a.trim())\n  : [];\n\nif (!allowedActions.length) {\n  throw new Error(\u0027allowed_actions missing or empty\u0027);\n}\n\nconst developerPrompt = `\nEres la capa de decisión de un AI Closer comercial.\n\nTu única tarea es devolver UNA decisión estructurada y válida.\nNo eres un agente libre.\nNo ejecutas herramientas.\nNo inventas acciones.\nNo escribes texto fuera del JSON.\n\nReglas:\n- action debe pertenecer a allowed_actions\n- elige solo una action\n- no inventes acciones\n- no ejecutes herramientas\n- no inventes horarios disponibles\n- no inventes precios\n- no inventes reservas\n- state_update debe ser conservador y coherente\n- confidence debe ser un número entre 0 y 1\n- si el contexto es ambiguo, elige la opción más segura dentro de allowed_actions\n- no pidas más de un dato faltante por turno\n\nUso de acciones:\n- ask_missing_data: úsala cuando falte un dato crítico para avanzar. Pregunta solo un dato por turno.\n- send_quote: úsala cuando el usuario quiere precio y ya existen service_interest, vehicle_type y district.\n- answer_question: úsala cuando el usuario pregunta algo informativo sobre servicios, proceso, cobertura, duración, preparación, formas de pago, servicio a domicilio, requisitos de agua/luz, descuentos o qué incluye cada servicio.\n- answer_objection: úsala cuando el usuario objeta precio, confianza, tiempo, valor o conveniencia.\n- offer_booking: úsala cuando ya hay interés y corresponde invitar a agendar, pero el usuario todavía no pidió horarios concretos.\n- offer_available_slots: úsala cuando el usuario pide horarios, fechas, disponibilidad, próxima semana, más horarios, otros días u otros horarios. Esta acción NO debe inventar horarios. El mensaje puede ir vacío porque action_executor consultará disponibilidad real.\n- confirm_booking: úsala solo cuando el usuario ya eligió o confirmó un horario específico y existe dirección exacta o address_confirmed=true.\n- schedule_followup: úsala cuando corresponde programar un seguimiento posterior y existen followup_type y scheduled_for.\n- handoff_human: úsala cuando el caso requiere humano, reclamo, baja confianza, problema operativo o petición explícita de persona.\n\nServicios oficiales de Ahumada Detailing:\n- lavado_basico = Lavado básico\n- lavado_premium = Lavado premium\n- encerado_full = Encerado full\n\nRegla de FAQ comercial:\n- Si el usuario pregunta una FAQ simple y allowed_actions contiene answer_question, responde de forma breve, profesional y comercial.\n- Cierra siempre con una pregunta útil para avanzar.\n- No fuerces calificación si el usuario solo hizo una pregunta simple.\n- No inventes descuentos, disponibilidad ni precios.\n\nRegla crítica de cotización:\n- Si ya existen service_interest, vehicle_type y district, y el cliente acaba de entregar el último dato faltante, la acción correcta es send_quote.\n- No uses recommend_service si service_interest ya existe.\n- recommend_service solo se usa cuando el cliente pide ayuda para elegir o no tiene claro qué servicio tomar.\n- Si el cliente ya eligió un servicio, no lo recomiendes de nuevo.\n\nRegla crítica:\n- No existe \"lavado profundo\" como servicio oficial separado.\n- No existe \"lavado de mantención\" como nombre comercial oficial.\n- Si el usuario menciona \"lavado profundo\", interprétalo como interés por lavado_premium, porque busca una limpieza más detallada.\n- Si el usuario pregunta por servicios disponibles y allowed_actions contiene send_service_menu, usa send_service_menu.\n- No inventes un menú de servicios desde answer_question.\n\nAcciones comerciales adicionales:\n- cancel_booking: úsala cuando el cliente quiere cancelar una reserva existente.\n- reschedule_booking: úsala cuando el cliente quiere cambiar día u hora de una reserva.\n- collect_address: úsala cuando falta dirección exacta antes de confirmar servicio a domicilio.\n- confirm_address: úsala cuando el cliente entrega una dirección y estamos esperando validarla.\n- send_pre_service_instructions: úsala antes del servicio confirmado para preparar al cliente.\n- notify_on_the_way: úsala cuando corresponde avisar que el equipo va en camino.\n- request_review: úsala después de un servicio completado para pedir reseña.\n- request_referral: úsala después de una experiencia positiva para pedir referido.\n\nSi el usuario pide horarios, disponibilidad, agenda, otra semana, próxima semana, más opciones, otros días u otros horarios, y ya existen service_interest, vehicle_type y district, la acción correcta debe ser siempre \"offer_available_slots\".\n\nNo responder con \"answer_question\".\nNo decir \"te indico cómo coordinamos\".\nDebe consultar disponibilidad real usando offer_available_slots.\n\nMapeo:\n- \"esta semana\", \"estos días\" =\u003e availability_window = \"this_week\"\n- \"próxima semana\", \"siguiente semana\", \"la otra semana\" =\u003e availability_window = \"next_week\"\n- \"más adelante\", \"otras semanas\", \"más horarios\", \"otros días\" =\u003e availability_window = \"next_14_days\"\n- \"este mes\", \"durante el mes\" =\u003e availability_window = \"next_30_days\"\n\nDevuelve solo un JSON válido que cumpla exactamente el schema.\n\nReglas críticas de reserva:\n- Para Ahumada Detailing el servicio es a domicilio.\n- No confirmes una reserva si falta dirección exacta.\n- Si el usuario entrega una dirección y allowed_actions contiene confirm_address, la acción correcta es confirm_address.\n- Si el usuario pide cancelar, usa cancel_booking si está permitido.\n- Si el usuario pide cambiar día u hora, usa reschedule_booking si está permitido.\n- No uses confirm_booking solo porque el usuario dijo \"sí\"; primero debe existir booking_date, booking_time y dirección.\n\nRegla crítica de normalización:\n- No guardes vehicle_type si el usuario solo pregunta por un tipo de vehículo.\n- Si el usuario dice \"¿lavan motos?\", \"¿hacen furgones?\", \"¿atienden camionetas?\", eso es una consulta comercial, no una confirmación de vehículo.\n- En esos casos usa mentioned_vehicle_type, pero deja vehicle_type y confirmed_vehicle_type en null.\n- Solo confirma vehicle_type cuando el cliente habla de su propio vehículo, por ejemplo: \"tengo una SUV\", \"mi auto es sedán\", \"es una camioneta\", \"para mi furgón\".\n- vehicle_type debe representar un dato confirmado para cotizar o agendar.\n- Usa formato normalizado: SUV, Camioneta, Sedán, Hatchback, City car, Auto, Moto, Furgón.\n- Las comunas deben guardarse con formato legible, por ejemplo: Huechuraba, Las Condes, Ñuñoa. Nunca uses las_condes.\n\nRegla crítica de disponibilidad antes de dirección:\n- Si el usuario propone un horario manual, por ejemplo \"este jueves a las 9\", y availability_confirmed no es true, NO pidas dirección todavía.\n- En ese caso la acción correcta es offer_available_slots para revisar disponibilidad real del horario solicitado.\n- Solo usa collect_address cuando booking_date y booking_time existen Y availability_confirmed = true.\n- Si el horario viene desde booking_options ofrecidas por el sistema, también debe pasar por validación real antes de confirmar reserva.\n`.trim();\n\nconst userPrompt = `\nAnaliza este context_packet y devuelve la mejor siguiente acción comercial.\n\nUsa SOLO acciones dentro de allowed_actions.\nElige SOLO UNA acción.\nNo inventes datos.\nNo prometas cosas no respaldadas por el contexto.\n\nContext packet:\n${JSON.stringify(contextPacket, null, 2)}\n`.trim();\n\nconst decisionSchema = {\n  name: \u0027llm_decision_output\u0027,\n  strict: true,\n  schema: {\n    type: \u0027object\u0027,\n    additionalProperties: false,\n    properties: {\n      action: {\n        type: \u0027string\u0027,\n        enum: allowedActions\n      },\n      reason: {\n        type: \u0027string\u0027\n      },\n      message: {\n        type: \u0027string\u0027\n      },\n      state_update: {\n        type: \u0027object\u0027,\n        additionalProperties: false,\n        properties: {\n          stage: { type: [\u0027string\u0027, \u0027null\u0027] },\n          next_goal: { type: [\u0027string\u0027, \u0027null\u0027] },\n          intent_last: { type: [\u0027string\u0027, \u0027null\u0027] },\n\n          service_interest: { type: [\u0027string\u0027, \u0027null\u0027] },\n          service_scope: { type: [\u0027string\u0027, \u0027null\u0027] },\n          vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\n          mentioned_vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\nconfirmed_vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\nmentioned_district: { type: [\u0027string\u0027, \u0027null\u0027] },\nconfirmed_district: { type: [\u0027string\u0027, \u0027null\u0027] },\n          district: { type: [\u0027string\u0027, \u0027null\u0027] },\n          service_address: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address_reference: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address_confirmed: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n\n          booking_date: { type: [\u0027string\u0027, \u0027null\u0027] },\n          booking_time: { type: [\u0027string\u0027, \u0027null\u0027] },\n          slot_id: { type: [\u0027string\u0027, \u0027null\u0027] },\n          availability_confirmed: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n          availability_window: {\n            type: [\"string\", \"null\"],\n            enum: [\"this_week\", \"next_week\", \"next_14_days\", \"next_30_days\", null]\n          },\n          \n          availability_label: { type: [\"string\", \"null\"] },\n          \n          days_ahead: { type: [\"number\", \"null\"] },\n          \n          start_offset_days: { type: [\"number\", \"null\"] },\n          \n          max_slots: { type: [\"number\", \"null\"] },\n          followup_type: { type: [\u0027string\u0027, \u0027null\u0027] },\n          scheduled_for: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          cancellation_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          reschedule_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          handoff_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          handoff_summary: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          eta_minutes: { type: [\u0027number\u0027, \u0027null\u0027] },\n          review_url: { type: [\u0027string\u0027, \u0027null\u0027] },\n          referral_message: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          human_handoff: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n\n          last_bot_action: { type: [\u0027string\u0027, \u0027null\u0027] },\n\n          missing_fields: {\n            type: \u0027array\u0027,\n            items: { type: \u0027string\u0027 }\n          }\n        },\n        required: [\n          \"stage\",\n          \"next_goal\",\n          \"intent_last\",\n          \"service_interest\",\n          \"service_scope\",\n          \"vehicle_type\",\n          \"district\",\n          \"mentioned_vehicle_type\",\n          \"confirmed_vehicle_type\",\n          \"mentioned_district\",\n          \"confirmed_district\",\n          \"service_address\",\n          \"address\",\n          \"address_reference\",\n          \"address_confirmed\",\n          \"booking_date\",\n          \"booking_time\",\n          \"slot_id\",\n          \"availability_confirmed\",\n          \"availability_window\",\n          \"availability_label\",\n          \"days_ahead\",\n          \"start_offset_days\",\n          \"max_slots\",\n          \"followup_type\",\n          \"scheduled_for\",\n          \"cancellation_reason\",\n          \"reschedule_reason\",\n          \"handoff_reason\",\n          \"handoff_summary\",\n          \"eta_minutes\",\n          \"review_url\",\n          \"referral_message\",\n          \"human_handoff\",\n          \"last_bot_action\",\n          \"missing_fields\"\n        ]\n      },\n      confidence: {\n        type: \u0027number\u0027\n      }\n    },\n    required: [\n      \u0027action\u0027,\n      \u0027reason\u0027,\n      \u0027message\u0027,\n      \u0027state_update\u0027,\n      \u0027confidence\u0027\n    ]\n  }\n};\n\nreturn [{\n  json: {\n    context_packet: contextPacket,\n    allowed_actions: allowedActions,\n    developer_prompt: developerPrompt,\n    user_prompt: userPrompt,\n    response_format: {\n      type: \u0027json_schema\u0027,\n      json_schema: decisionSchema\n    },\n    model_config: {\n      model: \u0027gpt-5.4-mini\u0027,\n      temperature: 0.1\n    }\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "d4ca8c51-734e-4729-8146-d591bf41e7e1",
+                      "name":  "prepare_context_and_guardrail"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "openAiApi",
+                                         "sendHeaders":  true,
+                                         "specifyHeaders":  "json",
+                                         "jsonHeaders":  "={\n  \"Content-Type\": \"application/json\"\n}",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{\n{\n  model: $json.model_config.model,\n  messages: [\n    {\n      role: \"developer\",\n      content: $json.developer_prompt\n    },\n    {\n      role: \"user\",\n      content: $json.user_prompt\n    }\n  ],\n  temperature: $json.model_config.temperature,\n  response_format: $json.response_format\n}\n}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "2a57fd15-ae0c-4340-bb64-20c7db627791",
+                      "name":  "HTTP Request",
+                      "credentials":  {
+                                          "openAiApi":  {
+                                                            "id":  "SmQPupAVe2an24Gv",
+                                                            "name":  "OpenAI account"
+                                                        }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const raw = $json;\n\nfunction tryParseJSON(str) {\n  try {\n    return JSON.parse(str);\n  } catch {\n    return null;\n  }\n}\n\nfunction cleanText(str) {\n  if (typeof str !== \u0027string\u0027) return \u0027\u0027;\n  return str\n    .trim()\n    .replace(/^```json\\s*/i, \u0027\u0027)\n    .replace(/^```\\s*/i, \u0027\u0027)\n    .replace(/\\s*```$/i, \u0027\u0027)\n    .trim();\n}\n\nfunction extractJsonSubstring(str) {\n  if (typeof str !== \u0027string\u0027) return null;\n  const start = str.indexOf(\u0027{\u0027);\n  const end = str.lastIndexOf(\u0027}\u0027);\n  if (start === -1 || end === -1 || end \u003c= start) return null;\n  return str.slice(start, end + 1);\n}\n\nfunction extractCandidate(obj) {\n  if (!obj) return { parsed: null, source: \u0027empty\u0027 };\n\n  if (typeof obj === \u0027object\u0027 \u0026\u0026 obj.action \u0026\u0026 obj.state_update) {\n    return { parsed: obj, source: \u0027root_object\u0027 };\n  }\n\n  const content = obj?.choices?.[0]?.message?.content;\n\n  if (typeof content === \u0027string\u0027) {\n    const cleaned = cleanText(content);\n    return {\n      parsed: tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned)),\n      source: \u0027choices_message_content\u0027,\n      raw_content: content\n    };\n  }\n\n  if (typeof obj.output_text === \u0027string\u0027) {\n    const cleaned = cleanText(obj.output_text);\n    return {\n      parsed: tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned)),\n      source: \u0027output_text\u0027,\n      raw_content: obj.output_text\n    };\n  }\n\n  if (Array.isArray(content)) {\n    for (const part of content) {\n      if (typeof part?.text === \u0027string\u0027) {\n        const cleaned = cleanText(part.text);\n        const parsed = tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned));\n        if (parsed) {\n          return {\n            parsed,\n            source: \u0027content_array_text\u0027,\n            raw_content: part.text\n          };\n        }\n      }\n    }\n  }\n\n  return { parsed: null, source: \u0027not_found\u0027 };\n}\n\nconst result = extractCandidate(raw);\n\nreturn [{\n  json: {\n    raw_response: raw,\n    raw_content: result.raw_content || null,\n    parsed_output: result.parsed,\n    parse_ok: !!result.parsed,\n    parse_source: result.source\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1104,
+                                       352
+                                   ],
+                      "id":  "057bae8a-00b5-439a-bd1a-3cb79b59ad2e",
+                      "name":  "parse_or_extract_structured_output"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const parsed = $json.parsed_output;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst allowedActions = prepared.allowed_actions || [];\n\nconst state = context.state || {};\nconst ruleContext = context.rule_context || {};\nconst conversation = context.conversation || {};\n\nconst errors = [];\nconst warnings = [];\n\nconst latestUserMessage = conversation.latest_user_message || \u0027\u0027;\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) return false;\n  if (Array.isArray(value) \u0026\u0026 value.length === 0) return false;\n  return true;\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (isFilled(value)) return value;\n  }\n  return null;\n}\n\nfunction compactObject(obj) {\n  const out = {};\n\n  for (const [key, value] of Object.entries(obj || {})) {\n    if (value === undefined) continue;\n    if (value === null) continue;\n    if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) continue;\n    out[key] = value;\n  }\n\n  return out;\n}\n\nif (!$json.schema_valid) {\n  return [{\n    json: {\n      valid: false,\n      validation_errors: $json.schema_errors || [\u0027schema_invalid\u0027],\n      validation_warnings: [],\n      decision: null,\n      validation_meta: {\n        allowed_actions: allowedActions,\n        current_stage: state.stage || null,\n        latest_user_message: latestUserMessage\n      }\n    }\n  }];\n}\n\nif (!parsed || typeof parsed !== \u0027object\u0027) {\n  return [{\n    json: {\n      valid: false,\n      validation_errors: [\u0027parsed_output_missing\u0027],\n      validation_warnings: [],\n      decision: null,\n      validation_meta: {\n        allowed_actions: allowedActions,\n        current_stage: state.stage || null,\n        latest_user_message: latestUserMessage\n      }\n    }\n  }];\n}\n\nconst update = parsed.state_update || {};\n\nconst serviceInterest = firstValue(update.service_interest, state.service_interest);\nconst vehicleType = firstValue(update.vehicle_type, state.vehicle_type);\nconst district = firstValue(update.district, state.district);\n\nconst bookingDate = firstValue(\n  update.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  update.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  update.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst serviceAddress = firstValue(\n  update.service_address,\n  update.address,\n  state.service_address,\n  state.address,\n  ruleContext.address_candidate?.address\n);\n\nconst addressReference = firstValue(\n  update.address_reference,\n  state.address_reference,\n  ruleContext.address_candidate?.address_reference\n);\n\nconst addressConfirmed =\n  update.address_confirmed === true ||\n  state.address_confirmed === true;\n\nconst hasAddress =\n  isFilled(serviceAddress) ||\n  isFilled(addressReference) ||\n  addressConfirmed;\n\nconst hasBookingContext =\n  isFilled(state.pending_booking_slot) ||\n  isFilled(state.booking_slot) ||\n  isFilled(ruleContext.booking_candidate) ||\n  isFilled(ruleContext.calendar_hold) ||\n  (isFilled(bookingDate) \u0026\u0026 isFilled(bookingTime)) ||\n  isFilled(slotId);\n\nif (!allowedActions.includes(parsed.action)) {\n  errors.push(`action_not_allowed:${parsed.action}`);\n}\n\nif (parsed.action === \u0027offer_available_slots\u0027) {\n  if (!serviceInterest) errors.push(\u0027offer_available_slots_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027offer_available_slots_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027offer_available_slots_without_district\u0027);\n}\n\nif (parsed.action === \u0027send_quote\u0027) {\n  if (!serviceInterest) errors.push(\u0027send_quote_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027send_quote_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027send_quote_without_district\u0027);\n}\n\nif (parsed.action === \u0027confirm_booking\u0027) {\n  if (!serviceInterest) errors.push(\u0027confirm_booking_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027confirm_booking_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027confirm_booking_without_district\u0027);\n  if (!bookingDate) errors.push(\u0027confirm_booking_without_booking_date\u0027);\n  if (!bookingTime) errors.push(\u0027confirm_booking_without_booking_time\u0027);\n  if (!hasBookingContext) errors.push(\u0027confirm_booking_without_booking_context\u0027);\n  if (!hasAddress) errors.push(\u0027confirm_booking_without_address\u0027);\n}\n\nif (parsed.action === \u0027confirm_address\u0027) {\n  const hasAddressCandidate =\n    hasAddress ||\n    isFilled(latestUserMessage);\n\n  if (!hasAddressCandidate) {\n    errors.push(\u0027confirm_address_without_address_candidate\u0027);\n  }\n}\n\nif (parsed.action === \u0027collect_address\u0027) {\n  const hasBookingCandidate =\n    isFilled(bookingDate) ||\n    isFilled(bookingTime) ||\n    isFilled(slotId) ||\n    Array.isArray(state.booking_options) \u0026\u0026 state.booking_options.length \u003e 0;\n\n  if (!hasBookingCandidate) {\n    warnings.push(\u0027collect_address_without_booking_candidate\u0027);\n  }\n}\n\nif (parsed.action === \u0027schedule_followup\u0027) {\n  const followupType = firstValue(parsed.followup_type, update.followup_type, state.followup_type);\n  const scheduledFor = firstValue(parsed.scheduled_for, update.scheduled_for, state.scheduled_for);\n\n  if (!followupType) errors.push(\u0027schedule_followup_without_followup_type\u0027);\n  if (!scheduledFor) errors.push(\u0027schedule_followup_without_scheduled_for\u0027);\n}\n\nif (parsed.action === \u0027handoff_human\u0027) {\n  if (update.stage !== \u0027human_handoff\u0027) {\n    warnings.push(\u0027handoff_without_human_handoff_stage\u0027);\n  }\n}\n\nif (Number(parsed.confidence) \u003c 0.45 \u0026\u0026 allowedActions.includes(\u0027handoff_human\u0027)) {\n  warnings.push(\u0027low_confidence_recommend_handoff\u0027);\n}\n\nconst normalizedStateUpdate = compactObject({\n  ...(update || {}),\n\n  slot_id: firstValue(update.slot_id, slotId),\n  last_bot_action: firstValue(update.last_bot_action, parsed.action),\n\n  missing_fields: Array.isArray(update.missing_fields)\n    ? update.missing_fields\n    : []\n});\n\nconst normalizedDecision = {\n  action: parsed.action,\n  reason: String(parsed.reason || \u0027\u0027).trim(),\n  message: typeof parsed.message === \u0027string\u0027 ? parsed.message.trim() : \u0027\u0027,\n  state_update: normalizedStateUpdate,\n  confidence: Number(parsed.confidence)\n};\n\nreturn [{\n  json: {\n    valid: errors.length === 0,\n    validation_errors: errors,\n    validation_warnings: warnings,\n    decision: normalizedDecision,\n    validation_meta: {\n      allowed_actions: allowedActions,\n      current_stage: state.stage || null,\n      latest_user_message: latestUserMessage\n    }\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1520,
+                                       352
+                                   ],
+                      "id":  "4cf83721-69b5-46b9-98f8-189b67b9ec70",
+                      "name":  "validate_business_rules"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "be99c7a6-a25f-4679-bb2e-183c41479248",
+                                                                                   "leftValue":  "={{$json.valid === true}}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1728,
+                                       352
+                                   ],
+                      "id":  "5786748f-74ec-4b5b-8b11-57216df935a2",
+                      "name":  "If"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const validation = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst allowed = prepared.allowed_actions || [];\nconst state = context.state || {};\nconst conversation = context.conversation || {};\nconst text = String(conversation.latest_user_message || \u0027\u0027).toLowerCase();\n\nfunction normalize(value) {\n  return String(value || \u0027\u0027)\n    .toLowerCase()\n    .normalize(\u0027NFD\u0027)\n    .replace(/[\\u0300-\\u036f]/g, \u0027\u0027)\n    .trim();\n}\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) return false;\n  if (Array.isArray(value) \u0026\u0026 value.length === 0) return false;\n  return true;\n}\n\nfunction looksLikeAddress(rawText) {\n  const t = normalize(rawText);\n  if (t.length \u003c 8) return false;\n\n  const hasNumber = /\\d{2,6}/.test(t);\n  const words = [\n    \u0027calle\u0027,\n    \u0027avenida\u0027,\n    \u0027av\u0027,\n    \u0027pasaje\u0027,\n    \u0027camino\u0027,\n    \u0027condominio\u0027,\n    \u0027depto\u0027,\n    \u0027departamento\u0027,\n    \u0027casa\u0027,\n    \u0027block\u0027,\n    \u0027torre\u0027,\n    \u0027villa\u0027,\n    \u0027pje\u0027,\n    \u0027edificio\u0027,\n    \u0027porton\u0027,\n    \u0027portón\u0027\n  ];\n\n  return hasNumber || words.some(w =\u003e t.includes(normalize(w)));\n}\n\nfunction getAvailabilityConfig(rawText) {\n  const t = normalize(rawText);\n\n  if (\n    t.includes(\u0027proxima semana\u0027) ||\n    t.includes(\u0027siguiente semana\u0027) ||\n    t.includes(\u0027la otra semana\u0027) ||\n    t.includes(\u0027otra semana\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_week\u0027,\n      availability_label: \u0027la próxima semana\u0027,\n      days_ahead: 7,\n      start_offset_days: 7,\n      max_slots: 5\n    };\n  }\n\n  if (\n    t.includes(\u0027mas adelante\u0027) ||\n    t.includes(\u0027mas horarios\u0027) ||\n    t.includes(\u0027otros horarios\u0027) ||\n    t.includes(\u0027otros dias\u0027) ||\n    t.includes(\u0027otras semanas\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_14_days\u0027,\n      availability_label: \u0027las próximas dos semanas\u0027,\n      days_ahead: 14,\n      start_offset_days: 0,\n      max_slots: 6\n    };\n  }\n\n  if (\n    t.includes(\u0027este mes\u0027) ||\n    t.includes(\u0027durante el mes\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_30_days\u0027,\n      availability_label: \u0027las próximas semanas\u0027,\n      days_ahead: 30,\n      start_offset_days: 0,\n      max_slots: 8\n    };\n  }\n\n  return {\n    availability_window: \u0027this_week\u0027,\n    availability_label: \u0027los próximos días\u0027,\n    days_ahead: 7,\n    start_offset_days: 0,\n    max_slots: 3\n  };\n}\n\nconst normalizedText = normalize(text);\n\nconst asksAvailability =\n  normalizedText.includes(\u0027horario\u0027) ||\n  normalizedText.includes(\u0027hora disponible\u0027) ||\n  normalizedText.includes(\u0027disponible\u0027) ||\n  normalizedText.includes(\u0027disponibilidad\u0027) ||\n  normalizedText.includes(\u0027fecha\u0027) ||\n  normalizedText.includes(\u0027agenda\u0027) ||\n  normalizedText.includes(\u0027agendar\u0027) ||\n  normalizedText.includes(\u0027proxima semana\u0027) ||\n  normalizedText.includes(\u0027mas horarios\u0027) ||\n  normalizedText.includes(\u0027otros dias\u0027);\n\nconst wantsCancel =\n  normalizedText.includes(\u0027cancelar\u0027) ||\n  normalizedText.includes(\u0027anular\u0027) ||\n  normalizedText.includes(\u0027cancela\u0027) ||\n  normalizedText.includes(\u0027no podre asistir\u0027) ||\n  normalizedText.includes(\u0027no puedo asistir\u0027);\n\nconst wantsReschedule =\n  normalizedText.includes(\u0027reagendar\u0027) ||\n  normalizedText.includes(\u0027reprogramar\u0027) ||\n  normalizedText.includes(\u0027cambiar la hora\u0027) ||\n  normalizedText.includes(\u0027cambiar el horario\u0027) ||\n  normalizedText.includes(\u0027otra hora\u0027) ||\n  normalizedText.includes(\u0027otro dia\u0027) ||\n  normalizedText.includes(\u0027no me sirve\u0027);\n\nconst waitingAddress =\n  state.stage === \u0027collecting_address\u0027 ||\n  state.next_goal === \u0027collect_address\u0027 ||\n  state.last_bot_action === \u0027collect_address\u0027;\n\nconst hasBookingBasics =\n  !!state.service_interest \u0026\u0026\n  !!state.vehicle_type \u0026\u0026\n  !!state.district;\n\nconst missingFields =\n  Array.isArray(state.missing_fields)\n    ? state.missing_fields\n    : Array.isArray(context.context_hints?.priority_missing_fields)\n      ? context.context_hints.priority_missing_fields\n      : [];\n\nlet decision = null;\n\nif (\n  validation.validation_errors?.includes(\u0027confirm_booking_without_address\u0027) \u0026\u0026\n  allowed.includes(\u0027collect_address\u0027)\n) {\n  decision = {\n    action: \u0027collect_address\u0027,\n    reason: \u0027Fallback seguro: el usuario confirmó horario, pero falta dirección exacta antes de reservar.\u0027,\n    message: \u0027Perfecto. Antes de confirmar la reserva, ¿me puedes enviar la dirección exacta donde sería el servicio?\u0027,\n    state_update: {\n      stage: \u0027collecting_address\u0027,\n      next_goal: \u0027collect_address\u0027,\n      intent_last: \u0027booking_confirmed_address_missing\u0027,\n      last_bot_action: \u0027collect_address\u0027,\n      missing_fields: [\u0027address\u0027]\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 waitingAddress \u0026\u0026 looksLikeAddress(text) \u0026\u0026 allowed.includes(\u0027confirm_address\u0027)) {\n  decision = {\n    action: \u0027confirm_address\u0027,\n    reason: \u0027Fallback seguro: el usuario entregó una dirección mientras el bot estaba esperando dirección.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027address_confirmation\u0027,\n      next_goal: \u0027validate_address\u0027,\n      intent_last: \u0027address_provided\u0027,\n      service_address: conversation.latest_user_message,\n      address: conversation.latest_user_message,\n      address_reference: conversation.latest_user_message,\n      address_confirmed: false,\n      last_bot_action: \u0027confirm_address_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 wantsCancel \u0026\u0026 allowed.includes(\u0027cancel_booking\u0027)) {\n  decision = {\n    action: \u0027cancel_booking\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió cancelar una reserva.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027cancelling\u0027,\n      next_goal: \u0027cancel_active_booking\u0027,\n      intent_last: \u0027cancel_booking_requested\u0027,\n      last_bot_action: \u0027cancel_booking_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 wantsReschedule \u0026\u0026 allowed.includes(\u0027reschedule_booking\u0027)) {\n  decision = {\n    action: \u0027reschedule_booking\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió cambiar día u hora de su reserva.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027reschedule\u0027,\n      next_goal: \u0027collect_new_slot\u0027,\n      intent_last: \u0027reschedule_booking_requested\u0027,\n      last_bot_action: \u0027reschedule_booking_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 asksAvailability \u0026\u0026 hasBookingBasics \u0026\u0026 allowed.includes(\u0027offer_available_slots\u0027)) {\n  const availability = getAvailabilityConfig(text);\n\n  decision = {\n    action: \u0027offer_available_slots\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió disponibilidad y existen los datos mínimos para consultar horarios reales.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027booking_selection\u0027,\n      next_goal: \u0027send_available_slots\u0027,\n      intent_last: \u0027availability_requested\u0027,\n      ...availability,\n      last_bot_action: \u0027offer_available_slots\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 missingFields.length \u003e 0 \u0026\u0026 allowed.includes(\u0027ask_missing_data\u0027)) {\n  const firstMissing = missingFields[0];\n\n  let message = \u0027Perfecto. Para avanzar, necesito un dato más. ¿Me lo puedes indicar?\u0027;\n  let nextGoal = \u0027collect_missing_data\u0027;\n\n  if (firstMissing === \u0027district\u0027) {\n    message = \u0027Perfecto. Para ayudarte bien, ¿en qué comuna estás?\u0027;\n    nextGoal = \u0027collect_district\u0027;\n  }\n\n  if (firstMissing === \u0027vehicle_type\u0027) {\n    message = \u0027Perfecto. Para cotizarte bien, ¿qué tipo de vehículo tienes?\u0027;\n    nextGoal = \u0027collect_vehicle_type\u0027;\n  }\n\n  if (firstMissing === \u0027service_interest\u0027) {\n    message = \u0027Claro. ¿Qué servicio te interesa exactamente?\u0027;\n    nextGoal = \u0027collect_service_interest\u0027;\n  }\n\n  if (firstMissing === \u0027address\u0027) {\n    message = \u0027Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\u0027;\n    nextGoal = \u0027collect_address\u0027;\n  }\n\n  decision = {\n    action: \u0027ask_missing_data\u0027,\n    reason: \u0027Fallback seguro orientado a recopilar el siguiente dato crítico.\u0027,\n    message,\n    state_update: {\n      stage: state.stage || \u0027new_lead\u0027,\n      next_goal: nextGoal,\n      intent_last: state.intent_last || null,\n      last_bot_action: \u0027ask_missing_data\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 allowed.includes(\u0027answer_question\u0027)) {\n  decision = {\n    action: \u0027answer_question\u0027,\n    reason: \u0027Fallback conservador para mantener conversación segura.\u0027,\n    message: \u0027Gracias por tu mensaje. ¿Me puedes dar un poco más de detalle para responderte bien?\u0027,\n    state_update: {\n      stage: state.stage || null,\n      next_goal: state.next_goal || null,\n      intent_last: state.intent_last || null,\n      last_bot_action: \u0027answer_question\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 allowed.includes(\u0027handoff_human\u0027)) {\n  decision = {\n    action: \u0027handoff_human\u0027,\n    reason: \u0027Fallback a humano por imposibilidad de validar una decisión segura.\u0027,\n    message: \u0027Gracias por escribir. Voy a derivar tu caso para que te ayuden directamente.\u0027,\n    state_update: {\n      stage: \u0027human_handoff\u0027,\n      next_goal: \u0027human_review\u0027,\n      intent_last: \u0027handoff_required\u0027,\n      human_handoff: true,\n      last_bot_action: \u0027handoff_human\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision) {\n  decision = {\n    action: allowed[0] || \u0027handoff_human\u0027,\n    reason: \u0027Fallback final usando primera acción permitida.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      last_bot_action: allowed[0] || \u0027handoff_human\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nreturn [{\n  json: {\n    valid: true,\n    fallback_used: true,\n    original_validation_errors: validation.validation_errors || [],\n    original_validation_warnings: validation.validation_warnings || [],\n    decision\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1936,
+                                       400
+                                   ],
+                      "id":  "d280d3a2-d3b0-4c5a-afe7-bddaabab652e",
+                      "name":  "build_fallback_decision"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const cp = $json.context_packet || {};\n\nfunction trimString(value, max = 500) {\n  if (typeof value !== \u0027string\u0027) return value;\n  return value.length \u003e max ? value.slice(0, max) : value;\n}\n\nfunction uniqueStrings(arr) {\n  if (!Array.isArray(arr)) return [];\n  return [...new Set(arr.filter(v =\u003e typeof v === \u0027string\u0027 \u0026\u0026 v.trim()))];\n}\n\nconst sanitized = {\n  lead: {\n    ...(cp.lead || {}),\n    id: cp.lead?.id || cp.state?.lead_id || null,\n    phone: cp.lead?.phone || cp.lead?.external_id || null,\n    channel: cp.lead?.channel || \u0027whatsapp\u0027\n  },\n\n  state: {\n    ...(cp.state || {}),\n    lead_id: cp.state?.lead_id || cp.lead?.id || null,\n    missing_fields: uniqueStrings(cp.state?.missing_fields)\n  },\n\n  conversation: {\n    latest_user_message: trimString(cp.conversation?.latest_user_message || \u0027\u0027, 500),\n    short_summary: trimString(cp.conversation?.short_summary || \u0027\u0027, 800),\n    last_message_id: cp.conversation?.last_message_id || null,\n    message_type: cp.conversation?.message_type || \u0027text\u0027\n  },\n\n  business: cp.business || {},\n  rule_context: cp.rule_context || {},\n  context_hints: cp.context_hints || {},\n  allowed_actions: uniqueStrings(cp.allowed_actions)\n};\n\nif (!sanitized.lead.id) {\n  throw new Error(\u0027sanitize_context_packet missing lead.id\u0027);\n}\n\nif (!sanitized.lead.phone) {\n  throw new Error(\u0027sanitize_context_packet missing lead.phone\u0027);\n}\n\nreturn [\n  {\n    json: {\n      context_packet: sanitized\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "ddc283a5-cefc-4428-b70c-d4f0ff952d8a",
+                      "name":  "sanitize_context_packet"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const parsed = $json.parsed_output;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst allowedActions = prepared.allowed_actions || [];\n\nconst errors = [];\n\nfunction isNonEmptyString(v) {\n  return typeof v === \u0027string\u0027 \u0026\u0026 v.trim().length \u003e 0;\n}\n\nfunction isObject(v) {\n  return v \u0026\u0026 typeof v === \u0027object\u0027 \u0026\u0026 !Array.isArray(v);\n}\n\nif (!$json.parse_ok || !parsed) {\n  errors.push(\u0027invalid_or_unparseable_output\u0027);\n}\n\nif (!isObject(parsed)) {\n  errors.push(\u0027output_not_object\u0027);\n}\n\nif (parsed) {\n  if (!isNonEmptyString(parsed.action)) errors.push(\u0027missing_action\u0027);\n  else if (!allowedActions.includes(parsed.action)) errors.push(\u0027action_not_allowed\u0027);\n\n  if (!isNonEmptyString(parsed.reason)) errors.push(\u0027missing_reason\u0027);\n\n    const actionsThatCanBuildMessageLater = [\n      \u0027send_quote\u0027,\n      \u0027offer_available_slots\u0027,\n      \u0027confirm_booking\u0027,\n      \u0027send_service_menu\u0027,\n      \u0027recommend_service\u0027\n    ];\n    \n    if (\n      !isNonEmptyString(parsed.message) \u0026\u0026\n      !actionsThatCanBuildMessageLater.includes(parsed.action)\n    ) {\n      errors.push(\u0027missing_message\u0027);\n    }\n  if (!isObject(parsed.state_update)) {\n    errors.push(\u0027missing_state_update\u0027);\n  } else if (!Array.isArray(parsed.state_update.missing_fields)) {\n    errors.push(\u0027missing_fields_must_be_array\u0027);\n  }\n\n  if (typeof parsed.confidence !== \u0027number\u0027 || Number.isNaN(parsed.confidence)) {\n    errors.push(\u0027invalid_confidence\u0027);\n  } else if (parsed.confidence \u003c 0 || parsed.confidence \u003e 1) {\n    errors.push(\u0027confidence_out_of_range\u0027);\n  }\n}\n\nreturn [{\n  json: {\n    parsed_output: parsed,\n    schema_valid: errors.length === 0,\n    schema_errors: errors,\n    raw_response: $json.raw_response,\n    raw_content: $json.raw_content,\n    parse_source: $json.parse_source\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1312,
+                                       352
+                                   ],
+                      "id":  "d94a8ea0-6956-4b3c-9314-e724d512815c",
+                      "name":  "validate_schema_and_required_fields"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const finalNode = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst parsedNode = $(\u0027parse_or_extract_structured_output\u0027).first().json;\nconst httpNode = $(\u0027HTTP Request\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst lead = context.lead || {};\nconst state = context.state || {};\nconst conversation = context.conversation || {};\n\nconst usage = httpNode.usage || {};\n\nconst auditLog = {\n  flow_name: \u0027llm_decision\u0027,\n  lead_id: lead.id || lead.lead_id || lead.phone || lead.wa_id || null,\n  channel: lead.channel || null,\n  stage_before: state.stage || null,\n  latest_user_message: conversation.latest_user_message || null,\n  allowed_actions: prepared.allowed_actions || [],\n  decision: finalNode.decision || null,\n  meta: {\n    fallback_used: finalNode.meta?.fallback_used || false,\n    validation_errors: finalNode.meta?.validation_errors || [],\n    validation_warnings: finalNode.meta?.validation_warnings || []\n  },\n  llm: {\n    model: prepared.model_config?.model || null,\n    parse_source: parsedNode.parse_source || null,\n    raw_content: parsedNode.raw_content || null,\n    prompt_tokens: usage.prompt_tokens || 0,\n    completion_tokens: usage.completion_tokens || 0,\n    total_tokens: usage.total_tokens || 0\n  },\n  created_at: new Date().toISOString()\n};\n\nreturn [{ json: auditLog }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2160,
+                                       192
+                                   ],
+                      "id":  "4b85e41b-1c73-478e-a523-441c0430ce21",
+                      "name":  "build_audit_log_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  created_at\n)\nVALUES (\n  \u0027{{ ($json.flow_name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.channel || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.stage_before || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.latest_user_message || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  \u0027{{ JSON.stringify($json.allowed_actions || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.decision || null).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.meta || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.llm || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  \u0027{{ $json.created_at || new Date().toISOString() }}\u0027::timestamptz\n)\nRETURNING id;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       2336,
+                                       80
+                                   ],
+                      "id":  "93ba03dd-5588-4dc0-bbe9-4063550670ef",
+                      "name":  "save_audit_log",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const finalDecisionNode = $(\u0027finalize_decision\u0027).first().json;\nconst preparedNode = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst auditResult = $json;\n\nconst decision = finalDecisionNode.decision || null;\nconst contextPacket = preparedNode.context_packet || null;\n\nif (!decision) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nif (!contextPacket) {\n  throw new Error(\u0027Missing context_packet in prepare_context_and_guardrail\u0027);\n}\n\nreturn [\n  {\n    json: {\n      decision,\n      context_packet: contextPacket,\n      meta: {\n        ...(finalDecisionNode.meta || {}),\n        audit_saved: auditResult.success === true,\n        source: \u0027llm_decision\u0027\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2544,
+                                       144
+                                   ],
+                      "id":  "6e041a6f-dfca-4bed-b65a-e252c425097b",
+                      "name":  "save_audit_log1"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const finalNode = $(\u0027finalize_decision\u0027).first().json;\nconst preparedNode = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst auditResult = $json;\n\nconst decision = finalNode.decision || null;\nconst contextPacket = preparedNode.context_packet || null;\n\nif (!decision) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nif (!contextPacket) {\n  throw new Error(\u0027Missing context_packet in prepare_context_and_guardrail\u0027);\n}\n\nif (!contextPacket.lead?.id) {\n  throw new Error(\u0027Missing lead.id in context_packet before returning to parent\u0027);\n}\n\nif (!contextPacket.lead?.phone) {\n  throw new Error(\u0027Missing lead.phone in context_packet before returning to parent\u0027);\n}\n\nreturn [\n  {\n    json: {\n      decision,\n      context_packet: contextPacket,\n      meta: {\n        ...(finalNode.meta || {}),\n        source: \u0027llm_decision\u0027,\n        audit_saved: auditResult.success === true\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2752,
+                                       144
+                                   ],
+                      "id":  "8e0809ad-028a-4a22-a5c2-1467b721c3ef",
+                      "name":  "return_decision_to_parent"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst contextPacket = prepared.context_packet || {};\nconst decision = input.decision || null;\n\nif (!decision || typeof decision !== \u0027object\u0027) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nfunction cleanStateUpdate(update) {\n  const cleaned = {};\n\n  for (const [key, value] of Object.entries(update || {})) {\n    if (value === undefined) continue;\n    if (value === null) continue;\n    if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) continue;\n\n    cleaned[key] = value;\n  }\n\n  if (!Array.isArray(cleaned.missing_fields)) {\n    cleaned.missing_fields = [];\n  }\n\n  if (!cleaned.last_bot_action) {\n    cleaned.last_bot_action = decision.action;\n  }\n\n  return cleaned;\n}\n\nconst finalDecision = {\n  action: decision.action,\n  reason: String(decision.reason || \u0027\u0027).trim(),\n  message: typeof decision.message === \u0027string\u0027 ? decision.message.trim() : \u0027\u0027,\n  state_update: cleanStateUpdate(decision.state_update || {}),\n  confidence: Number.isFinite(Number(decision.confidence))\n    ? Number(decision.confidence)\n    : 0.2\n};\n\nreturn [\n  {\n    json: {\n      valid: true,\n      decision: finalDecision,\n      context_packet: contextPacket,\n      meta: {\n        source: \u0027llm_decision\u0027,\n        fallback_used: input.fallback_used === true,\n        validation_errors:\n          input.validation_errors ||\n          input.original_validation_errors ||\n          [],\n        validation_warnings:\n          input.validation_warnings ||\n          input.original_validation_warnings ||\n          []\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1920,
+                                       176
+                                   ],
+                      "id":  "d008f5a0-000c-4551-914b-06c2452a6114",
+                      "name":  "finalize_decision"
+                  }
+              ],
+    "connections":  {
+                        "IN context_builder":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "sanitize_context_packet",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "prepare_context_and_guardrail":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "HTTP Request",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "HTTP Request":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "parse_or_extract_structured_output",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "parse_or_extract_structured_output":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "validate_schema_and_required_fields",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                        "validate_business_rules":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "If",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "If":  {
+                                   "main":  [
+                                                [
+                                                    {
+                                                        "node":  "finalize_decision",
+                                                        "type":  "main",
+                                                        "index":  0
+                                                    }
+                                                ],
+                                                [
+                                                    {
+                                                        "node":  "build_fallback_decision",
+                                                        "type":  "main",
+                                                        "index":  0
+                                                    }
+                                                ]
+                                            ]
+                               },
+                        "sanitize_context_packet":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "prepare_context_and_guardrail",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "validate_schema_and_required_fields":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "validate_business_rules",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                },
+                        "build_fallback_decision":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "finalize_decision",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "build_audit_log_payload":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "save_audit_log",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "save_audit_log":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "save_audit_log1",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "save_audit_log1":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "return_decision_to_parent",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "finalize_decision":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "build_audit_log_payload",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+                    "IN context_builder":  [
+                                               {
+                                                   "json":  {
+                                                                "context_packet":  {
+                                                                                       "lead":  {
+                                                                                                    "id":  "76329124-66ae-497b-a2a0-e45250ae56cf",
+                                                                                                    "phone":  "56949186386",
+                                                                                                    "channel":  "whatsapp",
+                                                                                                    "name":  "Agustín"
+                                                                                                },
+                                                                                       "state":  {
+                                                                                                     "stage":  "collecting_address",
+                                                                                                     "human_handoff":  false,
+                                                                                                     "service_interest":  "lavado_premium",
+                                                                                                     "vehicle_type":  "SUV",
+                                                                                                     "district":  "Huechuraba",
+                                                                                                     "booking_date":  "2026-05-03",
+                                                                                                     "booking_time":  "09:00",
+                                                                                                     "slot_id":  "2026-05-03_09:00",
+                                                                                                     "duration_minutes":  120,
+                                                                                                     "missing_fields":  [
+                                                                                                                            "address"
+                                                                                                                        ],
+                                                                                                     "last_bot_action":  "collect_address",
+                                                                                                     "next_goal":  "collect_address"
+                                                                                                 },
+                                                                                       "conversation":  {
+                                                                                                            "last_message_id":  "test_confirm_address_001",
+                                                                                                            "latest_user_message":  "Av. Pedro Fontova 7450, Huechuraba, casa con portón negro",
+                                                                                                            "message_type":  "text",
+                                                                                                            "short_summary":  ""
+                                                                                                        },
+                                                                                       "business":  {
+                                                                                                        "currency":  "CLP"
+                                                                                                    },
+                                                                                       "rule_context":  {
+
+                                                                                                        },
+                                                                                       "context_hints":  {
+                                                                                                             "has_missing_fields":  true,
+                                                                                                             "priority_missing_fields":  [
+                                                                                                                                             "address"
+                                                                                                                                         ]
+                                                                                                         },
+                                                                                       "allowed_actions":  [
+                                                                                                               "confirm_address",
+                                                                                                               "collect_address",
+                                                                                                               "confirm_booking",
+                                                                                                               "offer_available_slots",
+                                                                                                               "answer_question",
+                                                                                                               "handoff_human"
+                                                                                                           ]
+                                                                                   }
+                                                            }
+                                               }
+                                           ]
+                },
+    "versionId":  "b0df719f-023d-43c4-9d6f-95724b8bea90",
+    "activeVersionId":  "b0df719f-023d-43c4-9d6f-95724b8bea90",
+    "versionCounter":  277,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-14T15:15:10.257Z",
+                       "createdAt":  "2026-04-14T15:15:10.257Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "Li3qmQHIKbjqWY15",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-01T18:11:35.425Z",
+                     "createdAt":  "2026-05-01T18:11:35.425Z",
+                     "id":  "kESwVa42vzrEr7Y3",
+                     "name":  "main"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-06T15:21:26.000Z",
+                          "createdAt":  "2026-05-06T15:21:19.650Z",
+                          "versionId":  "b0df719f-023d-43c4-9d6f-95724b8bea90",
+                          "workflowId":  "Li3qmQHIKbjqWY15",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "passthrough"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "IN context_builder",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\nconst contextPacket = input.context_packet;\n\nif (!contextPacket || typeof contextPacket !== \u0027object\u0027) {\n  throw new Error(\u0027context_packet missing or invalid\u0027);\n}\n\nconst allowedActions = Array.isArray(contextPacket.allowed_actions)\n  ? contextPacket.allowed_actions.filter(a =\u003e typeof a === \u0027string\u0027 \u0026\u0026 a.trim())\n  : [];\n\nif (!allowedActions.length) {\n  throw new Error(\u0027allowed_actions missing or empty\u0027);\n}\n\nconst developerPrompt = `\nEres la capa de decisión de un AI Closer comercial.\n\nTu única tarea es devolver UNA decisión estructurada y válida.\nNo eres un agente libre.\nNo ejecutas herramientas.\nNo inventas acciones.\nNo escribes texto fuera del JSON.\n\nReglas:\n- action debe pertenecer a allowed_actions\n- elige solo una action\n- no inventes acciones\n- no ejecutes herramientas\n- no inventes horarios disponibles\n- no inventes precios\n- no inventes reservas\n- state_update debe ser conservador y coherente\n- confidence debe ser un número entre 0 y 1\n- si el contexto es ambiguo, elige la opción más segura dentro de allowed_actions\n- no pidas más de un dato faltante por turno\n\nUso de acciones:\n- ask_missing_data: úsala cuando falte un dato crítico para avanzar. Pregunta solo un dato por turno.\n- send_quote: úsala cuando el usuario quiere precio y ya existen service_interest, vehicle_type y district.\n- answer_question: úsala cuando el usuario pregunta algo informativo sobre servicios, proceso, cobertura, duración, preparación, formas de pago, servicio a domicilio, requisitos de agua/luz, descuentos o qué incluye cada servicio.\n- answer_objection: úsala cuando el usuario objeta precio, confianza, tiempo, valor o conveniencia.\n- offer_booking: úsala cuando ya hay interés y corresponde invitar a agendar, pero el usuario todavía no pidió horarios concretos.\n- offer_available_slots: úsala cuando el usuario pide horarios, fechas, disponibilidad, próxima semana, más horarios, otros días u otros horarios. Esta acción NO debe inventar horarios. El mensaje puede ir vacío porque action_executor consultará disponibilidad real.\n- confirm_booking: úsala solo cuando el usuario ya eligió o confirmó un horario específico y existe dirección exacta o address_confirmed=true.\n- schedule_followup: úsala cuando corresponde programar un seguimiento posterior y existen followup_type y scheduled_for.\n- handoff_human: úsala cuando el caso requiere humano, reclamo, baja confianza, problema operativo o petición explícita de persona.\n\nServicios oficiales de Ahumada Detailing:\n- lavado_basico = Lavado básico\n- lavado_premium = Lavado premium\n- encerado_full = Encerado full\n\nRegla de FAQ comercial:\n- Si el usuario pregunta una FAQ simple y allowed_actions contiene answer_question, responde de forma breve, profesional y comercial.\n- Cierra siempre con una pregunta útil para avanzar.\n- No fuerces calificación si el usuario solo hizo una pregunta simple.\n- No inventes descuentos, disponibilidad ni precios.\n\nRegla crítica de cotización:\n- Si ya existen service_interest, vehicle_type y district, y el cliente acaba de entregar el último dato faltante, la acción correcta es send_quote.\n- No uses recommend_service si service_interest ya existe.\n- recommend_service solo se usa cuando el cliente pide ayuda para elegir o no tiene claro qué servicio tomar.\n- Si el cliente ya eligió un servicio, no lo recomiendes de nuevo.\n\nRegla crítica:\n- No existe \"lavado profundo\" como servicio oficial separado.\n- No existe \"lavado de mantención\" como nombre comercial oficial.\n- Si el usuario menciona \"lavado profundo\", interprétalo como interés por lavado_premium, porque busca una limpieza más detallada.\n- Si el usuario pregunta por servicios disponibles y allowed_actions contiene send_service_menu, usa send_service_menu.\n- No inventes un menú de servicios desde answer_question.\n\nAcciones comerciales adicionales:\n- cancel_booking: úsala cuando el cliente quiere cancelar una reserva existente.\n- reschedule_booking: úsala cuando el cliente quiere cambiar día u hora de una reserva.\n- collect_address: úsala cuando falta dirección exacta antes de confirmar servicio a domicilio.\n- confirm_address: úsala cuando el cliente entrega una dirección y estamos esperando validarla.\n- send_pre_service_instructions: úsala antes del servicio confirmado para preparar al cliente.\n- notify_on_the_way: úsala cuando corresponde avisar que el equipo va en camino.\n- request_review: úsala después de un servicio completado para pedir reseña.\n- request_referral: úsala después de una experiencia positiva para pedir referido.\n\nSi el usuario pide horarios, disponibilidad, agenda, otra semana, próxima semana, más opciones, otros días u otros horarios, y ya existen service_interest, vehicle_type y district, la acción correcta debe ser siempre \"offer_available_slots\".\n\nNo responder con \"answer_question\".\nNo decir \"te indico cómo coordinamos\".\nDebe consultar disponibilidad real usando offer_available_slots.\n\nMapeo:\n- \"esta semana\", \"estos días\" =\u003e availability_window = \"this_week\"\n- \"próxima semana\", \"siguiente semana\", \"la otra semana\" =\u003e availability_window = \"next_week\"\n- \"más adelante\", \"otras semanas\", \"más horarios\", \"otros días\" =\u003e availability_window = \"next_14_days\"\n- \"este mes\", \"durante el mes\" =\u003e availability_window = \"next_30_days\"\n\nDevuelve solo un JSON válido que cumpla exactamente el schema.\n\nReglas críticas de reserva:\n- Para Ahumada Detailing el servicio es a domicilio.\n- No confirmes una reserva si falta dirección exacta.\n- Si el usuario entrega una dirección y allowed_actions contiene confirm_address, la acción correcta es confirm_address.\n- Si el usuario pide cancelar, usa cancel_booking si está permitido.\n- Si el usuario pide cambiar día u hora, usa reschedule_booking si está permitido.\n- No uses confirm_booking solo porque el usuario dijo \"sí\"; primero debe existir booking_date, booking_time y dirección.\n\nRegla crítica de normalización:\n- No guardes vehicle_type si el usuario solo pregunta por un tipo de vehículo.\n- Si el usuario dice \"¿lavan motos?\", \"¿hacen furgones?\", \"¿atienden camionetas?\", eso es una consulta comercial, no una confirmación de vehículo.\n- En esos casos usa mentioned_vehicle_type, pero deja vehicle_type y confirmed_vehicle_type en null.\n- Solo confirma vehicle_type cuando el cliente habla de su propio vehículo, por ejemplo: \"tengo una SUV\", \"mi auto es sedán\", \"es una camioneta\", \"para mi furgón\".\n- vehicle_type debe representar un dato confirmado para cotizar o agendar.\n- Usa formato normalizado: SUV, Camioneta, Sedán, Hatchback, City car, Auto, Moto, Furgón.\n- Las comunas deben guardarse con formato legible, por ejemplo: Huechuraba, Las Condes, Ñuñoa. Nunca uses las_condes.\n\nRegla crítica de disponibilidad antes de dirección:\n- Si el usuario propone un horario manual, por ejemplo \"este jueves a las 9\", y availability_confirmed no es true, NO pidas dirección todavía.\n- En ese caso la acción correcta es offer_available_slots para revisar disponibilidad real del horario solicitado.\n- Solo usa collect_address cuando booking_date y booking_time existen Y availability_confirmed = true.\n- Si el horario viene desde booking_options ofrecidas por el sistema, también debe pasar por validación real antes de confirmar reserva.\n`.trim();\n\nconst userPrompt = `\nAnaliza este context_packet y devuelve la mejor siguiente acción comercial.\n\nUsa SOLO acciones dentro de allowed_actions.\nElige SOLO UNA acción.\nNo inventes datos.\nNo prometas cosas no respaldadas por el contexto.\n\nContext packet:\n${JSON.stringify(contextPacket, null, 2)}\n`.trim();\n\nconst decisionSchema = {\n  name: \u0027llm_decision_output\u0027,\n  strict: true,\n  schema: {\n    type: \u0027object\u0027,\n    additionalProperties: false,\n    properties: {\n      action: {\n        type: \u0027string\u0027,\n        enum: allowedActions\n      },\n      reason: {\n        type: \u0027string\u0027\n      },\n      message: {\n        type: \u0027string\u0027\n      },\n      state_update: {\n        type: \u0027object\u0027,\n        additionalProperties: false,\n        properties: {\n          stage: { type: [\u0027string\u0027, \u0027null\u0027] },\n          next_goal: { type: [\u0027string\u0027, \u0027null\u0027] },\n          intent_last: { type: [\u0027string\u0027, \u0027null\u0027] },\n\n          service_interest: { type: [\u0027string\u0027, \u0027null\u0027] },\n          service_scope: { type: [\u0027string\u0027, \u0027null\u0027] },\n          vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\n          mentioned_vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\nconfirmed_vehicle_type: { type: [\u0027string\u0027, \u0027null\u0027] },\nmentioned_district: { type: [\u0027string\u0027, \u0027null\u0027] },\nconfirmed_district: { type: [\u0027string\u0027, \u0027null\u0027] },\n          district: { type: [\u0027string\u0027, \u0027null\u0027] },\n          service_address: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address_reference: { type: [\u0027string\u0027, \u0027null\u0027] },\n          address_confirmed: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n\n          booking_date: { type: [\u0027string\u0027, \u0027null\u0027] },\n          booking_time: { type: [\u0027string\u0027, \u0027null\u0027] },\n          slot_id: { type: [\u0027string\u0027, \u0027null\u0027] },\n          availability_confirmed: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n          availability_window: {\n            type: [\"string\", \"null\"],\n            enum: [\"this_week\", \"next_week\", \"next_14_days\", \"next_30_days\", null]\n          },\n          \n          availability_label: { type: [\"string\", \"null\"] },\n          \n          days_ahead: { type: [\"number\", \"null\"] },\n          \n          start_offset_days: { type: [\"number\", \"null\"] },\n          \n          max_slots: { type: [\"number\", \"null\"] },\n          followup_type: { type: [\u0027string\u0027, \u0027null\u0027] },\n          scheduled_for: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          cancellation_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          reschedule_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          handoff_reason: { type: [\u0027string\u0027, \u0027null\u0027] },\n          handoff_summary: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          eta_minutes: { type: [\u0027number\u0027, \u0027null\u0027] },\n          review_url: { type: [\u0027string\u0027, \u0027null\u0027] },\n          referral_message: { type: [\u0027string\u0027, \u0027null\u0027] },\n          \n          human_handoff: { type: [\u0027boolean\u0027, \u0027null\u0027] },\n\n          last_bot_action: { type: [\u0027string\u0027, \u0027null\u0027] },\n\n          missing_fields: {\n            type: \u0027array\u0027,\n            items: { type: \u0027string\u0027 }\n          }\n        },\n        required: [\n          \"stage\",\n          \"next_goal\",\n          \"intent_last\",\n          \"service_interest\",\n          \"service_scope\",\n          \"vehicle_type\",\n          \"district\",\n          \"mentioned_vehicle_type\",\n          \"confirmed_vehicle_type\",\n          \"mentioned_district\",\n          \"confirmed_district\",\n          \"service_address\",\n          \"address\",\n          \"address_reference\",\n          \"address_confirmed\",\n          \"booking_date\",\n          \"booking_time\",\n          \"slot_id\",\n          \"availability_confirmed\",\n          \"availability_window\",\n          \"availability_label\",\n          \"days_ahead\",\n          \"start_offset_days\",\n          \"max_slots\",\n          \"followup_type\",\n          \"scheduled_for\",\n          \"cancellation_reason\",\n          \"reschedule_reason\",\n          \"handoff_reason\",\n          \"handoff_summary\",\n          \"eta_minutes\",\n          \"review_url\",\n          \"referral_message\",\n          \"human_handoff\",\n          \"last_bot_action\",\n          \"missing_fields\"\n        ]\n      },\n      confidence: {\n        type: \u0027number\u0027\n      }\n    },\n    required: [\n      \u0027action\u0027,\n      \u0027reason\u0027,\n      \u0027message\u0027,\n      \u0027state_update\u0027,\n      \u0027confidence\u0027\n    ]\n  }\n};\n\nreturn [{\n  json: {\n    context_packet: contextPacket,\n    allowed_actions: allowedActions,\n    developer_prompt: developerPrompt,\n    user_prompt: userPrompt,\n    response_format: {\n      type: \u0027json_schema\u0027,\n      json_schema: decisionSchema\n    },\n    model_config: {\n      model: \u0027gpt-5.4-mini\u0027,\n      temperature: 0.1\n    }\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "d4ca8c51-734e-4729-8146-d591bf41e7e1",
+                                            "name":  "prepare_context_and_guardrail"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "https://api.openai.com/v1/chat/completions",
+                                                               "authentication":  "predefinedCredentialType",
+                                                               "nodeCredentialType":  "openAiApi",
+                                                               "sendHeaders":  true,
+                                                               "specifyHeaders":  "json",
+                                                               "jsonHeaders":  "={\n  \"Content-Type\": \"application/json\"\n}",
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={{\n{\n  model: $json.model_config.model,\n  messages: [\n    {\n      role: \"developer\",\n      content: $json.developer_prompt\n    },\n    {\n      role: \"user\",\n      content: $json.user_prompt\n    }\n  ],\n  temperature: $json.model_config.temperature,\n  response_format: $json.response_format\n}\n}}",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.4,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "2a57fd15-ae0c-4340-bb64-20c7db627791",
+                                            "name":  "HTTP Request",
+                                            "credentials":  {
+                                                                "openAiApi":  {
+                                                                                  "id":  "SmQPupAVe2an24Gv",
+                                                                                  "name":  "OpenAI account"
+                                                                              }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const raw = $json;\n\nfunction tryParseJSON(str) {\n  try {\n    return JSON.parse(str);\n  } catch {\n    return null;\n  }\n}\n\nfunction cleanText(str) {\n  if (typeof str !== \u0027string\u0027) return \u0027\u0027;\n  return str\n    .trim()\n    .replace(/^```json\\s*/i, \u0027\u0027)\n    .replace(/^```\\s*/i, \u0027\u0027)\n    .replace(/\\s*```$/i, \u0027\u0027)\n    .trim();\n}\n\nfunction extractJsonSubstring(str) {\n  if (typeof str !== \u0027string\u0027) return null;\n  const start = str.indexOf(\u0027{\u0027);\n  const end = str.lastIndexOf(\u0027}\u0027);\n  if (start === -1 || end === -1 || end \u003c= start) return null;\n  return str.slice(start, end + 1);\n}\n\nfunction extractCandidate(obj) {\n  if (!obj) return { parsed: null, source: \u0027empty\u0027 };\n\n  if (typeof obj === \u0027object\u0027 \u0026\u0026 obj.action \u0026\u0026 obj.state_update) {\n    return { parsed: obj, source: \u0027root_object\u0027 };\n  }\n\n  const content = obj?.choices?.[0]?.message?.content;\n\n  if (typeof content === \u0027string\u0027) {\n    const cleaned = cleanText(content);\n    return {\n      parsed: tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned)),\n      source: \u0027choices_message_content\u0027,\n      raw_content: content\n    };\n  }\n\n  if (typeof obj.output_text === \u0027string\u0027) {\n    const cleaned = cleanText(obj.output_text);\n    return {\n      parsed: tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned)),\n      source: \u0027output_text\u0027,\n      raw_content: obj.output_text\n    };\n  }\n\n  if (Array.isArray(content)) {\n    for (const part of content) {\n      if (typeof part?.text === \u0027string\u0027) {\n        const cleaned = cleanText(part.text);\n        const parsed = tryParseJSON(cleaned) || tryParseJSON(extractJsonSubstring(cleaned));\n        if (parsed) {\n          return {\n            parsed,\n            source: \u0027content_array_text\u0027,\n            raw_content: part.text\n          };\n        }\n      }\n    }\n  }\n\n  return { parsed: null, source: \u0027not_found\u0027 };\n}\n\nconst result = extractCandidate(raw);\n\nreturn [{\n  json: {\n    raw_response: raw,\n    raw_content: result.raw_content || null,\n    parsed_output: result.parsed,\n    parse_ok: !!result.parsed,\n    parse_source: result.source\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1104,
+                                                             352
+                                                         ],
+                                            "id":  "057bae8a-00b5-439a-bd1a-3cb79b59ad2e",
+                                            "name":  "parse_or_extract_structured_output"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const parsed = $json.parsed_output;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst allowedActions = prepared.allowed_actions || [];\n\nconst state = context.state || {};\nconst ruleContext = context.rule_context || {};\nconst conversation = context.conversation || {};\n\nconst errors = [];\nconst warnings = [];\n\nconst latestUserMessage = conversation.latest_user_message || \u0027\u0027;\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) return false;\n  if (Array.isArray(value) \u0026\u0026 value.length === 0) return false;\n  return true;\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (isFilled(value)) return value;\n  }\n  return null;\n}\n\nfunction compactObject(obj) {\n  const out = {};\n\n  for (const [key, value] of Object.entries(obj || {})) {\n    if (value === undefined) continue;\n    if (value === null) continue;\n    if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) continue;\n    out[key] = value;\n  }\n\n  return out;\n}\n\nif (!$json.schema_valid) {\n  return [{\n    json: {\n      valid: false,\n      validation_errors: $json.schema_errors || [\u0027schema_invalid\u0027],\n      validation_warnings: [],\n      decision: null,\n      validation_meta: {\n        allowed_actions: allowedActions,\n        current_stage: state.stage || null,\n        latest_user_message: latestUserMessage\n      }\n    }\n  }];\n}\n\nif (!parsed || typeof parsed !== \u0027object\u0027) {\n  return [{\n    json: {\n      valid: false,\n      validation_errors: [\u0027parsed_output_missing\u0027],\n      validation_warnings: [],\n      decision: null,\n      validation_meta: {\n        allowed_actions: allowedActions,\n        current_stage: state.stage || null,\n        latest_user_message: latestUserMessage\n      }\n    }\n  }];\n}\n\nconst update = parsed.state_update || {};\n\nconst serviceInterest = firstValue(update.service_interest, state.service_interest);\nconst vehicleType = firstValue(update.vehicle_type, state.vehicle_type);\nconst district = firstValue(update.district, state.district);\n\nconst bookingDate = firstValue(\n  update.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  update.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  update.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate \u0026\u0026 bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nconst serviceAddress = firstValue(\n  update.service_address,\n  update.address,\n  state.service_address,\n  state.address,\n  ruleContext.address_candidate?.address\n);\n\nconst addressReference = firstValue(\n  update.address_reference,\n  state.address_reference,\n  ruleContext.address_candidate?.address_reference\n);\n\nconst addressConfirmed =\n  update.address_confirmed === true ||\n  state.address_confirmed === true;\n\nconst hasAddress =\n  isFilled(serviceAddress) ||\n  isFilled(addressReference) ||\n  addressConfirmed;\n\nconst hasBookingContext =\n  isFilled(state.pending_booking_slot) ||\n  isFilled(state.booking_slot) ||\n  isFilled(ruleContext.booking_candidate) ||\n  isFilled(ruleContext.calendar_hold) ||\n  (isFilled(bookingDate) \u0026\u0026 isFilled(bookingTime)) ||\n  isFilled(slotId);\n\nif (!allowedActions.includes(parsed.action)) {\n  errors.push(`action_not_allowed:${parsed.action}`);\n}\n\nif (parsed.action === \u0027offer_available_slots\u0027) {\n  if (!serviceInterest) errors.push(\u0027offer_available_slots_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027offer_available_slots_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027offer_available_slots_without_district\u0027);\n}\n\nif (parsed.action === \u0027send_quote\u0027) {\n  if (!serviceInterest) errors.push(\u0027send_quote_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027send_quote_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027send_quote_without_district\u0027);\n}\n\nif (parsed.action === \u0027confirm_booking\u0027) {\n  if (!serviceInterest) errors.push(\u0027confirm_booking_without_service_interest\u0027);\n  if (!vehicleType) errors.push(\u0027confirm_booking_without_vehicle_type\u0027);\n  if (!district) errors.push(\u0027confirm_booking_without_district\u0027);\n  if (!bookingDate) errors.push(\u0027confirm_booking_without_booking_date\u0027);\n  if (!bookingTime) errors.push(\u0027confirm_booking_without_booking_time\u0027);\n  if (!hasBookingContext) errors.push(\u0027confirm_booking_without_booking_context\u0027);\n  if (!hasAddress) errors.push(\u0027confirm_booking_without_address\u0027);\n}\n\nif (parsed.action === \u0027confirm_address\u0027) {\n  const hasAddressCandidate =\n    hasAddress ||\n    isFilled(latestUserMessage);\n\n  if (!hasAddressCandidate) {\n    errors.push(\u0027confirm_address_without_address_candidate\u0027);\n  }\n}\n\nif (parsed.action === \u0027collect_address\u0027) {\n  const hasBookingCandidate =\n    isFilled(bookingDate) ||\n    isFilled(bookingTime) ||\n    isFilled(slotId) ||\n    Array.isArray(state.booking_options) \u0026\u0026 state.booking_options.length \u003e 0;\n\n  if (!hasBookingCandidate) {\n    warnings.push(\u0027collect_address_without_booking_candidate\u0027);\n  }\n}\n\nif (parsed.action === \u0027schedule_followup\u0027) {\n  const followupType = firstValue(parsed.followup_type, update.followup_type, state.followup_type);\n  const scheduledFor = firstValue(parsed.scheduled_for, update.scheduled_for, state.scheduled_for);\n\n  if (!followupType) errors.push(\u0027schedule_followup_without_followup_type\u0027);\n  if (!scheduledFor) errors.push(\u0027schedule_followup_without_scheduled_for\u0027);\n}\n\nif (parsed.action === \u0027handoff_human\u0027) {\n  if (update.stage !== \u0027human_handoff\u0027) {\n    warnings.push(\u0027handoff_without_human_handoff_stage\u0027);\n  }\n}\n\nif (Number(parsed.confidence) \u003c 0.45 \u0026\u0026 allowedActions.includes(\u0027handoff_human\u0027)) {\n  warnings.push(\u0027low_confidence_recommend_handoff\u0027);\n}\n\nconst normalizedStateUpdate = compactObject({\n  ...(update || {}),\n\n  slot_id: firstValue(update.slot_id, slotId),\n  last_bot_action: firstValue(update.last_bot_action, parsed.action),\n\n  missing_fields: Array.isArray(update.missing_fields)\n    ? update.missing_fields\n    : []\n});\n\nconst normalizedDecision = {\n  action: parsed.action,\n  reason: String(parsed.reason || \u0027\u0027).trim(),\n  message: typeof parsed.message === \u0027string\u0027 ? parsed.message.trim() : \u0027\u0027,\n  state_update: normalizedStateUpdate,\n  confidence: Number(parsed.confidence)\n};\n\nreturn [{\n  json: {\n    valid: errors.length === 0,\n    validation_errors: errors,\n    validation_warnings: warnings,\n    decision: normalizedDecision,\n    validation_meta: {\n      allowed_actions: allowedActions,\n      current_stage: state.stage || null,\n      latest_user_message: latestUserMessage\n    }\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1520,
+                                                             352
+                                                         ],
+                                            "id":  "4cf83721-69b5-46b9-98f8-189b67b9ec70",
+                                            "name":  "validate_business_rules"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "be99c7a6-a25f-4679-bb2e-183c41479248",
+                                                                                                         "leftValue":  "={{$json.valid === true}}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             1728,
+                                                             352
+                                                         ],
+                                            "id":  "5786748f-74ec-4b5b-8b11-57216df935a2",
+                                            "name":  "If"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const validation = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst allowed = prepared.allowed_actions || [];\nconst state = context.state || {};\nconst conversation = context.conversation || {};\nconst text = String(conversation.latest_user_message || \u0027\u0027).toLowerCase();\n\nfunction normalize(value) {\n  return String(value || \u0027\u0027)\n    .toLowerCase()\n    .normalize(\u0027NFD\u0027)\n    .replace(/[\\u0300-\\u036f]/g, \u0027\u0027)\n    .trim();\n}\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) return false;\n  if (Array.isArray(value) \u0026\u0026 value.length === 0) return false;\n  return true;\n}\n\nfunction looksLikeAddress(rawText) {\n  const t = normalize(rawText);\n  if (t.length \u003c 8) return false;\n\n  const hasNumber = /\\d{2,6}/.test(t);\n  const words = [\n    \u0027calle\u0027,\n    \u0027avenida\u0027,\n    \u0027av\u0027,\n    \u0027pasaje\u0027,\n    \u0027camino\u0027,\n    \u0027condominio\u0027,\n    \u0027depto\u0027,\n    \u0027departamento\u0027,\n    \u0027casa\u0027,\n    \u0027block\u0027,\n    \u0027torre\u0027,\n    \u0027villa\u0027,\n    \u0027pje\u0027,\n    \u0027edificio\u0027,\n    \u0027porton\u0027,\n    \u0027portón\u0027\n  ];\n\n  return hasNumber || words.some(w =\u003e t.includes(normalize(w)));\n}\n\nfunction getAvailabilityConfig(rawText) {\n  const t = normalize(rawText);\n\n  if (\n    t.includes(\u0027proxima semana\u0027) ||\n    t.includes(\u0027siguiente semana\u0027) ||\n    t.includes(\u0027la otra semana\u0027) ||\n    t.includes(\u0027otra semana\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_week\u0027,\n      availability_label: \u0027la próxima semana\u0027,\n      days_ahead: 7,\n      start_offset_days: 7,\n      max_slots: 5\n    };\n  }\n\n  if (\n    t.includes(\u0027mas adelante\u0027) ||\n    t.includes(\u0027mas horarios\u0027) ||\n    t.includes(\u0027otros horarios\u0027) ||\n    t.includes(\u0027otros dias\u0027) ||\n    t.includes(\u0027otras semanas\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_14_days\u0027,\n      availability_label: \u0027las próximas dos semanas\u0027,\n      days_ahead: 14,\n      start_offset_days: 0,\n      max_slots: 6\n    };\n  }\n\n  if (\n    t.includes(\u0027este mes\u0027) ||\n    t.includes(\u0027durante el mes\u0027)\n  ) {\n    return {\n      availability_window: \u0027next_30_days\u0027,\n      availability_label: \u0027las próximas semanas\u0027,\n      days_ahead: 30,\n      start_offset_days: 0,\n      max_slots: 8\n    };\n  }\n\n  return {\n    availability_window: \u0027this_week\u0027,\n    availability_label: \u0027los próximos días\u0027,\n    days_ahead: 7,\n    start_offset_days: 0,\n    max_slots: 3\n  };\n}\n\nconst normalizedText = normalize(text);\n\nconst asksAvailability =\n  normalizedText.includes(\u0027horario\u0027) ||\n  normalizedText.includes(\u0027hora disponible\u0027) ||\n  normalizedText.includes(\u0027disponible\u0027) ||\n  normalizedText.includes(\u0027disponibilidad\u0027) ||\n  normalizedText.includes(\u0027fecha\u0027) ||\n  normalizedText.includes(\u0027agenda\u0027) ||\n  normalizedText.includes(\u0027agendar\u0027) ||\n  normalizedText.includes(\u0027proxima semana\u0027) ||\n  normalizedText.includes(\u0027mas horarios\u0027) ||\n  normalizedText.includes(\u0027otros dias\u0027);\n\nconst wantsCancel =\n  normalizedText.includes(\u0027cancelar\u0027) ||\n  normalizedText.includes(\u0027anular\u0027) ||\n  normalizedText.includes(\u0027cancela\u0027) ||\n  normalizedText.includes(\u0027no podre asistir\u0027) ||\n  normalizedText.includes(\u0027no puedo asistir\u0027);\n\nconst wantsReschedule =\n  normalizedText.includes(\u0027reagendar\u0027) ||\n  normalizedText.includes(\u0027reprogramar\u0027) ||\n  normalizedText.includes(\u0027cambiar la hora\u0027) ||\n  normalizedText.includes(\u0027cambiar el horario\u0027) ||\n  normalizedText.includes(\u0027otra hora\u0027) ||\n  normalizedText.includes(\u0027otro dia\u0027) ||\n  normalizedText.includes(\u0027no me sirve\u0027);\n\nconst waitingAddress =\n  state.stage === \u0027collecting_address\u0027 ||\n  state.next_goal === \u0027collect_address\u0027 ||\n  state.last_bot_action === \u0027collect_address\u0027;\n\nconst hasBookingBasics =\n  !!state.service_interest \u0026\u0026\n  !!state.vehicle_type \u0026\u0026\n  !!state.district;\n\nconst missingFields =\n  Array.isArray(state.missing_fields)\n    ? state.missing_fields\n    : Array.isArray(context.context_hints?.priority_missing_fields)\n      ? context.context_hints.priority_missing_fields\n      : [];\n\nlet decision = null;\n\nif (\n  validation.validation_errors?.includes(\u0027confirm_booking_without_address\u0027) \u0026\u0026\n  allowed.includes(\u0027collect_address\u0027)\n) {\n  decision = {\n    action: \u0027collect_address\u0027,\n    reason: \u0027Fallback seguro: el usuario confirmó horario, pero falta dirección exacta antes de reservar.\u0027,\n    message: \u0027Perfecto. Antes de confirmar la reserva, ¿me puedes enviar la dirección exacta donde sería el servicio?\u0027,\n    state_update: {\n      stage: \u0027collecting_address\u0027,\n      next_goal: \u0027collect_address\u0027,\n      intent_last: \u0027booking_confirmed_address_missing\u0027,\n      last_bot_action: \u0027collect_address\u0027,\n      missing_fields: [\u0027address\u0027]\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 waitingAddress \u0026\u0026 looksLikeAddress(text) \u0026\u0026 allowed.includes(\u0027confirm_address\u0027)) {\n  decision = {\n    action: \u0027confirm_address\u0027,\n    reason: \u0027Fallback seguro: el usuario entregó una dirección mientras el bot estaba esperando dirección.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027address_confirmation\u0027,\n      next_goal: \u0027validate_address\u0027,\n      intent_last: \u0027address_provided\u0027,\n      service_address: conversation.latest_user_message,\n      address: conversation.latest_user_message,\n      address_reference: conversation.latest_user_message,\n      address_confirmed: false,\n      last_bot_action: \u0027confirm_address_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 wantsCancel \u0026\u0026 allowed.includes(\u0027cancel_booking\u0027)) {\n  decision = {\n    action: \u0027cancel_booking\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió cancelar una reserva.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027cancelling\u0027,\n      next_goal: \u0027cancel_active_booking\u0027,\n      intent_last: \u0027cancel_booking_requested\u0027,\n      last_bot_action: \u0027cancel_booking_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 wantsReschedule \u0026\u0026 allowed.includes(\u0027reschedule_booking\u0027)) {\n  decision = {\n    action: \u0027reschedule_booking\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió cambiar día u hora de su reserva.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027reschedule\u0027,\n      next_goal: \u0027collect_new_slot\u0027,\n      intent_last: \u0027reschedule_booking_requested\u0027,\n      last_bot_action: \u0027reschedule_booking_in_progress\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 asksAvailability \u0026\u0026 hasBookingBasics \u0026\u0026 allowed.includes(\u0027offer_available_slots\u0027)) {\n  const availability = getAvailabilityConfig(text);\n\n  decision = {\n    action: \u0027offer_available_slots\u0027,\n    reason: \u0027Fallback seguro: el usuario pidió disponibilidad y existen los datos mínimos para consultar horarios reales.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      stage: \u0027booking_selection\u0027,\n      next_goal: \u0027send_available_slots\u0027,\n      intent_last: \u0027availability_requested\u0027,\n      ...availability,\n      last_bot_action: \u0027offer_available_slots\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 missingFields.length \u003e 0 \u0026\u0026 allowed.includes(\u0027ask_missing_data\u0027)) {\n  const firstMissing = missingFields[0];\n\n  let message = \u0027Perfecto. Para avanzar, necesito un dato más. ¿Me lo puedes indicar?\u0027;\n  let nextGoal = \u0027collect_missing_data\u0027;\n\n  if (firstMissing === \u0027district\u0027) {\n    message = \u0027Perfecto. Para ayudarte bien, ¿en qué comuna estás?\u0027;\n    nextGoal = \u0027collect_district\u0027;\n  }\n\n  if (firstMissing === \u0027vehicle_type\u0027) {\n    message = \u0027Perfecto. Para cotizarte bien, ¿qué tipo de vehículo tienes?\u0027;\n    nextGoal = \u0027collect_vehicle_type\u0027;\n  }\n\n  if (firstMissing === \u0027service_interest\u0027) {\n    message = \u0027Claro. ¿Qué servicio te interesa exactamente?\u0027;\n    nextGoal = \u0027collect_service_interest\u0027;\n  }\n\n  if (firstMissing === \u0027address\u0027) {\n    message = \u0027Perfecto. Para dejar la reserva bien registrada, ¿me puedes enviar la dirección exacta donde sería el servicio?\u0027;\n    nextGoal = \u0027collect_address\u0027;\n  }\n\n  decision = {\n    action: \u0027ask_missing_data\u0027,\n    reason: \u0027Fallback seguro orientado a recopilar el siguiente dato crítico.\u0027,\n    message,\n    state_update: {\n      stage: state.stage || \u0027new_lead\u0027,\n      next_goal: nextGoal,\n      intent_last: state.intent_last || null,\n      last_bot_action: \u0027ask_missing_data\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 allowed.includes(\u0027answer_question\u0027)) {\n  decision = {\n    action: \u0027answer_question\u0027,\n    reason: \u0027Fallback conservador para mantener conversación segura.\u0027,\n    message: \u0027Gracias por tu mensaje. ¿Me puedes dar un poco más de detalle para responderte bien?\u0027,\n    state_update: {\n      stage: state.stage || null,\n      next_goal: state.next_goal || null,\n      intent_last: state.intent_last || null,\n      last_bot_action: \u0027answer_question\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision \u0026\u0026 allowed.includes(\u0027handoff_human\u0027)) {\n  decision = {\n    action: \u0027handoff_human\u0027,\n    reason: \u0027Fallback a humano por imposibilidad de validar una decisión segura.\u0027,\n    message: \u0027Gracias por escribir. Voy a derivar tu caso para que te ayuden directamente.\u0027,\n    state_update: {\n      stage: \u0027human_handoff\u0027,\n      next_goal: \u0027human_review\u0027,\n      intent_last: \u0027handoff_required\u0027,\n      human_handoff: true,\n      last_bot_action: \u0027handoff_human\u0027,\n      missing_fields: []\n    },\n    confidence: 0.2\n  };\n}\n\nif (!decision) {\n  decision = {\n    action: allowed[0] || \u0027handoff_human\u0027,\n    reason: \u0027Fallback final usando primera acción permitida.\u0027,\n    message: \u0027\u0027,\n    state_update: {\n      last_bot_action: allowed[0] || \u0027handoff_human\u0027,\n      missing_fields: missingFields\n    },\n    confidence: 0.2\n  };\n}\n\nreturn [{\n  json: {\n    valid: true,\n    fallback_used: true,\n    original_validation_errors: validation.validation_errors || [],\n    original_validation_warnings: validation.validation_warnings || [],\n    decision\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1936,
+                                                             400
+                                                         ],
+                                            "id":  "d280d3a2-d3b0-4c5a-afe7-bddaabab652e",
+                                            "name":  "build_fallback_decision"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const cp = $json.context_packet || {};\n\nfunction trimString(value, max = 500) {\n  if (typeof value !== \u0027string\u0027) return value;\n  return value.length \u003e max ? value.slice(0, max) : value;\n}\n\nfunction uniqueStrings(arr) {\n  if (!Array.isArray(arr)) return [];\n  return [...new Set(arr.filter(v =\u003e typeof v === \u0027string\u0027 \u0026\u0026 v.trim()))];\n}\n\nconst sanitized = {\n  lead: {\n    ...(cp.lead || {}),\n    id: cp.lead?.id || cp.state?.lead_id || null,\n    phone: cp.lead?.phone || cp.lead?.external_id || null,\n    channel: cp.lead?.channel || \u0027whatsapp\u0027\n  },\n\n  state: {\n    ...(cp.state || {}),\n    lead_id: cp.state?.lead_id || cp.lead?.id || null,\n    missing_fields: uniqueStrings(cp.state?.missing_fields)\n  },\n\n  conversation: {\n    latest_user_message: trimString(cp.conversation?.latest_user_message || \u0027\u0027, 500),\n    short_summary: trimString(cp.conversation?.short_summary || \u0027\u0027, 800),\n    last_message_id: cp.conversation?.last_message_id || null,\n    message_type: cp.conversation?.message_type || \u0027text\u0027\n  },\n\n  business: cp.business || {},\n  rule_context: cp.rule_context || {},\n  context_hints: cp.context_hints || {},\n  allowed_actions: uniqueStrings(cp.allowed_actions)\n};\n\nif (!sanitized.lead.id) {\n  throw new Error(\u0027sanitize_context_packet missing lead.id\u0027);\n}\n\nif (!sanitized.lead.phone) {\n  throw new Error(\u0027sanitize_context_packet missing lead.phone\u0027);\n}\n\nreturn [\n  {\n    json: {\n      context_packet: sanitized\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "ddc283a5-cefc-4428-b70c-d4f0ff952d8a",
+                                            "name":  "sanitize_context_packet"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const parsed = $json.parsed_output;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst allowedActions = prepared.allowed_actions || [];\n\nconst errors = [];\n\nfunction isNonEmptyString(v) {\n  return typeof v === \u0027string\u0027 \u0026\u0026 v.trim().length \u003e 0;\n}\n\nfunction isObject(v) {\n  return v \u0026\u0026 typeof v === \u0027object\u0027 \u0026\u0026 !Array.isArray(v);\n}\n\nif (!$json.parse_ok || !parsed) {\n  errors.push(\u0027invalid_or_unparseable_output\u0027);\n}\n\nif (!isObject(parsed)) {\n  errors.push(\u0027output_not_object\u0027);\n}\n\nif (parsed) {\n  if (!isNonEmptyString(parsed.action)) errors.push(\u0027missing_action\u0027);\n  else if (!allowedActions.includes(parsed.action)) errors.push(\u0027action_not_allowed\u0027);\n\n  if (!isNonEmptyString(parsed.reason)) errors.push(\u0027missing_reason\u0027);\n\n    const actionsThatCanBuildMessageLater = [\n      \u0027send_quote\u0027,\n      \u0027offer_available_slots\u0027,\n      \u0027confirm_booking\u0027,\n      \u0027send_service_menu\u0027,\n      \u0027recommend_service\u0027\n    ];\n    \n    if (\n      !isNonEmptyString(parsed.message) \u0026\u0026\n      !actionsThatCanBuildMessageLater.includes(parsed.action)\n    ) {\n      errors.push(\u0027missing_message\u0027);\n    }\n  if (!isObject(parsed.state_update)) {\n    errors.push(\u0027missing_state_update\u0027);\n  } else if (!Array.isArray(parsed.state_update.missing_fields)) {\n    errors.push(\u0027missing_fields_must_be_array\u0027);\n  }\n\n  if (typeof parsed.confidence !== \u0027number\u0027 || Number.isNaN(parsed.confidence)) {\n    errors.push(\u0027invalid_confidence\u0027);\n  } else if (parsed.confidence \u003c 0 || parsed.confidence \u003e 1) {\n    errors.push(\u0027confidence_out_of_range\u0027);\n  }\n}\n\nreturn [{\n  json: {\n    parsed_output: parsed,\n    schema_valid: errors.length === 0,\n    schema_errors: errors,\n    raw_response: $json.raw_response,\n    raw_content: $json.raw_content,\n    parse_source: $json.parse_source\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1312,
+                                                             352
+                                                         ],
+                                            "id":  "d94a8ea0-6956-4b3c-9314-e724d512815c",
+                                            "name":  "validate_schema_and_required_fields"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const finalNode = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst parsedNode = $(\u0027parse_or_extract_structured_output\u0027).first().json;\nconst httpNode = $(\u0027HTTP Request\u0027).first().json;\n\nconst context = prepared.context_packet || {};\nconst lead = context.lead || {};\nconst state = context.state || {};\nconst conversation = context.conversation || {};\n\nconst usage = httpNode.usage || {};\n\nconst auditLog = {\n  flow_name: \u0027llm_decision\u0027,\n  lead_id: lead.id || lead.lead_id || lead.phone || lead.wa_id || null,\n  channel: lead.channel || null,\n  stage_before: state.stage || null,\n  latest_user_message: conversation.latest_user_message || null,\n  allowed_actions: prepared.allowed_actions || [],\n  decision: finalNode.decision || null,\n  meta: {\n    fallback_used: finalNode.meta?.fallback_used || false,\n    validation_errors: finalNode.meta?.validation_errors || [],\n    validation_warnings: finalNode.meta?.validation_warnings || []\n  },\n  llm: {\n    model: prepared.model_config?.model || null,\n    parse_source: parsedNode.parse_source || null,\n    raw_content: parsedNode.raw_content || null,\n    prompt_tokens: usage.prompt_tokens || 0,\n    completion_tokens: usage.completion_tokens || 0,\n    total_tokens: usage.total_tokens || 0\n  },\n  created_at: new Date().toISOString()\n};\n\nreturn [{ json: auditLog }];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2160,
+                                                             192
+                                                         ],
+                                            "id":  "4b85e41b-1c73-478e-a523-441c0430ce21",
+                                            "name":  "build_audit_log_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  created_at\n)\nVALUES (\n  \u0027{{ ($json.flow_name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027,\n  NULLIF(\u0027{{ ($json.lead_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.channel || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.stage_before || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n  NULLIF(\u0027{{ ($json.latest_user_message || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027, \u0027\u0027),\n\n  \u0027{{ JSON.stringify($json.allowed_actions || []).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.decision || null).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.meta || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n  \u0027{{ JSON.stringify($json.llm || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb,\n\n  \u0027{{ $json.created_at || new Date().toISOString() }}\u0027::timestamptz\n)\nRETURNING id;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             2336,
+                                                             80
+                                                         ],
+                                            "id":  "93ba03dd-5588-4dc0-bbe9-4063550670ef",
+                                            "name":  "save_audit_log",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const finalDecisionNode = $(\u0027finalize_decision\u0027).first().json;\nconst preparedNode = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst auditResult = $json;\n\nconst decision = finalDecisionNode.decision || null;\nconst contextPacket = preparedNode.context_packet || null;\n\nif (!decision) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nif (!contextPacket) {\n  throw new Error(\u0027Missing context_packet in prepare_context_and_guardrail\u0027);\n}\n\nreturn [\n  {\n    json: {\n      decision,\n      context_packet: contextPacket,\n      meta: {\n        ...(finalDecisionNode.meta || {}),\n        audit_saved: auditResult.success === true,\n        source: \u0027llm_decision\u0027\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2544,
+                                                             144
+                                                         ],
+                                            "id":  "6e041a6f-dfca-4bed-b65a-e252c425097b",
+                                            "name":  "save_audit_log1"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const finalNode = $(\u0027finalize_decision\u0027).first().json;\nconst preparedNode = $(\u0027prepare_context_and_guardrail\u0027).first().json;\nconst auditResult = $json;\n\nconst decision = finalNode.decision || null;\nconst contextPacket = preparedNode.context_packet || null;\n\nif (!decision) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nif (!contextPacket) {\n  throw new Error(\u0027Missing context_packet in prepare_context_and_guardrail\u0027);\n}\n\nif (!contextPacket.lead?.id) {\n  throw new Error(\u0027Missing lead.id in context_packet before returning to parent\u0027);\n}\n\nif (!contextPacket.lead?.phone) {\n  throw new Error(\u0027Missing lead.phone in context_packet before returning to parent\u0027);\n}\n\nreturn [\n  {\n    json: {\n      decision,\n      context_packet: contextPacket,\n      meta: {\n        ...(finalNode.meta || {}),\n        source: \u0027llm_decision\u0027,\n        audit_saved: auditResult.success === true\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             2752,
+                                                             144
+                                                         ],
+                                            "id":  "8e0809ad-028a-4a22-a5c2-1467b721c3ef",
+                                            "name":  "return_decision_to_parent"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input = $json;\nconst prepared = $(\u0027prepare_context_and_guardrail\u0027).first().json;\n\nconst contextPacket = prepared.context_packet || {};\nconst decision = input.decision || null;\n\nif (!decision || typeof decision !== \u0027object\u0027) {\n  throw new Error(\u0027Missing decision in finalize_decision\u0027);\n}\n\nfunction cleanStateUpdate(update) {\n  const cleaned = {};\n\n  for (const [key, value] of Object.entries(update || {})) {\n    if (value === undefined) continue;\n    if (value === null) continue;\n    if (typeof value === \u0027string\u0027 \u0026\u0026 value.trim() === \u0027\u0027) continue;\n\n    cleaned[key] = value;\n  }\n\n  if (!Array.isArray(cleaned.missing_fields)) {\n    cleaned.missing_fields = [];\n  }\n\n  if (!cleaned.last_bot_action) {\n    cleaned.last_bot_action = decision.action;\n  }\n\n  return cleaned;\n}\n\nconst finalDecision = {\n  action: decision.action,\n  reason: String(decision.reason || \u0027\u0027).trim(),\n  message: typeof decision.message === \u0027string\u0027 ? decision.message.trim() : \u0027\u0027,\n  state_update: cleanStateUpdate(decision.state_update || {}),\n  confidence: Number.isFinite(Number(decision.confidence))\n    ? Number(decision.confidence)\n    : 0.2\n};\n\nreturn [\n  {\n    json: {\n      valid: true,\n      decision: finalDecision,\n      context_packet: contextPacket,\n      meta: {\n        source: \u0027llm_decision\u0027,\n        fallback_used: input.fallback_used === true,\n        validation_errors:\n          input.validation_errors ||\n          input.original_validation_errors ||\n          [],\n        validation_warnings:\n          input.validation_warnings ||\n          input.original_validation_warnings ||\n          []\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1920,
+                                                             176
+                                                         ],
+                                            "id":  "d008f5a0-000c-4551-914b-06c2452a6114",
+                                            "name":  "finalize_decision"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "IN context_builder":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "sanitize_context_packet",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "prepare_context_and_guardrail":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "HTTP Request",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "HTTP Request":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "parse_or_extract_structured_output",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                                              "parse_or_extract_structured_output":  {
+                                                                                         "main":  [
+                                                                                                      [
+                                                                                                          {
+                                                                                                              "node":  "validate_schema_and_required_fields",
+                                                                                                              "type":  "main",
+                                                                                                              "index":  0
+                                                                                                          }
+                                                                                                      ]
+                                                                                                  ]
+                                                                                     },
+                                              "validate_business_rules":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "If",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "If":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "finalize_decision",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ],
+                                                                      [
+                                                                          {
+                                                                              "node":  "build_fallback_decision",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                                              "sanitize_context_packet":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "prepare_context_and_guardrail",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "validate_schema_and_required_fields":  {
+                                                                                          "main":  [
+                                                                                                       [
+                                                                                                           {
+                                                                                                               "node":  "validate_business_rules",
+                                                                                                               "type":  "main",
+                                                                                                               "index":  0
+                                                                                                           }
+                                                                                                       ]
+                                                                                                   ]
+                                                                                      },
+                                              "build_fallback_decision":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "finalize_decision",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "build_audit_log_payload":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "save_audit_log",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "save_audit_log":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "save_audit_log1",
+                                                                                          "type":  "main",
+                                                                                          "index":  0
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "save_audit_log1":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "return_decision_to_parent",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "finalize_decision":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "build_audit_log_payload",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version b0df719f",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-06T15:21:26.153Z",
+                                                             "id":  510,
+                                                             "workflowId":  "Li3qmQHIKbjqWY15",
+                                                             "versionId":  "b0df719f-023d-43c4-9d6f-95724b8bea90",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

@@ -1,0 +1,286 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:08:11.110Z",
+    "createdAt":  "2026-04-20T21:22:02.014Z",
+    "id":  "9OraQ2AJv4Cql9hM",
+    "name":  "6.3 create_calendar_booking",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"lead_id\": \"={{$json.execution_context.lead_id}}\",\n  \"slot_id\": \"={{$json.slot_id}}\",\n  \"slot_start_at\": \"={{$json.slot_start_at}}\",\n  \"slot_end_at\": \"={{$json.slot_end_at}}\",\n  \"service_interest\": \"={{$json.execution_context.service_interest}}\",\n  \"vehicle_type\": \"={{$json.execution_context.vehicle_type}}\",\n  \"district\": \"={{$json.execution_context.district}}\",\n  \"customer_name\": \"={{$json.context_packet?.lead?.name || \u0027Cliente\u0027}}\",\n  \"phone\": \"={{$json.context_packet?.lead?.phone || null}}\",\n  \"calendar_id\": \"={{$json.calendar_id || \u0027primary\u0027}}\"\n}"
+                                     },
+                      "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                      "typeVersion":  1.1,
+                      "name":  "When Executed by Another Workflow",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "position":  [
+                                       272,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const {\n  lead_id,\n  slot_id,\n  slot_start_at,\n  slot_end_at,\n  service_interest,\n  vehicle_type,\n  district,\n  customer_name,\n  phone,\n  calendar_id,\n} = $json;\n\n// Validaciones mínimas del módulo 6.3\nif (!slot_start_at || !slot_end_at || !service_interest || !lead_id) {\n  throw new Error(\u0027Faltan datos requeridos: slot_start_at, slot_end_at, service_interest o lead_id\u0027);\n}\n\nconst start = DateTime.fromISO(slot_start_at);\nconst end = DateTime.fromISO(slot_end_at);\n\nif (!start.isValid || !end.isValid) {\n  throw new Error(\u0027slot_start_at o slot_end_at tienen formato inválido\u0027);\n}\n\nif (end \u003c= start) {\n  throw new Error(\u0027slot_end_at debe ser mayor que slot_start_at\u0027);\n}\n\nconst cleanCustomerName = (customer_name || \u0027Cliente\u0027).trim();\nconst cleanService = String(service_interest).trim();\nconst cleanVehicle = vehicle_type ? String(vehicle_type).trim() : null;\nconst cleanDistrict = district ? String(district).trim() : null;\nconst cleanPhone = phone ? String(phone).trim() : null;\n\nconst summary = `${cleanService} - ${cleanCustomerName}`;\n\nconst descriptionLines = [\n  `Lead ID: ${lead_id}`,\n  `Cliente: ${cleanCustomerName}`,\n  cleanPhone ? `Teléfono: ${cleanPhone}` : null,\n  `Servicio: ${cleanService}`,\n  cleanVehicle ? `Vehículo: ${cleanVehicle}` : null,\n  cleanDistrict ? `Comuna: ${cleanDistrict}` : null,\n  `Slot ID: ${slot_id || \u0027\u0027}`,\n].filter(Boolean);\n\nconst description = descriptionLines.join(\u0027\\n\u0027);\n\nreturn [\n  {\n    json: {\n      lead_id,\n      slot_id,\n      calendar_id: calendar_id || \u0027primary\u0027,\n\n      slot_start_at: start.toISO(),\n      slot_end_at: end.toISO(),\n\n      service_interest: cleanService,\n      vehicle_type: cleanVehicle,\n      district: cleanDistrict,\n      customer_name: cleanCustomerName,\n      phone: cleanPhone,\n\n      summary,\n      description,\n      location: cleanDistrict || \u0027\u0027,\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       352
+                                   ],
+                      "id":  "64a12a28-0e7b-44f9-b323-cd9cb1d7175b",
+                      "name":  "build_calendar_event_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const event = $json;\nconst req = $(\u0027build_calendar_event_payload\u0027).first().json;\n\nreturn [\n  {\n    json: {\n      calendar_event: {\n        id: event.id || null,\n        summary: event.summary || req.summary,\n        description: event.description || req.description,\n        start: event.start || { dateTime: req.slot_start_at },\n        end: event.end || { dateTime: req.slot_end_at },\n        status: event.status || null,\n        htmlLink: event.htmlLink || null,\n        location: event.location || req.location || null,\n      },\n      booking_context: {\n        lead_id: req.lead_id,\n        slot_id: req.slot_id,\n        calendar_id: req.calendar_id,\n        service_interest: req.service_interest,\n        vehicle_type: req.vehicle_type,\n        district: req.district,\n        customer_name: req.customer_name,\n        phone: req.phone,\n      }\n    }\n  }\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       896,
+                                       352
+                                   ],
+                      "id":  "d884c7ba-544d-45d4-89f1-0b2566030504",
+                      "name":  "normalize_calendar_booking"
+                  },
+                  {
+                      "parameters":  {
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "={{ $json.calendar_id }}",
+                                                          "mode":  "id"
+                                                      },
+                                         "start":  "={{ $json.slot_start_at }}",
+                                         "end":  "={{ $json.slot_end_at }}",
+                                         "additionalFields":  {
+                                                                  "description":  "={{ $json.description }}",
+                                                                  "location":  "={{ $json.location }}",
+                                                                  "summary":  "={{ $json.summary }}"
+                                                              }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       688,
+                                       352
+                                   ],
+                      "id":  "2c641601-5782-4f21-83aa-98265fe74bd6",
+                      "name":  "GC create_event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "mpmI0f0dGSSsN1Rj",
+                                                                          "name":  "Google Calendar account"
+                                                                      }
+                                      }
+                  }
+              ],
+    "connections":  {
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "build_calendar_event_payload",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "build_calendar_event_payload":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "GC create_event",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "GC create_event":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "normalize_calendar_booking",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "availableInMCP":  false,
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "a23461bd-da31-4ea2-8a69-e5ac2293068d",
+    "activeVersionId":  "a23461bd-da31-4ea2-8a69-e5ac2293068d",
+    "versionCounter":  36,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-20T21:22:02.021Z",
+                       "createdAt":  "2026-04-20T21:22:02.021Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "9OraQ2AJv4Cql9hM",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-04-20T21:37:27.000Z",
+                          "createdAt":  "2026-04-20T21:37:23.935Z",
+                          "versionId":  "a23461bd-da31-4ea2-8a69-e5ac2293068d",
+                          "workflowId":  "9OraQ2AJv4Cql9hM",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"lead_id\": \"={{$json.execution_context.lead_id}}\",\n  \"slot_id\": \"={{$json.slot_id}}\",\n  \"slot_start_at\": \"={{$json.slot_start_at}}\",\n  \"slot_end_at\": \"={{$json.slot_end_at}}\",\n  \"service_interest\": \"={{$json.execution_context.service_interest}}\",\n  \"vehicle_type\": \"={{$json.execution_context.vehicle_type}}\",\n  \"district\": \"={{$json.execution_context.district}}\",\n  \"customer_name\": \"={{$json.context_packet?.lead?.name || \u0027Cliente\u0027}}\",\n  \"phone\": \"={{$json.context_packet?.lead?.phone || null}}\",\n  \"calendar_id\": \"={{$json.calendar_id || \u0027primary\u0027}}\"\n}"
+                                                           },
+                                            "id":  "c055762a-8fe7-4141-a639-df2372f30060",
+                                            "typeVersion":  1.1,
+                                            "name":  "When Executed by Another Workflow",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "position":  [
+                                                             272,
+                                                             352
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const {\n  lead_id,\n  slot_id,\n  slot_start_at,\n  slot_end_at,\n  service_interest,\n  vehicle_type,\n  district,\n  customer_name,\n  phone,\n  calendar_id,\n} = $json;\n\n// Validaciones mínimas del módulo 6.3\nif (!slot_start_at || !slot_end_at || !service_interest || !lead_id) {\n  throw new Error(\u0027Faltan datos requeridos: slot_start_at, slot_end_at, service_interest o lead_id\u0027);\n}\n\nconst start = DateTime.fromISO(slot_start_at);\nconst end = DateTime.fromISO(slot_end_at);\n\nif (!start.isValid || !end.isValid) {\n  throw new Error(\u0027slot_start_at o slot_end_at tienen formato inválido\u0027);\n}\n\nif (end \u003c= start) {\n  throw new Error(\u0027slot_end_at debe ser mayor que slot_start_at\u0027);\n}\n\nconst cleanCustomerName = (customer_name || \u0027Cliente\u0027).trim();\nconst cleanService = String(service_interest).trim();\nconst cleanVehicle = vehicle_type ? String(vehicle_type).trim() : null;\nconst cleanDistrict = district ? String(district).trim() : null;\nconst cleanPhone = phone ? String(phone).trim() : null;\n\nconst summary = `${cleanService} - ${cleanCustomerName}`;\n\nconst descriptionLines = [\n  `Lead ID: ${lead_id}`,\n  `Cliente: ${cleanCustomerName}`,\n  cleanPhone ? `Teléfono: ${cleanPhone}` : null,\n  `Servicio: ${cleanService}`,\n  cleanVehicle ? `Vehículo: ${cleanVehicle}` : null,\n  cleanDistrict ? `Comuna: ${cleanDistrict}` : null,\n  `Slot ID: ${slot_id || \u0027\u0027}`,\n].filter(Boolean);\n\nconst description = descriptionLines.join(\u0027\\n\u0027);\n\nreturn [\n  {\n    json: {\n      lead_id,\n      slot_id,\n      calendar_id: calendar_id || \u0027primary\u0027,\n\n      slot_start_at: start.toISO(),\n      slot_end_at: end.toISO(),\n\n      service_interest: cleanService,\n      vehicle_type: cleanVehicle,\n      district: cleanDistrict,\n      customer_name: cleanCustomerName,\n      phone: cleanPhone,\n\n      summary,\n      description,\n      location: cleanDistrict || \u0027\u0027,\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             352
+                                                         ],
+                                            "id":  "64a12a28-0e7b-44f9-b323-cd9cb1d7175b",
+                                            "name":  "build_calendar_event_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const event = $json;\nconst req = $(\u0027build_calendar_event_payload\u0027).first().json;\n\nreturn [\n  {\n    json: {\n      calendar_event: {\n        id: event.id || null,\n        summary: event.summary || req.summary,\n        description: event.description || req.description,\n        start: event.start || { dateTime: req.slot_start_at },\n        end: event.end || { dateTime: req.slot_end_at },\n        status: event.status || null,\n        htmlLink: event.htmlLink || null,\n        location: event.location || req.location || null,\n      },\n      booking_context: {\n        lead_id: req.lead_id,\n        slot_id: req.slot_id,\n        calendar_id: req.calendar_id,\n        service_interest: req.service_interest,\n        vehicle_type: req.vehicle_type,\n        district: req.district,\n        customer_name: req.customer_name,\n        phone: req.phone,\n      }\n    }\n  }\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             896,
+                                                             352
+                                                         ],
+                                            "id":  "d884c7ba-544d-45d4-89f1-0b2566030504",
+                                            "name":  "normalize_calendar_booking"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "calendar":  {
+                                                                                "__rl":  true,
+                                                                                "value":  "={{ $json.calendar_id }}",
+                                                                                "mode":  "id"
+                                                                            },
+                                                               "start":  "={{ $json.slot_start_at }}",
+                                                               "end":  "={{ $json.slot_end_at }}",
+                                                               "additionalFields":  {
+                                                                                        "description":  "={{ $json.description }}",
+                                                                                        "location":  "={{ $json.location }}",
+                                                                                        "summary":  "={{ $json.summary }}"
+                                                                                    }
+                                                           },
+                                            "type":  "n8n-nodes-base.googleCalendar",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             688,
+                                                             352
+                                                         ],
+                                            "id":  "2c641601-5782-4f21-83aa-98265fe74bd6",
+                                            "name":  "GC create_event",
+                                            "credentials":  {
+                                                                "googleCalendarOAuth2Api":  {
+                                                                                                "id":  "mpmI0f0dGSSsN1Rj",
+                                                                                                "name":  "Google Calendar account"
+                                                                                            }
+                                                            }
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "build_calendar_event_payload",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "build_calendar_event_payload":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "GC create_event",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "GC create_event":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "normalize_calendar_booking",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version a23461bd",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-04-20T21:37:27.576Z",
+                                                             "id":  80,
+                                                             "workflowId":  "9OraQ2AJv4Cql9hM",
+                                                             "versionId":  "a23461bd-da31-4ea2-8a69-e5ac2293068d",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

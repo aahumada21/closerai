@@ -1,0 +1,1840 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:47:43.225Z",
+    "createdAt":  "2026-05-13T14:45:01.164Z",
+    "id":  "5kcYOeYHLlcAFtf9",
+    "name":  "6.24 persist_and_audit",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const originalInput = $input.first().json;\n\n// Soportar input envuelto en `payload` (string JSON u objeto) para llamadas desde otros workflows\nlet input = $json;\nif (typeof $json.payload === \"string\" && $json.payload.trim() !== \"\") {\n  try {\n    const parsed = JSON.parse($json.payload);\n    if (parsed && typeof parsed === \"object\") {\n      input = { ...parsed, ...$json };\n    }\n  } catch {\n    // ignore\n  }\n} else if ($json.payload && typeof $json.payload === \"object\") {\n  input = { ...$json.payload, ...$json };\n}\n\nconst originalContext = originalInput.context_packet || {};\nconst currentContext = input.context_packet || originalContext || {};\n\nconst leadId =\n  input.execution_context?.lead_id ||\n  input.lead_id ||\n  currentContext.lead?.id ||\n  originalContext.lead?.id ||\n  null;\n\nconst phone =\n  currentContext.lead?.phone ||\n  input.execution_context?.phone ||\n  input.phone ||\n  originalContext.lead?.phone ||\n  null;\n\nconst channel =\n  input.execution_context?.channel ||\n  input.channel ||\n  currentContext.lead?.channel ||\n  originalContext.lead?.channel ||\n  \"whatsapp\";\n\nconst chatSessionId =\n  input.execution_context?.chat_session_id ||\n  input.chat_session_id ||\n  currentContext.conversation?.chat_session_id ||\n  currentContext.source_metadata?.chat_session_id ||\n  currentContext.event?.source_metadata?.chat_session_id ||\n  originalContext.conversation?.chat_session_id ||\n  originalContext.source_metadata?.chat_session_id ||\n  originalContext.event?.source_metadata?.chat_session_id ||\n  null;\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id for outbound message\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone for outbound message\");\n}\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  phone,\n  channel,\n  chat_session_id: chatSessionId,\n\n  message: input.message_to_send || input.message || \"\",\n  message_type: input.message_type || \"text\",\n\n  context_packet: currentContext,\n\n  execution_context: {\n    ...(input.execution_context || {}),\n    lead_id: leadId,\n    phone,\n    channel,\n    chat_session_id: chatSessionId,\n    action:\n      input.execution_context?.action ||\n      originalInput.decision?.action ||\n      null\n  },\n\n  state_update: input.state_update || {},\n  db_operations: input.db_operations || [],\n\n  quote: input.quote || null,\n  appointment: input.appointment || null,\n  followup: input.followup || null,\n\n  quote_db_id: input.quote_was_created === true ? (input.quote_db_id || null) : null,\nquote_was_created: input.quote_was_created === true\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -1504,
+                                       256
+                                   ],
+                      "id":  "192b797f-029f-4e05-93b2-0d8185330f75",
+                      "name":  "build_outbound_message_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "qY8gG9AaeBkFmxGn",
+                                                            "mode":  "list",
+                                                            "cachedResultUrl":  "/workflow/qY8gG9AaeBkFmxGn",
+                                                            "cachedResultName":  "6.1 send_outbound_message"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+                                                                              "lead_id":  "={{$json.lead_id}}",
+                                                                              "followup_id":  "={{$json.followup?.id || null}}",
+                                                                              "phone":  "={{$json.phone}}",
+                                                                              "channel":  "={{$json.channel}}",
+                                                                              "message":  "={{$json.message}}",
+                                                                              "message_type":  "={{$json.message_type || \"text\"}}",
+                                                                              "source":  "={{$json.execution_context?.action || \"action_executor\"}}",
+                                                                              "chat_session_id":  "={{$json.chat_session_id || $json.execution_context?.chat_session_id || $json.context_packet?.lead?.chat_session_id || $json.context_packet?.event?.source_metadata?.chat_session_id || $json.context_packet?.source_metadata?.chat_session_id || null}}"
+                                                                          },
+                                                                "matchingColumns":  [
+
+                                                                                    ],
+                                                                "schema":  [
+                                                                               {
+                                                                                   "id":  "lead_id",
+                                                                                   "displayName":  "lead_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "followup_id",
+                                                                                   "displayName":  "followup_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "phone",
+                                                                                   "displayName":  "phone",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "channel",
+                                                                                   "displayName":  "channel",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "message",
+                                                                                   "displayName":  "message",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "message_type",
+                                                                                   "displayName":  "message_type",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "source",
+                                                                                   "displayName":  "source",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               },
+                                                                               {
+                                                                                   "id":  "chat_session_id",
+                                                                                   "displayName":  "chat_session_id",
+                                                                                   "required":  false,
+                                                                                   "defaultMatch":  false,
+                                                                                   "display":  true,
+                                                                                   "canBeUsedToMatch":  true,
+                                                                                   "type":  "string",
+                                                                                   "removed":  false
+                                                                               }
+                                                                           ],
+                                                                "attemptToConvertTypes":  false,
+                                                                "convertFieldsToString":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       -1312,
+                                       256
+                                   ],
+                      "id":  "24ec2583-d12a-469f-8912-237c543680ad",
+                      "name":  "Call \u00276.1 send_outbound_message\u0027"
+                  },
+                  {
+                      "parameters":  {
+                                         "schema":  {
+                                                        "__rl":  true,
+                                                        "mode":  "list",
+                                                        "value":  "public"
+                                                    },
+                                         "table":  {
+                                                       "__rl":  true,
+                                                       "mode":  "list",
+                                                       "value":  "messages"
+                                                   },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "lead_id":  "={{ $json.lead_id }}",
+                                                                       "direction":  "outbound",
+                                                                       "channel":  "={{ $json.channel }}",
+                                                                       "message_type":  "={{ $json.message_type || \"text\" }}",
+                                                                       "content":  "={{ $json.message }}",
+                                                                       "provider_message_id":  "={{ $json.provider_message_id || null }}",
+                                                                       "status":  "={{ $json.message_sent ? \"sent\" : \"failed\" }}",
+                                                                       "created_at":  "={{ new Date().toISOString() }}",
+                                                                       "provider_status":  "={{ $json.provider_status || null }}",
+                                                                       "idempotency_key":  "={{ $json.execution_context?.idempotency_key || $json.idempotency_key || null }}"
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "id"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "id",
+                                                                            "displayName":  "id",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  true,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "lead_id",
+                                                                            "displayName":  "lead_id",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "direction",
+                                                                            "displayName":  "direction",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "channel",
+                                                                            "displayName":  "channel",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "message_type",
+                                                                            "displayName":  "message_type",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "content",
+                                                                            "displayName":  "content",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "provider_message_id",
+                                                                            "displayName":  "provider_message_id",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "provider_status",
+                                                                            "displayName":  "provider_status",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "status",
+                                                                            "displayName":  "status",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "created_at",
+                                                                            "displayName":  "created_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "idempotency_key",
+                                                                            "displayName":  "idempotency_key",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -960,
+                                       256
+                                   ],
+                      "id":  "ac5a8ded-7f9b-44ca-bb9e-177ffb7bbb08",
+                      "name":  "insert_message",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const originalInput = $input.first().json;\n\nconst originalContext = originalInput.context_packet || {};\nconst current = $json.context_packet?.state || originalContext.state || {};\nconst patch =\n  $json.sanitized_state_update ||\n  $json.state_update ||\n  {};\n\nconst leadId =\n  $json.execution_context?.lead_id ||\n  $json.lead_id ||\n  $json.context_packet?.lead?.id ||\n  originalContext.lead?.id ||\n  null;\n\nconst phone =\n  $json.execution_context?.phone ||\n  $json.phone ||\n  $json.context_packet?.lead?.phone ||\n  originalContext.lead?.phone ||\n  null;\n\nconst channel =\n  $json.execution_context?.channel ||\n  $json.channel ||\n  $json.context_packet?.lead?.channel ||\n  originalContext.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in build_state_payload\");\n}\n\n// eliminar solo undefined, no null\nconst cleanPatch = Object.fromEntries(\n  Object.entries(patch).filter(([_, value]) =\u003e value !== undefined)\n);\nif (cleanPatch.confirmed_vehicle_type === undefined \u0026\u0026 cleanPatch.vehicle_type) {\n  cleanPatch.confirmed_vehicle_type = cleanPatch.vehicle_type;\n}\n\nif (cleanPatch.confirmed_district === undefined \u0026\u0026 cleanPatch.district) {\n  cleanPatch.confirmed_district = cleanPatch.district;\n}\n\nlet lead_state_update = {\n  ...current,\n  ...cleanPatch,\n  updated_at: new Date().toISOString()\n};\n\n// asegurar que missing_fields sea array internamente\nif (!Array.isArray(lead_state_update.missing_fields)) {\n  lead_state_update.missing_fields = Array.isArray(current.missing_fields)\n    ? current.missing_fields\n    : [];\n}\n\nreturn [{\n  ...$json,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  context_packet: $json.context_packet || originalContext,\n\n  execution_context: {\n    ...($json.execution_context || {}),\n    lead_id: leadId,\n    phone,\n    channel,\n    action:\n      $json.execution_context?.action ||\n      originalInput.decision?.action ||\n      null\n  },\n\n  lead_state_update\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       576,
+                                       240
+                                   ],
+                      "id":  "2f801c71-901b-45d1-b7d3-030f8f7f6673",
+                      "name":  "build_state_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "{{$json.update_lead_state_query}}",
+                                         "options":  {
+                                                         "connectionTimeout":  30,
+                                                         "queryBatching":  "single",
+                                                         "largeNumbersOutput":  "text"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       960,
+                                       208
+                                   ],
+                      "id":  "3fa9c71e-4ccd-49db-a682-ddb43b39939f",
+                      "name":  "update_lead_state",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       -768,
+                                       256
+                                   ],
+                      "id":  "175f890a-a34e-40f9-949d-ff349b2b65e7",
+                      "name":  "Merge"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1392,
+                                       240
+                                   ],
+                      "id":  "9e907445-fca7-4d9c-a1c9-4bd24759a904",
+                      "name":  "Merge2"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f03d0603-0a9c-419c-8f60-2d6939d473cd",
+                                                                                   "leftValue":  "=$json.execution_context?.action === \"send_quote\" \u0026\u0026 $json.quote_was_created === true \u0026\u0026 !!$json.quote_db_id",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       -304,
+                                       0
+                                   ],
+                      "id":  "92a837d4-d501-4c8e-9fee-63b9a1c9747e",
+                      "name":  "is_send_quote_with_quote"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "update",
+                                         "schema":  {
+                                                        "__rl":  true,
+                                                        "mode":  "list",
+                                                        "value":  "public"
+                                                    },
+                                         "table":  {
+                                                       "__rl":  true,
+                                                       "value":  "offers_or_quotes",
+                                                       "mode":  "list",
+                                                       "cachedResultName":  "offers_or_quotes"
+                                                   },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "id":  "={{ $json.quote_db_id }}",
+                                                                       "status":  "={{ $json.message_sent ? \u0027sent\u0027 : \u0027failed\u0027 }}"
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "id"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "id",
+                                                                            "displayName":  "id",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  true,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "lead_id",
+                                                                            "displayName":  "lead_id",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "price",
+                                                                            "displayName":  "price",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "number",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "status",
+                                                                            "displayName":  "status",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "created_at",
+                                                                            "displayName":  "created_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "service",
+                                                                            "displayName":  "service",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "vehicle_type",
+                                                                            "displayName":  "vehicle_type",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "district",
+                                                                            "displayName":  "district",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "base_price",
+                                                                            "displayName":  "base_price",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "number",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "surcharge",
+                                                                            "displayName":  "surcharge",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "number",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -80,
+                                       128
+                                   ],
+                      "id":  "d7526ac7-386b-4f1b-a3c0-0e932240326e",
+                      "name":  "update_quote_status",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"is_send_quote_with_quote\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  state_update: {\n    ...(original.state_update || {}),\n    ...($json.state_update || {})\n  }\n};\n\nconst action =\n  data.execution_context?.action ||\n  data.decision?.action ||\n  data.action ||\n  null;\n\nif (action !== \"send_quote\") {\n  return [data];\n}\n\nconst currentStage = data.context_packet?.state?.stage || null;\n\nconst ok =\n  data.message_sent === true ||\n  data.success === true ||\n  data.status === \"sent\" ||\n  data.status === \"accepted\" ||\n  data.provider_status === \"sent\" ||\n  data.provider_status === \"accepted\" ||\n  !!data.provider_message_id;\nreturn [{\n  ...data,\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: ok ? \"quoted\" : currentStage,\n    intent_last: ok ? \"quote_sent\" : \"quote_failed\",\n\n    last_bot_action: ok ? \"send_quote\" : \"send_quote_failed\",\n    next_goal: ok ? \"book_appointment\" : \"retry_quote\",\n\n    missing_fields: []\n  },\n  internal_status: ok ? \"send_quote_completed\" : \"send_quote_failed\"\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       96,
+                                       240
+                                   ],
+                      "id":  "5ade7814-326b-446c-81a5-87afe06062fb",
+                      "name":  "finalize_send_quote_state"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "9b0697c3-2f53-4a10-8eca-0588d2c97161",
+                                                                                   "leftValue":  "={{\n  $json.message_sent === true ||\n  $json.success === true ||\n  $json.status === \"sent\" ||\n  $json.status === \"accepted\" ||\n  $json.provider_status === \"sent\" ||\n  $json.provider_status === \"accepted\" ||\n  !!$json.provider_message_id\n}}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       -64,
+                                       16
+                                   ],
+                      "id":  "078faca0-439f-427d-b9cc-b54aa09e4d92",
+                      "name":  "IF_quote_message_sent"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO followups (\n  lead_id,\n  followup_type,\n  message_template_key,\n  scheduled_for,\n  status,\n  metadata,\n  dedupe_key,\n  created_at\n)\nVALUES\n(\n  \u0027{{ $json.execution_context.lead_id }}\u0027,\n  \u0027quote_no_reply_24h\u0027,\n  \u0027quote_no_reply_24h\u0027,\n  NOW() + interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027action_executor\u0027,\n    \u0027trigger_action\u0027, \u0027send_quote\u0027,\n    \u0027quote_id\u0027, \u0027{{ $json.quote_db_id || \"\" }}\u0027,\n    \u0027service_interest\u0027, \u0027{{ $json.execution_context.service_interest || \"\" }}\u0027,\n    \u0027vehicle_type\u0027, \u0027{{ $json.execution_context.vehicle_type || \"\" }}\u0027,\n    \u0027district\u0027, \u0027{{ $json.execution_context.district || \"\" }}\u0027\n  ),\n  \u0027{{ $json.execution_context.lead_id }}__quote_no_reply_24h__{{ $json.quote_db_id || \"no_quote_id\" }}\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.execution_context.lead_id }}\u0027,\n  \u0027quote_no_reply_48h\u0027,\n  \u0027quote_no_reply_48h\u0027,\n  NOW() + interval \u002748 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027action_executor\u0027,\n    \u0027trigger_action\u0027, \u0027send_quote\u0027,\n    \u0027quote_id\u0027, \u0027{{ $json.quote_db_id || \"\" }}\u0027,\n    \u0027service_interest\u0027, \u0027{{ $json.execution_context.service_interest || \"\" }}\u0027,\n    \u0027vehicle_type\u0027, \u0027{{ $json.execution_context.vehicle_type || \"\" }}\u0027,\n    \u0027district\u0027, \u0027{{ $json.execution_context.district || \"\" }}\u0027\n  ),\n  \u0027{{ $json.execution_context.lead_id }}__quote_no_reply_48h__{{ $json.quote_db_id || \"no_quote_id\" }}\u0027,\n  NOW()\n)\nON CONFLICT (dedupe_key) DO NOTHING;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       224,
+                                       -16
+                                   ],
+                      "id":  "2a6ea76e-96e4-45f9-bb60-8217483d4e87",
+                      "name":  "DB_Create_Quote_Followups",
+                      "alwaysOutputData":  true,
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const s = $json.lead_state_update || {};\nconst leadId = $json.lead_id || $json.execution_context?.lead_id;\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in build_update_lead_state_query\");\n}\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return `\u0027${String(value).replace(/\u0027/g, \"\u0027\u0027\")}\u0027`;\n}\n\nfunction sqlNumber(value) {\n  const n = Number(value);\n  return Number.isFinite(n) ? String(n) : \"NULL\";\n}\n\nfunction sqlBool(value) {\n  if (value === true) return \"true\";\n  if (value === false) return \"false\";\n  if (String(value).toLowerCase() === \"true\") return \"true\";\n  if (String(value).toLowerCase() === \"false\") return \"false\";\n  return \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(Array.isArray(value) ? value : []);\n  return `\u0027${json.replace(/\u0027/g, \"\u0027\u0027\")}\u0027::jsonb`;\n}\n\nconst query = `\nUPDATE public.lead_state\nSET\n  stage = ${sqlText(s.stage)},\n  intent_last = ${sqlText(s.intent_last)},\n  interest_score = ${sqlNumber(s.interest_score ?? 0)},\n\n  service_interest = ${sqlText(s.service_interest)},\n\nvehicle_type = ${sqlText(s.vehicle_type)},\ndistrict = ${sqlText(s.district)},\n\nmentioned_vehicle_type = ${sqlText(s.mentioned_vehicle_type)},\nconfirmed_vehicle_type = ${sqlText(s.confirmed_vehicle_type)},\nmentioned_district = ${sqlText(s.mentioned_district)},\nconfirmed_district = ${sqlText(s.confirmed_district)},\n\n  missing_fields = ${sqlJsonb(s.missing_fields)},\n  last_bot_action = ${sqlText(s.last_bot_action)},\n  next_goal = ${sqlText(s.next_goal)},\n  human_handoff = ${sqlBool(s.human_handoff)},\n\n  booking_options = ${sqlJsonb(s.booking_options)},\n  booking_date = ${sqlText(s.booking_date)},\n  booking_time = ${sqlText(s.booking_time)},\n  slot_id = ${sqlText(s.slot_id)},\n  availability_confirmed = ${sqlBool(s.availability_confirmed)},\n\n  availability_window = ${sqlText(s.availability_window)},\n  availability_label = ${sqlText(s.availability_label)},\n  calendar_id = ${sqlText(s.calendar_id)},\n  duration_minutes = ${sqlNumber(s.duration_minutes ?? 120)},\n  days_ahead = ${sqlNumber(s.days_ahead)},\n  start_offset_days = ${sqlNumber(s.start_offset_days)},\n  max_slots = ${sqlNumber(s.max_slots)},\n\n   service_address = ${sqlText(s.service_address)},\n  address_reference = ${sqlText(s.address_reference)},\n  address_confirmed = ${sqlBool(s.address_confirmed)},\n  address_confirmed_at = ${sqlText(s.address_confirmed_at)},\n\n  cancellation_reason = ${sqlText(s.cancellation_reason)},\n  reschedule_reason = ${sqlText(s.reschedule_reason)},\n  last_appointment_event_id = ${sqlText(s.last_appointment_event_id)},\n\n  updated_at = NOW()\nWHERE lead_id = \u0027${String(leadId).replace(/\u0027/g, \"\u0027\u0027\")}\u0027::uuid\nRETURNING\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  \n  mentioned_vehicle_type,\n  confirmed_vehicle_type,\n  mentioned_district,\n  confirmed_district,\n  \n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n  updated_at;\n`;\n\nreturn [\n  {\n    ...$json,\n    update_lead_state_query: query,\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       784,
+                                       240
+                                   ],
+                      "id":  "3d0607ea-eb29-412c-b950-31169dd321b9",
+                      "name":  "build_update_lead_state_query"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = $(\"build_outbound_message_payload\").first().json;\n\nconst messageSent =\n  $json.message_sent === true ||\n  $json.success === true ||\n  $json.status === \"sent\" ||\n  $json.status === \"accepted\" ||\n  $json.provider_status === \"sent\" ||\n  $json.provider_status === \"accepted\" ||\n  !!$json.provider_message_id ||\n  !!$json.message_id ||\n  !!$json.id;\nreturn [{\n  ...original,\n  ...$json,\n\n  message_sent: messageSent,\n\n  provider_message_id:\n    $json.provider_message_id ||\n    $json.message_id ||\n    $json.id ||\n    null,\n\n  provider_status:\n  $json.provider_status ||\n  $json.status ||\n  (messageSent ? \"sent\" : \"failed\")\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -1120,
+                                       256
+                                   ],
+                      "id":  "4eb6f905-ad4d-48f2-ba5c-ad7489aecd27",
+                      "name":  "normalize_whatsapp_result"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const insertedMessage = $(\"insert_message\").first().json || {};\n\nreturn [{\n  ...$json,\n  outbound_message_id: insertedMessage.id || null,\n  outbound_message_saved: !!insertedMessage.id,\n  message_saved: !!insertedMessage.id,\n  records: [\n    ...($json.records || []),\n    \"messages\"\n  ]\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -560,
+                                       256
+                                   ],
+                      "id":  "72527fb8-dfaa-495e-a8e4-92a19a44cc27",
+                      "name":  "mark_outbound_saved"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const originalInput = $input.first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst currentState = contextPacket.state || {};\n\nconst action =\n  $json.execution_context?.action ||\n  $json.decision?.action ||\n  $json.action ||\n  null;\n\nconst proposedStateUpdate =\n  $json.state_update ||\n  $json.execution_context?.state_update ||\n  $json.decision?.state_update ||\n  {};\n\nfunction isEmpty(value) {\n  if (value === undefined) return true;\n  if (value === null) return true;\n  if (typeof value === \"string\" \u0026\u0026 value.trim() === \"\") return true;\n  return false;\n}\n\nfunction cleanPatch(obj) {\n  const out = {};\n\n  for (const [key, value] of Object.entries(obj || {})) {\n    if (isEmpty(value)) continue;\n    out[key] = value;\n  }\n\n  return out;\n}\n\nlet sanitized = cleanPatch(proposedStateUpdate);\n\nconst defaultsByAction = {\n  ask_missing_data: {\n    last_bot_action: \"ask_missing_data\",\n    next_goal: sanitized.next_goal || \"collect_missing_data\",\n  },\n\n  send_quote: {\n    stage: \"quoted\",\n    last_bot_action: \"send_quote\",\n    next_goal: \"book_appointment\",\n    missing_fields: [],\n  },\n\n  answer_question: {\n    last_bot_action: \"answer_question\",\n  },\n\n  answer_objection: {\n    stage: \"closing\",\n    intent_last: \"objection_answered\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"answer_objection\",\n    missing_fields: [],\n  },\n\n  offer_booking: {\n    stage: \"closing\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"offer_booking\",\n  },\n\n  offer_available_slots: {\n    stage: \"booking_selection\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_available_slots\",\n    availability_confirmed: false,\n  },\n\n  collect_address: {\n    stage: \"collecting_address\",\n    next_goal: \"collect_address\",\n    last_bot_action: \"collect_address\",\n    missing_fields: [\"address\"],\n  },\n\n  confirm_address: {\n    stage: \"address_confirmation\",\n    next_goal: \"confirm_booking\",\n    last_bot_action: \"confirm_address\",\n    missing_fields: [],\n  },\n\n  confirm_booking: {\n    stage: \"booked\",\n    next_goal: \"send_pre_service_instructions\",\n    last_bot_action: \"confirm_booking\",\n    availability_confirmed: true,\n    missing_fields: [],\n  },\n\n  cancel_booking: {\n    last_bot_action: sanitized.last_bot_action || \"cancel_booking\",\n    missing_fields: [],\n  },\n\n  reschedule_booking: {\n    stage: \"reschedule\",\n    next_goal: \"collect_new_slot\",\n    last_bot_action: \"reschedule_booking\",\n    missing_fields: [],\n  },\n\n  handoff_human: {\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: [],\n  },\n\n  request_review: {\n    stage: \"post_service\",\n    next_goal: \"request_customer_review\",\n    last_bot_action: \"request_review\",\n    missing_fields: [],\n  },\n\n  request_referral: {\n    stage: \"post_service\",\n    next_goal: \"facilitate_referral\",\n    last_bot_action: \"request_referral\",\n    missing_fields: [],\n  },\n\n  send_service_menu: {\n    stage: \"service_discovery\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"send_service_menu\",\n    missing_fields: [],\n  },\n\n  recommend_service: {\n    stage: \"service_discovery\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"recommend_service\",\n  },\n};\n\nsanitized = {\n  ...sanitized,\n  ...(defaultsByAction[action] || {}),\n};\n\nif (!Array.isArray(sanitized.missing_fields)) {\n  sanitized.missing_fields = Array.isArray(currentState.missing_fields)\n    ? currentState.missing_fields\n    : [];\n}\nfunction canonicalVehicle(value) {\n  const t = String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/_/g, \" \")\n    .trim();\n\n  const map = {\n    \"suv\": \"SUV\",\n    \"jeep\": \"SUV\",\n    \"4x4\": \"SUV\",\n    \"camioneta\": \"Camioneta\",\n    \"pickup\": \"Camioneta\",\n    \"pick up\": \"Camioneta\",\n    \"sedan\": \"Sedán\",\n    \"hatchback\": \"Hatchback\",\n    \"city car\": \"City car\",\n    \"citycar\": \"City car\",\n    \"auto\": \"Auto\",\n    \"automovil\": \"Auto\",\n    \"vehiculo\": \"Auto\",\n    \"moto\": \"Moto\",\n    \"motocicleta\": \"Moto\",\n    \"furgon\": \"Furgón\",\n    \"van\": \"Furgón\",\n  };\n\n  return map[t] || null;\n}\n\nfunction canonicalDistrict(value) {\n  const t = String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/_/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n\n  const map = {\n    \"huechuraba\": \"Huechuraba\",\n    \"vitacura\": \"Vitacura\",\n    \"las condes\": \"Las Condes\",\n    \"providencia\": \"Providencia\",\n    \"lo barnechea\": \"Lo Barnechea\",\n    \"santiago centro\": \"Santiago Centro\",\n    \"santiago\": \"Santiago\",\n    \"nunoa\": \"Ñuñoa\",\n    \"independencia\": \"Independencia\",\n    \"recoleta\": \"Recoleta\",\n    \"quilicura\": \"Quilicura\",\n    \"conchali\": \"Conchalí\",\n    \"colina\": \"Colina\",\n    \"la reina\": \"La Reina\",\n    \"penalolen\": \"Peñalolén\",\n    \"macul\": \"Macul\",\n    \"la florida\": \"La Florida\",\n    \"maipu\": \"Maipú\",\n    \"san miguel\": \"San Miguel\",\n    \"la cisterna\": \"La Cisterna\",\n    \"puente alto\": \"Puente Alto\",\n    \"pudahuel\": \"Pudahuel\",\n    \"renca\": \"Renca\",\n  };\n\n  return map[t] || null;\n}\n\nif (sanitized.mentioned_vehicle_type) {\n  sanitized.mentioned_vehicle_type =\n    canonicalVehicle(sanitized.mentioned_vehicle_type) || sanitized.mentioned_vehicle_type;\n}\n\nif (sanitized.confirmed_vehicle_type) {\n  sanitized.confirmed_vehicle_type =\n    canonicalVehicle(sanitized.confirmed_vehicle_type) || sanitized.confirmed_vehicle_type;\n\n  // compatibilidad con el sistema actual\n  sanitized.vehicle_type = sanitized.confirmed_vehicle_type;\n}\n\nif (sanitized.vehicle_type) {\n  const normalizedVehicle = canonicalVehicle(sanitized.vehicle_type);\n  sanitized.vehicle_type = normalizedVehicle || sanitized.vehicle_type;\n  sanitized.confirmed_vehicle_type = sanitized.confirmed_vehicle_type || sanitized.vehicle_type;\n}\n\nif (sanitized.mentioned_district) {\n  sanitized.mentioned_district =\n    canonicalDistrict(sanitized.mentioned_district) || sanitized.mentioned_district;\n}\n\nif (sanitized.confirmed_district) {\n  sanitized.confirmed_district =\n    canonicalDistrict(sanitized.confirmed_district) || sanitized.confirmed_district;\n\n  // compatibilidad con el sistema actual\n  sanitized.district = sanitized.confirmed_district;\n}\n\nif (sanitized.district) {\n  const normalizedDistrict = canonicalDistrict(sanitized.district);\n  sanitized.district = normalizedDistrict || sanitized.district;\n  sanitized.confirmed_district = sanitized.confirmed_district || sanitized.district;\n}\n\nreturn [\n  {\n    ...$json,\n\n    proposed_state_update: proposedStateUpdate,\n    sanitized_state_update: sanitized,\n\n    // Desde aquí en adelante este es el único state_update oficial.\n    state_update: sanitized,\n\n    meta: {\n      ...($json.meta || {}),\n      state_resolution: {\n        source: \"normalize_final_state_update\",\n        action,\n        state_before: currentState,\n        proposed_state_update: proposedStateUpdate,\n        sanitized_state_update: sanitized,\n      },\n    },\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       304,
+                                       240
+                                   ],
+                      "id":  "f64a34be-ea2f-4f4b-87b8-c995e71c39c0",
+                      "name":  "normalize_final_state_update"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch {\n      return [];\n    }\n  }\n\n  return [];\n}\n\nfunction boolValue(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return false;\n}\n\nconst persistedState = {\n  lead_id: $json.lead_id || null,\n\n  stage: $json.stage || null,\n  intent_last: $json.intent_last || null,\n  interest_score: $json.interest_score ?? null,\n\n  service_interest: $json.service_interest || null,\n  vehicle_type: $json.vehicle_type || null,\n  district: $json.district || null,\n\n  missing_fields: parseJsonArray($json.missing_fields),\n  last_bot_action: $json.last_bot_action || null,\n  next_goal: $json.next_goal || null,\n  human_handoff: boolValue($json.human_handoff),\n\n  booking_options: parseJsonArray($json.booking_options),\n  booking_date: $json.booking_date || null,\n  booking_time: $json.booking_time || null,\n  slot_id: $json.slot_id || null,\n  availability_confirmed: boolValue($json.availability_confirmed),\n\n  availability_window: $json.availability_window || null,\n  availability_label: $json.availability_label || null,\n  calendar_id: $json.calendar_id || null,\n  duration_minutes: $json.duration_minutes ?? null,\n  days_ahead: $json.days_ahead ?? null,\n  start_offset_days: $json.start_offset_days ?? null,\n  max_slots: $json.max_slots ?? null,\n\n  service_address: $json.service_address || null,\n  address_reference: $json.address_reference || null,\n  address_confirmed: boolValue($json.address_confirmed),\n  address_confirmed_at: $json.address_confirmed_at || null,\n\n  cancellation_reason: $json.cancellation_reason || null,\n  last_appointment_event_id: $json.last_appointment_event_id || null,\n\n  updated_at: $json.updated_at || null,\n};\n\nreturn [{\n  ...$json,\n  state_updated: !!persistedState.updated_at,\n  persisted_state_current: persistedState,\n  state: {\n    current: persistedState,\n  }\n}];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1168,
+                                       208
+                                   ],
+                      "id":  "4afda521-ba15-429d-bd86-93601565d48b",
+                      "name":  "normalize_persisted_state_current"
+                  },
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"a string\"\n}"
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       -1776,
+                                       256
+                                   ],
+                      "id":  "250f15ad-a718-4cb5-9cfc-e0716e9adb37",
+                      "name":  "When Executed by Another Workflow"
+                  }
+              ],
+    "connections":  {
+                        "build_outbound_message_payload":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Call \u00276.1 send_outbound_message\u0027",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "Call \u00276.1 send_outbound_message\u0027":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "normalize_whatsapp_result",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                        "insert_message":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Merge",
+                                                                    "type":  "main",
+                                                                    "index":  1
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "build_state_payload":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Merge2",
+                                                                         "type":  "main",
+                                                                         "index":  1
+                                                                     },
+                                                                     {
+                                                                         "node":  "build_update_lead_state_query",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "update_lead_state":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "normalize_persisted_state_current",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Merge":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "mark_outbound_saved",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  },
+                        "Merge2":  {
+                                       "main":  [
+                                                    [
+
+                                                    ]
+                                                ]
+                                   },
+                        "is_send_quote_with_quote":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "IF_quote_message_sent",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          },
+                                                                          {
+                                                                              "node":  "update_quote_status",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ],
+                                                                      [
+                                                                          {
+                                                                              "node":  "finalize_send_quote_state",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "update_quote_status":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "finalize_send_quote_state",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "finalize_send_quote_state":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "normalize_final_state_update",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "build_update_lead_state_query":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "update_lead_state",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "normalize_whatsapp_result":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "insert_message",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           },
+                                                                           {
+                                                                               "node":  "Merge",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "mark_outbound_saved":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "finalize_send_quote_state",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "normalize_final_state_update":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "build_state_payload",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "normalize_persisted_state_current":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "Merge2",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              },
+                        "When Executed by Another Workflow":  {
+                                                                  "main":  [
+                                                                               [
+                                                                                   {
+                                                                                       "node":  "build_outbound_message_payload",
+                                                                                       "type":  "main",
+                                                                                       "index":  0
+                                                                                   }
+                                                                               ]
+                                                                           ]
+                                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "5722dbe3-ce21-4c9f-9cee-e7a2f9a31b31",
+    "activeVersionId":  "5722dbe3-ce21-4c9f-9cee-e7a2f9a31b31",
+    "versionCounter":  15,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:45:01.169Z",
+                       "createdAt":  "2026-05-13T14:45:01.169Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "5kcYOeYHLlcAFtf9",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:47:45.000Z",
+                          "createdAt":  "2026-05-13T14:47:43.227Z",
+                          "versionId":  "5722dbe3-ce21-4c9f-9cee-e7a2f9a31b31",
+                          "workflowId":  "5kcYOeYHLlcAFtf9",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const originalInput = $input.first().json;\n\nconst originalContext = originalInput.context_packet || {};\nconst currentContext = $json.context_packet || originalContext || {};\n\nconst leadId =\n  $json.execution_context?.lead_id ||\n  $json.lead_id ||\n  currentContext.lead?.id ||\n  originalContext.lead?.id ||\n  null;\n\nconst phone =\n  currentContext.lead?.phone ||\n  $json.execution_context?.phone ||\n  $json.phone ||\n  originalContext.lead?.phone ||\n  null;\n\nconst channel =\n  $json.execution_context?.channel ||\n  $json.channel ||\n  currentContext.lead?.channel ||\n  originalContext.lead?.channel ||\n  \"whatsapp\";\n\nconst chatSessionId =\n  $json.execution_context?.chat_session_id ||\n  $json.chat_session_id ||\n  currentContext.conversation?.chat_session_id ||\n  currentContext.source_metadata?.chat_session_id ||\n  currentContext.event?.source_metadata?.chat_session_id ||\n  originalContext.conversation?.chat_session_id ||\n  originalContext.source_metadata?.chat_session_id ||\n  originalContext.event?.source_metadata?.chat_session_id ||\n  null;\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id for outbound message\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone for outbound message\");\n}\n\nreturn [{\n  ...$json,\n\n  lead_id: leadId,\n  phone,\n  channel,\n  chat_session_id: chatSessionId,\n\n  message: $json.message_to_send || $json.message || \"\",\n  message_type: $json.message_type || \"text\",\n\n  context_packet: currentContext,\n\n  execution_context: {\n    ...($json.execution_context || {}),\n    lead_id: leadId,\n    phone,\n    channel,\n    chat_session_id: chatSessionId,\n    action:\n      $json.execution_context?.action ||\n      originalInput.decision?.action ||\n      null\n  },\n\n  state_update: $json.state_update || {},\n  db_operations: $json.db_operations || [],\n\n  quote: $json.quote || null,\n  appointment: $json.appointment || null,\n  followup: $json.followup || null,\n\n  quote_db_id: $json.quote_was_created === true ? ($json.quote_db_id || null) : null,\nquote_was_created: $json.quote_was_created === true\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             -1504,
+                                                             256
+                                                         ],
+                                            "id":  "192b797f-029f-4e05-93b2-0d8185330f75",
+                                            "name":  "build_outbound_message_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "qY8gG9AaeBkFmxGn",
+                                                                                  "mode":  "list",
+                                                                                  "cachedResultUrl":  "/workflow/qY8gG9AaeBkFmxGn",
+                                                                                  "cachedResultName":  "6.1 send_outbound_message"
+                                                                              },
+                                                               "workflowInputs":  {
+                                                                                      "mappingMode":  "defineBelow",
+                                                                                      "value":  {
+                                                                                                    "lead_id":  "={{$json.lead_id}}",
+                                                                                                    "followup_id":  "={{$json.followup?.id || null}}",
+                                                                                                    "phone":  "={{$json.phone}}",
+                                                                                                    "channel":  "={{$json.channel}}",
+                                                                                                    "message":  "={{$json.message}}",
+                                                                                                    "message_type":  "={{$json.message_type || \"text\"}}",
+                                                                                                    "source":  "={{$json.execution_context?.action || \"action_executor\"}}",
+                                                                                                    "chat_session_id":  "={{$json.chat_session_id || $json.execution_context?.chat_session_id || $json.context_packet?.lead?.chat_session_id || $json.context_packet?.event?.source_metadata?.chat_session_id || $json.context_packet?.source_metadata?.chat_session_id || null}}"
+                                                                                                },
+                                                                                      "matchingColumns":  [
+
+                                                                                                          ],
+                                                                                      "schema":  [
+                                                                                                     {
+                                                                                                         "id":  "lead_id",
+                                                                                                         "displayName":  "lead_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "followup_id",
+                                                                                                         "displayName":  "followup_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "phone",
+                                                                                                         "displayName":  "phone",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "channel",
+                                                                                                         "displayName":  "channel",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "message",
+                                                                                                         "displayName":  "message",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "message_type",
+                                                                                                         "displayName":  "message_type",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "source",
+                                                                                                         "displayName":  "source",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     },
+                                                                                                     {
+                                                                                                         "id":  "chat_session_id",
+                                                                                                         "displayName":  "chat_session_id",
+                                                                                                         "required":  false,
+                                                                                                         "defaultMatch":  false,
+                                                                                                         "display":  true,
+                                                                                                         "canBeUsedToMatch":  true,
+                                                                                                         "type":  "string",
+                                                                                                         "removed":  false
+                                                                                                     }
+                                                                                                 ],
+                                                                                      "attemptToConvertTypes":  false,
+                                                                                      "convertFieldsToString":  true
+                                                                                  },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.3,
+                                            "position":  [
+                                                             -1312,
+                                                             256
+                                                         ],
+                                            "id":  "24ec2583-d12a-469f-8912-237c543680ad",
+                                            "name":  "Call \u00276.1 send_outbound_message\u0027"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "schema":  {
+                                                                              "__rl":  true,
+                                                                              "mode":  "list",
+                                                                              "value":  "public"
+                                                                          },
+                                                               "table":  {
+                                                                             "__rl":  true,
+                                                                             "mode":  "list",
+                                                                             "value":  "messages"
+                                                                         },
+                                                               "columns":  {
+                                                                               "mappingMode":  "defineBelow",
+                                                                               "value":  {
+                                                                                             "lead_id":  "={{ $json.lead_id }}",
+                                                                                             "direction":  "outbound",
+                                                                                             "channel":  "={{ $json.channel }}",
+                                                                                             "message_type":  "={{ $json.message_type || \"text\" }}",
+                                                                                             "content":  "={{ $json.message }}",
+                                                                                             "provider_message_id":  "={{ $json.provider_message_id || null }}",
+                                                                                             "status":  "={{ $json.message_sent ? \"sent\" : \"failed\" }}",
+                                                                                             "created_at":  "={{ new Date().toISOString() }}",
+                                                                                             "provider_status":  "={{ $json.provider_status || null }}",
+                                                                                             "idempotency_key":  "={{ $json.execution_context?.idempotency_key || $json.idempotency_key || null }}"
+                                                                                         },
+                                                                               "matchingColumns":  [
+                                                                                                       "id"
+                                                                                                   ],
+                                                                               "schema":  [
+                                                                                              {
+                                                                                                  "id":  "id",
+                                                                                                  "displayName":  "id",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  true,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "lead_id",
+                                                                                                  "displayName":  "lead_id",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "direction",
+                                                                                                  "displayName":  "direction",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "channel",
+                                                                                                  "displayName":  "channel",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "message_type",
+                                                                                                  "displayName":  "message_type",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "content",
+                                                                                                  "displayName":  "content",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "provider_message_id",
+                                                                                                  "displayName":  "provider_message_id",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "provider_status",
+                                                                                                  "displayName":  "provider_status",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "status",
+                                                                                                  "displayName":  "status",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "created_at",
+                                                                                                  "displayName":  "created_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "idempotency_key",
+                                                                                                  "displayName":  "idempotency_key",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              }
+                                                                                          ],
+                                                                               "attemptToConvertTypes":  false,
+                                                                               "convertFieldsToString":  false
+                                                                           },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             -960,
+                                                             256
+                                                         ],
+                                            "id":  "ac5a8ded-7f9b-44ca-bb9e-177ffb7bbb08",
+                                            "name":  "insert_message",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const originalInput = $input.first().json;\n\nconst originalContext = originalInput.context_packet || {};\nconst current = $json.context_packet?.state || originalContext.state || {};\nconst patch =\n  $json.sanitized_state_update ||\n  $json.state_update ||\n  {};\n\nconst leadId =\n  $json.execution_context?.lead_id ||\n  $json.lead_id ||\n  $json.context_packet?.lead?.id ||\n  originalContext.lead?.id ||\n  null;\n\nconst phone =\n  $json.execution_context?.phone ||\n  $json.phone ||\n  $json.context_packet?.lead?.phone ||\n  originalContext.lead?.phone ||\n  null;\n\nconst channel =\n  $json.execution_context?.channel ||\n  $json.channel ||\n  $json.context_packet?.lead?.channel ||\n  originalContext.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in build_state_payload\");\n}\n\n// eliminar solo undefined, no null\nconst cleanPatch = Object.fromEntries(\n  Object.entries(patch).filter(([_, value]) =\u003e value !== undefined)\n);\nif (cleanPatch.confirmed_vehicle_type === undefined \u0026\u0026 cleanPatch.vehicle_type) {\n  cleanPatch.confirmed_vehicle_type = cleanPatch.vehicle_type;\n}\n\nif (cleanPatch.confirmed_district === undefined \u0026\u0026 cleanPatch.district) {\n  cleanPatch.confirmed_district = cleanPatch.district;\n}\n\nlet lead_state_update = {\n  ...current,\n  ...cleanPatch,\n  updated_at: new Date().toISOString()\n};\n\n// asegurar que missing_fields sea array internamente\nif (!Array.isArray(lead_state_update.missing_fields)) {\n  lead_state_update.missing_fields = Array.isArray(current.missing_fields)\n    ? current.missing_fields\n    : [];\n}\n\nreturn [{\n  ...$json,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  context_packet: $json.context_packet || originalContext,\n\n  execution_context: {\n    ...($json.execution_context || {}),\n    lead_id: leadId,\n    phone,\n    channel,\n    action:\n      $json.execution_context?.action ||\n      originalInput.decision?.action ||\n      null\n  },\n\n  lead_state_update\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             576,
+                                                             240
+                                                         ],
+                                            "id":  "2f801c71-901b-45d1-b7d3-030f8f7f6673",
+                                            "name":  "build_state_payload"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "{{$json.update_lead_state_query}}",
+                                                               "options":  {
+                                                                               "connectionTimeout":  30,
+                                                                               "queryBatching":  "single",
+                                                                               "largeNumbersOutput":  "text"
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             960,
+                                                             208
+                                                         ],
+                                            "id":  "3fa9c71e-4ccd-49db-a682-ddb43b39939f",
+                                            "name":  "update_lead_state",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             -768,
+                                                             256
+                                                         ],
+                                            "id":  "175f890a-a34e-40f9-949d-ff349b2b65e7",
+                                            "name":  "Merge"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             1392,
+                                                             240
+                                                         ],
+                                            "id":  "9e907445-fca7-4d9c-a1c9-4bd24759a904",
+                                            "name":  "Merge2"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "f03d0603-0a9c-419c-8f60-2d6939d473cd",
+                                                                                                         "leftValue":  "=$json.execution_context?.action === \"send_quote\" \u0026\u0026 $json.quote_was_created === true \u0026\u0026 !!$json.quote_db_id",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             -304,
+                                                             0
+                                                         ],
+                                            "id":  "92a837d4-d501-4c8e-9fee-63b9a1c9747e",
+                                            "name":  "is_send_quote_with_quote"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "update",
+                                                               "schema":  {
+                                                                              "__rl":  true,
+                                                                              "mode":  "list",
+                                                                              "value":  "public"
+                                                                          },
+                                                               "table":  {
+                                                                             "__rl":  true,
+                                                                             "value":  "offers_or_quotes",
+                                                                             "mode":  "list",
+                                                                             "cachedResultName":  "offers_or_quotes"
+                                                                         },
+                                                               "columns":  {
+                                                                               "mappingMode":  "defineBelow",
+                                                                               "value":  {
+                                                                                             "id":  "={{ $json.quote_db_id }}",
+                                                                                             "status":  "={{ $json.message_sent ? \u0027sent\u0027 : \u0027failed\u0027 }}"
+                                                                                         },
+                                                                               "matchingColumns":  [
+                                                                                                       "id"
+                                                                                                   ],
+                                                                               "schema":  [
+                                                                                              {
+                                                                                                  "id":  "id",
+                                                                                                  "displayName":  "id",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  true,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "lead_id",
+                                                                                                  "displayName":  "lead_id",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "price",
+                                                                                                  "displayName":  "price",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "number",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "status",
+                                                                                                  "displayName":  "status",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "created_at",
+                                                                                                  "displayName":  "created_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "service",
+                                                                                                  "displayName":  "service",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "vehicle_type",
+                                                                                                  "displayName":  "vehicle_type",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "district",
+                                                                                                  "displayName":  "district",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "base_price",
+                                                                                                  "displayName":  "base_price",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "number",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "surcharge",
+                                                                                                  "displayName":  "surcharge",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "number",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              }
+                                                                                          ],
+                                                                               "attemptToConvertTypes":  false,
+                                                                               "convertFieldsToString":  false
+                                                                           },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             -80,
+                                                             128
+                                                         ],
+                                            "id":  "d7526ac7-386b-4f1b-a3c0-0e932240326e",
+                                            "name":  "update_quote_status",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = (() =\u003e {\n  try {\n    return $(\"is_send_quote_with_quote\").first().json;\n  } catch {\n    return {};\n  }\n})();\n\nconst data = {\n  ...original,\n  ...$json,\n  execution_context: {\n    ...(original.execution_context || {}),\n    ...($json.execution_context || {})\n  },\n  context_packet: $json.context_packet || original.context_packet || {},\n  state_update: {\n    ...(original.state_update || {}),\n    ...($json.state_update || {})\n  }\n};\n\nconst action =\n  data.execution_context?.action ||\n  data.decision?.action ||\n  data.action ||\n  null;\n\nif (action !== \"send_quote\") {\n  return [data];\n}\n\nconst currentStage = data.context_packet?.state?.stage || null;\n\nconst ok =\n  data.message_sent === true ||\n  data.success === true ||\n  data.status === \"sent\" ||\n  data.status === \"accepted\" ||\n  data.provider_status === \"sent\" ||\n  data.provider_status === \"accepted\" ||\n  !!data.provider_message_id;\nreturn [{\n  ...data,\n  state_update: {\n    ...(data.state_update || {}),\n\n    stage: ok ? \"quoted\" : currentStage,\n    intent_last: ok ? \"quote_sent\" : \"quote_failed\",\n\n    last_bot_action: ok ? \"send_quote\" : \"send_quote_failed\",\n    next_goal: ok ? \"book_appointment\" : \"retry_quote\",\n\n    missing_fields: []\n  },\n  internal_status: ok ? \"send_quote_completed\" : \"send_quote_failed\"\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             96,
+                                                             240
+                                                         ],
+                                            "id":  "5ade7814-326b-446c-81a5-87afe06062fb",
+                                            "name":  "finalize_send_quote_state"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "leftValue":  "",
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  3
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "9b0697c3-2f53-4a10-8eca-0588d2c97161",
+                                                                                                         "leftValue":  "={{\n  $json.message_sent === true ||\n  $json.success === true ||\n  $json.status === \"sent\" ||\n  $json.status === \"accepted\" ||\n  $json.provider_status === \"sent\" ||\n  $json.provider_status === \"accepted\" ||\n  !!$json.provider_message_id\n}}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.3,
+                                            "position":  [
+                                                             -64,
+                                                             16
+                                                         ],
+                                            "id":  "078faca0-439f-427d-b9cc-b54aa09e4d92",
+                                            "name":  "IF_quote_message_sent"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "INSERT INTO followups (\n  lead_id,\n  followup_type,\n  message_template_key,\n  scheduled_for,\n  status,\n  metadata,\n  dedupe_key,\n  created_at\n)\nVALUES\n(\n  \u0027{{ $json.execution_context.lead_id }}\u0027,\n  \u0027quote_no_reply_24h\u0027,\n  \u0027quote_no_reply_24h\u0027,\n  NOW() + interval \u002724 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027action_executor\u0027,\n    \u0027trigger_action\u0027, \u0027send_quote\u0027,\n    \u0027quote_id\u0027, \u0027{{ $json.quote_db_id || \"\" }}\u0027,\n    \u0027service_interest\u0027, \u0027{{ $json.execution_context.service_interest || \"\" }}\u0027,\n    \u0027vehicle_type\u0027, \u0027{{ $json.execution_context.vehicle_type || \"\" }}\u0027,\n    \u0027district\u0027, \u0027{{ $json.execution_context.district || \"\" }}\u0027\n  ),\n  \u0027{{ $json.execution_context.lead_id }}__quote_no_reply_24h__{{ $json.quote_db_id || \"no_quote_id\" }}\u0027,\n  NOW()\n),\n(\n  \u0027{{ $json.execution_context.lead_id }}\u0027,\n  \u0027quote_no_reply_48h\u0027,\n  \u0027quote_no_reply_48h\u0027,\n  NOW() + interval \u002748 hours\u0027,\n  \u0027pending\u0027,\n  jsonb_build_object(\n    \u0027source\u0027, \u0027action_executor\u0027,\n    \u0027trigger_action\u0027, \u0027send_quote\u0027,\n    \u0027quote_id\u0027, \u0027{{ $json.quote_db_id || \"\" }}\u0027,\n    \u0027service_interest\u0027, \u0027{{ $json.execution_context.service_interest || \"\" }}\u0027,\n    \u0027vehicle_type\u0027, \u0027{{ $json.execution_context.vehicle_type || \"\" }}\u0027,\n    \u0027district\u0027, \u0027{{ $json.execution_context.district || \"\" }}\u0027\n  ),\n  \u0027{{ $json.execution_context.lead_id }}__quote_no_reply_48h__{{ $json.quote_db_id || \"no_quote_id\" }}\u0027,\n  NOW()\n)\nON CONFLICT (dedupe_key) DO NOTHING;",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             224,
+                                                             -16
+                                                         ],
+                                            "id":  "2a6ea76e-96e4-45f9-bb60-8217483d4e87",
+                                            "name":  "DB_Create_Quote_Followups",
+                                            "alwaysOutputData":  true,
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const s = $json.lead_state_update || {};\nconst leadId = $json.lead_id || $json.execution_context?.lead_id;\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in build_update_lead_state_query\");\n}\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return `\u0027${String(value).replace(/\u0027/g, \"\u0027\u0027\")}\u0027`;\n}\n\nfunction sqlNumber(value) {\n  const n = Number(value);\n  return Number.isFinite(n) ? String(n) : \"NULL\";\n}\n\nfunction sqlBool(value) {\n  if (value === true) return \"true\";\n  if (value === false) return \"false\";\n  if (String(value).toLowerCase() === \"true\") return \"true\";\n  if (String(value).toLowerCase() === \"false\") return \"false\";\n  return \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(Array.isArray(value) ? value : []);\n  return `\u0027${json.replace(/\u0027/g, \"\u0027\u0027\")}\u0027::jsonb`;\n}\n\nconst query = `\nUPDATE public.lead_state\nSET\n  stage = ${sqlText(s.stage)},\n  intent_last = ${sqlText(s.intent_last)},\n  interest_score = ${sqlNumber(s.interest_score ?? 0)},\n\n  service_interest = ${sqlText(s.service_interest)},\n\nvehicle_type = ${sqlText(s.vehicle_type)},\ndistrict = ${sqlText(s.district)},\n\nmentioned_vehicle_type = ${sqlText(s.mentioned_vehicle_type)},\nconfirmed_vehicle_type = ${sqlText(s.confirmed_vehicle_type)},\nmentioned_district = ${sqlText(s.mentioned_district)},\nconfirmed_district = ${sqlText(s.confirmed_district)},\n\n  missing_fields = ${sqlJsonb(s.missing_fields)},\n  last_bot_action = ${sqlText(s.last_bot_action)},\n  next_goal = ${sqlText(s.next_goal)},\n  human_handoff = ${sqlBool(s.human_handoff)},\n\n  booking_options = ${sqlJsonb(s.booking_options)},\n  booking_date = ${sqlText(s.booking_date)},\n  booking_time = ${sqlText(s.booking_time)},\n  slot_id = ${sqlText(s.slot_id)},\n  availability_confirmed = ${sqlBool(s.availability_confirmed)},\n\n  availability_window = ${sqlText(s.availability_window)},\n  availability_label = ${sqlText(s.availability_label)},\n  calendar_id = ${sqlText(s.calendar_id)},\n  duration_minutes = ${sqlNumber(s.duration_minutes ?? 120)},\n  days_ahead = ${sqlNumber(s.days_ahead)},\n  start_offset_days = ${sqlNumber(s.start_offset_days)},\n  max_slots = ${sqlNumber(s.max_slots)},\n\n   service_address = ${sqlText(s.service_address)},\n  address_reference = ${sqlText(s.address_reference)},\n  address_confirmed = ${sqlBool(s.address_confirmed)},\n  address_confirmed_at = ${sqlText(s.address_confirmed_at)},\n\n  cancellation_reason = ${sqlText(s.cancellation_reason)},\n  reschedule_reason = ${sqlText(s.reschedule_reason)},\n  last_appointment_event_id = ${sqlText(s.last_appointment_event_id)},\n\n  updated_at = NOW()\nWHERE lead_id = \u0027${String(leadId).replace(/\u0027/g, \"\u0027\u0027\")}\u0027::uuid\nRETURNING\n  lead_id,\n  stage,\n  intent_last,\n  interest_score,\n  service_interest,\n  vehicle_type,\n  district,\n  \n  mentioned_vehicle_type,\n  confirmed_vehicle_type,\n  mentioned_district,\n  confirmed_district,\n  \n  missing_fields,\n  last_bot_action,\n  next_goal,\n  human_handoff,\n  booking_options,\n  booking_date,\n  booking_time,\n  slot_id,\n  availability_confirmed,\n  availability_window,\n  availability_label,\n  calendar_id,\n  duration_minutes,\n  days_ahead,\n  start_offset_days,\n  max_slots,\n service_address,\n  address_reference,\n  address_confirmed,\n  address_confirmed_at,\n  cancellation_reason,\n  reschedule_reason,\n  last_appointment_event_id,\n  updated_at;\n`;\n\nreturn [\n  {\n    ...$json,\n    update_lead_state_query: query,\n  },\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             784,
+                                                             240
+                                                         ],
+                                            "id":  "3d0607ea-eb29-412c-b950-31169dd321b9",
+                                            "name":  "build_update_lead_state_query"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const original = $(\"build_outbound_message_payload\").first().json;\n\nconst messageSent =\n  $json.message_sent === true ||\n  $json.success === true ||\n  $json.status === \"sent\" ||\n  $json.status === \"accepted\" ||\n  $json.provider_status === \"sent\" ||\n  $json.provider_status === \"accepted\" ||\n  !!$json.provider_message_id ||\n  !!$json.message_id ||\n  !!$json.id;\nreturn [{\n  ...original,\n  ...$json,\n\n  message_sent: messageSent,\n\n  provider_message_id:\n    $json.provider_message_id ||\n    $json.message_id ||\n    $json.id ||\n    null,\n\n  provider_status:\n  $json.provider_status ||\n  $json.status ||\n  (messageSent ? \"sent\" : \"failed\")\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             -1120,
+                                                             256
+                                                         ],
+                                            "id":  "4eb6f905-ad4d-48f2-ba5c-ad7489aecd27",
+                                            "name":  "normalize_whatsapp_result"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const insertedMessage = $(\"insert_message\").first().json || {};\n\nreturn [{\n  ...$json,\n  outbound_message_id: insertedMessage.id || null,\n  outbound_message_saved: !!insertedMessage.id,\n  message_saved: !!insertedMessage.id,\n  records: [\n    ...($json.records || []),\n    \"messages\"\n  ]\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             -560,
+                                                             256
+                                                         ],
+                                            "id":  "72527fb8-dfaa-495e-a8e4-92a19a44cc27",
+                                            "name":  "mark_outbound_saved"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const originalInput = $input.first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst currentState = contextPacket.state || {};\n\nconst action =\n  $json.execution_context?.action ||\n  $json.decision?.action ||\n  $json.action ||\n  null;\n\nconst proposedStateUpdate =\n  $json.state_update ||\n  $json.execution_context?.state_update ||\n  $json.decision?.state_update ||\n  {};\n\nfunction isEmpty(value) {\n  if (value === undefined) return true;\n  if (value === null) return true;\n  if (typeof value === \"string\" \u0026\u0026 value.trim() === \"\") return true;\n  return false;\n}\n\nfunction cleanPatch(obj) {\n  const out = {};\n\n  for (const [key, value] of Object.entries(obj || {})) {\n    if (isEmpty(value)) continue;\n    out[key] = value;\n  }\n\n  return out;\n}\n\nlet sanitized = cleanPatch(proposedStateUpdate);\n\nconst defaultsByAction = {\n  ask_missing_data: {\n    last_bot_action: \"ask_missing_data\",\n    next_goal: sanitized.next_goal || \"collect_missing_data\",\n  },\n\n  send_quote: {\n    stage: \"quoted\",\n    last_bot_action: \"send_quote\",\n    next_goal: \"book_appointment\",\n    missing_fields: [],\n  },\n\n  answer_question: {\n    last_bot_action: \"answer_question\",\n  },\n\n  answer_objection: {\n    stage: \"closing\",\n    intent_last: \"objection_answered\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"answer_objection\",\n    missing_fields: [],\n  },\n\n  offer_booking: {\n    stage: \"closing\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"offer_booking\",\n  },\n\n  offer_available_slots: {\n    stage: \"booking_selection\",\n    next_goal: \"collect_selected_slot\",\n    last_bot_action: \"offer_available_slots\",\n    availability_confirmed: false,\n  },\n\n  collect_address: {\n    stage: \"collecting_address\",\n    next_goal: \"collect_address\",\n    last_bot_action: \"collect_address\",\n    missing_fields: [\"address\"],\n  },\n\n  confirm_address: {\n    stage: \"address_confirmation\",\n    next_goal: \"confirm_booking\",\n    last_bot_action: \"confirm_address\",\n    missing_fields: [],\n  },\n\n  confirm_booking: {\n    stage: \"booked\",\n    next_goal: \"send_pre_service_instructions\",\n    last_bot_action: \"confirm_booking\",\n    availability_confirmed: true,\n    missing_fields: [],\n  },\n\n  cancel_booking: {\n    last_bot_action: sanitized.last_bot_action || \"cancel_booking\",\n    missing_fields: [],\n  },\n\n  reschedule_booking: {\n    stage: \"reschedule\",\n    next_goal: \"collect_new_slot\",\n    last_bot_action: \"reschedule_booking\",\n    missing_fields: [],\n  },\n\n  handoff_human: {\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: [],\n  },\n\n  request_review: {\n    stage: \"post_service\",\n    next_goal: \"request_customer_review\",\n    last_bot_action: \"request_review\",\n    missing_fields: [],\n  },\n\n  request_referral: {\n    stage: \"post_service\",\n    next_goal: \"facilitate_referral\",\n    last_bot_action: \"request_referral\",\n    missing_fields: [],\n  },\n\n  send_service_menu: {\n    stage: \"service_discovery\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"send_service_menu\",\n    missing_fields: [],\n  },\n\n  recommend_service: {\n    stage: \"service_discovery\",\n    next_goal: \"collect_vehicle_and_district\",\n    last_bot_action: \"recommend_service\",\n  },\n};\n\nsanitized = {\n  ...sanitized,\n  ...(defaultsByAction[action] || {}),\n};\n\nif (!Array.isArray(sanitized.missing_fields)) {\n  sanitized.missing_fields = Array.isArray(currentState.missing_fields)\n    ? currentState.missing_fields\n    : [];\n}\nfunction canonicalVehicle(value) {\n  const t = String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/_/g, \" \")\n    .trim();\n\n  const map = {\n    \"suv\": \"SUV\",\n    \"jeep\": \"SUV\",\n    \"4x4\": \"SUV\",\n    \"camioneta\": \"Camioneta\",\n    \"pickup\": \"Camioneta\",\n    \"pick up\": \"Camioneta\",\n    \"sedan\": \"Sedán\",\n    \"hatchback\": \"Hatchback\",\n    \"city car\": \"City car\",\n    \"citycar\": \"City car\",\n    \"auto\": \"Auto\",\n    \"automovil\": \"Auto\",\n    \"vehiculo\": \"Auto\",\n    \"moto\": \"Moto\",\n    \"motocicleta\": \"Moto\",\n    \"furgon\": \"Furgón\",\n    \"van\": \"Furgón\",\n  };\n\n  return map[t] || null;\n}\n\nfunction canonicalDistrict(value) {\n  const t = String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .replace(/_/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n\n  const map = {\n    \"huechuraba\": \"Huechuraba\",\n    \"vitacura\": \"Vitacura\",\n    \"las condes\": \"Las Condes\",\n    \"providencia\": \"Providencia\",\n    \"lo barnechea\": \"Lo Barnechea\",\n    \"santiago centro\": \"Santiago Centro\",\n    \"santiago\": \"Santiago\",\n    \"nunoa\": \"Ñuñoa\",\n    \"independencia\": \"Independencia\",\n    \"recoleta\": \"Recoleta\",\n    \"quilicura\": \"Quilicura\",\n    \"conchali\": \"Conchalí\",\n    \"colina\": \"Colina\",\n    \"la reina\": \"La Reina\",\n    \"penalolen\": \"Peñalolén\",\n    \"macul\": \"Macul\",\n    \"la florida\": \"La Florida\",\n    \"maipu\": \"Maipú\",\n    \"san miguel\": \"San Miguel\",\n    \"la cisterna\": \"La Cisterna\",\n    \"puente alto\": \"Puente Alto\",\n    \"pudahuel\": \"Pudahuel\",\n    \"renca\": \"Renca\",\n  };\n\n  return map[t] || null;\n}\n\nif (sanitized.mentioned_vehicle_type) {\n  sanitized.mentioned_vehicle_type =\n    canonicalVehicle(sanitized.mentioned_vehicle_type) || sanitized.mentioned_vehicle_type;\n}\n\nif (sanitized.confirmed_vehicle_type) {\n  sanitized.confirmed_vehicle_type =\n    canonicalVehicle(sanitized.confirmed_vehicle_type) || sanitized.confirmed_vehicle_type;\n\n  // compatibilidad con el sistema actual\n  sanitized.vehicle_type = sanitized.confirmed_vehicle_type;\n}\n\nif (sanitized.vehicle_type) {\n  const normalizedVehicle = canonicalVehicle(sanitized.vehicle_type);\n  sanitized.vehicle_type = normalizedVehicle || sanitized.vehicle_type;\n  sanitized.confirmed_vehicle_type = sanitized.confirmed_vehicle_type || sanitized.vehicle_type;\n}\n\nif (sanitized.mentioned_district) {\n  sanitized.mentioned_district =\n    canonicalDistrict(sanitized.mentioned_district) || sanitized.mentioned_district;\n}\n\nif (sanitized.confirmed_district) {\n  sanitized.confirmed_district =\n    canonicalDistrict(sanitized.confirmed_district) || sanitized.confirmed_district;\n\n  // compatibilidad con el sistema actual\n  sanitized.district = sanitized.confirmed_district;\n}\n\nif (sanitized.district) {\n  const normalizedDistrict = canonicalDistrict(sanitized.district);\n  sanitized.district = normalizedDistrict || sanitized.district;\n  sanitized.confirmed_district = sanitized.confirmed_district || sanitized.district;\n}\n\nreturn [\n  {\n    ...$json,\n\n    proposed_state_update: proposedStateUpdate,\n    sanitized_state_update: sanitized,\n\n    // Desde aquí en adelante este es el único state_update oficial.\n    state_update: sanitized,\n\n    meta: {\n      ...($json.meta || {}),\n      state_resolution: {\n        source: \"normalize_final_state_update\",\n        action,\n        state_before: currentState,\n        proposed_state_update: proposedStateUpdate,\n        sanitized_state_update: sanitized,\n      },\n    },\n  },\n];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             304,
+                                                             240
+                                                         ],
+                                            "id":  "f64a34be-ea2f-4f4b-87b8-c995e71c39c0",
+                                            "name":  "normalize_final_state_update"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch {\n      return [];\n    }\n  }\n\n  return [];\n}\n\nfunction boolValue(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  if (String(value).toLowerCase() === \"false\") return false;\n  return false;\n}\n\nconst persistedState = {\n  lead_id: $json.lead_id || null,\n\n  stage: $json.stage || null,\n  intent_last: $json.intent_last || null,\n  interest_score: $json.interest_score ?? null,\n\n  service_interest: $json.service_interest || null,\n  vehicle_type: $json.vehicle_type || null,\n  district: $json.district || null,\n\n  missing_fields: parseJsonArray($json.missing_fields),\n  last_bot_action: $json.last_bot_action || null,\n  next_goal: $json.next_goal || null,\n  human_handoff: boolValue($json.human_handoff),\n\n  booking_options: parseJsonArray($json.booking_options),\n  booking_date: $json.booking_date || null,\n  booking_time: $json.booking_time || null,\n  slot_id: $json.slot_id || null,\n  availability_confirmed: boolValue($json.availability_confirmed),\n\n  availability_window: $json.availability_window || null,\n  availability_label: $json.availability_label || null,\n  calendar_id: $json.calendar_id || null,\n  duration_minutes: $json.duration_minutes ?? null,\n  days_ahead: $json.days_ahead ?? null,\n  start_offset_days: $json.start_offset_days ?? null,\n  max_slots: $json.max_slots ?? null,\n\n  service_address: $json.service_address || null,\n  address_reference: $json.address_reference || null,\n  address_confirmed: boolValue($json.address_confirmed),\n  address_confirmed_at: $json.address_confirmed_at || null,\n\n  cancellation_reason: $json.cancellation_reason || null,\n  last_appointment_event_id: $json.last_appointment_event_id || null,\n\n  updated_at: $json.updated_at || null,\n};\n\nreturn [{\n  ...$json,\n  state_updated: !!persistedState.updated_at,\n  persisted_state_current: persistedState,\n  state: {\n    current: persistedState,\n  }\n}];"
+                                                           },
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1168,
+                                                             208
+                                                         ],
+                                            "id":  "4afda521-ba15-429d-bd86-93601565d48b",
+                                            "name":  "normalize_persisted_state_current"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"a string\"\n}"
+                                                           },
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             -1776,
+                                                             256
+                                                         ],
+                                            "id":  "250f15ad-a718-4cb5-9cfc-e0716e9adb37",
+                                            "name":  "When Executed by Another Workflow"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "build_outbound_message_payload":  {
+                                                                                     "main":  [
+                                                                                                  [
+                                                                                                      {
+                                                                                                          "node":  "Call \u00276.1 send_outbound_message\u0027",
+                                                                                                          "type":  "main",
+                                                                                                          "index":  0
+                                                                                                      }
+                                                                                                  ]
+                                                                                              ]
+                                                                                 },
+                                              "Call \u00276.1 send_outbound_message\u0027":  {
+                                                                                                 "main":  [
+                                                                                                              [
+                                                                                                                  {
+                                                                                                                      "node":  "normalize_whatsapp_result",
+                                                                                                                      "type":  "main",
+                                                                                                                      "index":  0
+                                                                                                                  }
+                                                                                                              ]
+                                                                                                          ]
+                                                                                             },
+                                              "insert_message":  {
+                                                                     "main":  [
+                                                                                  [
+                                                                                      {
+                                                                                          "node":  "Merge",
+                                                                                          "type":  "main",
+                                                                                          "index":  1
+                                                                                      }
+                                                                                  ]
+                                                                              ]
+                                                                 },
+                                              "build_state_payload":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Merge2",
+                                                                                               "type":  "main",
+                                                                                               "index":  1
+                                                                                           },
+                                                                                           {
+                                                                                               "node":  "build_update_lead_state_query",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "update_lead_state":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "normalize_persisted_state_current",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Merge":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "mark_outbound_saved",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                                              "Merge2":  {
+                                                             "main":  [
+                                                                          [
+
+                                                                          ]
+                                                                      ]
+                                                         },
+                                              "is_send_quote_with_quote":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "IF_quote_message_sent",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                },
+                                                                                                {
+                                                                                                    "node":  "update_quote_status",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ],
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "finalize_send_quote_state",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "update_quote_status":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "finalize_send_quote_state",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "finalize_send_quote_state":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "normalize_final_state_update",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "build_update_lead_state_query":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "update_lead_state",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "normalize_whatsapp_result":  {
+                                                                                "main":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "insert_message",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "node":  "Merge",
+                                                                                                     "type":  "main",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                            },
+                                              "mark_outbound_saved":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "finalize_send_quote_state",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "normalize_final_state_update":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "build_state_payload",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "normalize_persisted_state_current":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "Merge2",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    },
+                                              "When Executed by Another Workflow":  {
+                                                                                        "main":  [
+                                                                                                     [
+                                                                                                         {
+                                                                                                             "node":  "build_outbound_message_payload",
+                                                                                                             "type":  "main",
+                                                                                                             "index":  0
+                                                                                                         }
+                                                                                                     ]
+                                                                                                 ]
+                                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 5722dbe3",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:47:45.826Z",
+                                                             "id":  597,
+                                                             "workflowId":  "5kcYOeYHLlcAFtf9",
+                                                             "versionId":  "5722dbe3-ce21-4c9f-9cee-e7a2f9a31b31",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}

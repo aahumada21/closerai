@@ -1,0 +1,283 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:12:28.507Z",
+    "createdAt":  "2026-04-13T15:30:21.959Z",
+    "id":  "zwCXR6R0vVi4l9tY",
+    "name":  "Verificación del webhook (Meta)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "96cecbf9-0db4-49b3-b3cb-1549dfeb5897",
+                                                                                   "leftValue":  "={{$json[\"query\"][\"hub.mode\"]}}",
+                                                                                   "rightValue":  "subscribe",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals",
+                                                                                                    "name":  "filter.operator.equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       208,
+                                       0
+                                   ],
+                      "id":  "cf2840fb-ce33-4600-812b-ee1c28b4ab51",
+                      "name":  "VERIFICACIÓN (GET)"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "={{$json[\"query\"][\"hub.challenge\"]}}",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       736,
+                                       -176
+                                   ],
+                      "id":  "fbf408d9-0498-4aab-8f81-cdac9aa225a0",
+                      "name":  "Respond to Webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "c0923e95-9496-4956-bfea-26e3fdb9d7b3",
+                                                                                   "leftValue":  "={{$json[\"query\"][\"hub.verify_token\"]}}",
+                                                                                   "rightValue":  "AAHUMADA",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       416,
+                                       -64
+                                   ],
+                      "id":  "0bc4ec16-c0c0-4701-9e33-fd94e511e657",
+                      "name":  "if tokeN"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "Invalid verify token",
+                                         "options":  {
+                                                         "responseCode":  403
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       672,
+                                       16
+                                   ],
+                      "id":  "2d1b126c-a2fa-4d49-9d0f-628da271c186",
+                      "name":  "Respond to Webhook INVALID"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const entry = $json.body?.entry?.[0];\nconst change = entry?.changes?.[0];\nconst value = change?.value;\n\nif (!value) {\n  return [{ json: { event_type: \u0027unknown\u0027, raw: $json.body } }];\n}\n\nif (value.messages?.length) {\n  const msg = value.messages[0];\n  const contact = value.contacts?.[0];\n\n  return [{\n    json: {\n      event_type: \u0027message\u0027,\n      channel: \u0027whatsapp\u0027,\n      from: msg.from,\n      name: contact?.profile?.name || null,\n      message_id: msg.id,\n      timestamp: msg.timestamp,\n      text: msg.text?.body || null,\n      raw: $json.body\n    }\n  }];\n}\n\nif (value.statuses?.length) {\n  return [{\n    json: {\n      event_type: \u0027status\u0027,\n      channel: \u0027whatsapp\u0027,\n      status: value.statuses[0],\n      raw: $json.body\n    }\n  }];\n}\n\nreturn [{ json: { event_type: \u0027other\u0027, raw: $json.body } }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       368,
+                                       208
+                                   ],
+                      "id":  "8fdb554c-0211-4fd6-b78c-a0da47d69a83",
+                      "name":  "Parse WhatsApp POST"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "ok",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       608,
+                                       224
+                                   ],
+                      "id":  "0f19bab8-fd14-40bd-942d-dcf502d09e16",
+                      "name":  "Respond to Webhook OK"
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "whatsapp-meta",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "id":  "1111f1f8-5e0b-4602-a8a2-e5710fc107bf",
+                      "name":  "WB WEBHOOK",
+                      "webhookId":  "9395322a-eca6-4412-9168-b050e6ce38e3"
+                  }
+              ],
+    "connections":  {
+                        "VERIFICACIÓN (GET)":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "if tokeN",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "Parse WhatsApp POST",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "if tokeN":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "Respond to Webhook",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ],
+                                                      [
+                                                          {
+                                                              "node":  "Respond to Webhook INVALID",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     },
+                        "Parse WhatsApp POST":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Respond to Webhook OK",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "WB WEBHOOK":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "VERIFICACIÓN (GET)",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "timeSavedMode":  "fixed",
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "09d51a6c-4db7-4b36-a63d-54e4497f2aa5",
+    "activeVersionId":  null,
+    "versionCounter":  100,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-13T15:30:21.964Z",
+                       "createdAt":  "2026-04-13T15:30:21.964Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "zwCXR6R0vVi4l9tY",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-05-12T14:12:24.945Z",
+                     "createdAt":  "2026-05-12T14:12:24.945Z",
+                     "id":  "Qop8Mp4ympUpmY9V",
+                     "name":  "META"
+                 },
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 },
+                 {
+                     "updatedAt":  "2026-05-12T14:08:53.491Z",
+                     "createdAt":  "2026-05-12T14:08:53.491Z",
+                     "id":  "lEIaFX9FE9GJwQJS",
+                     "name":  "TOOL"
+                 }
+             ],
+    "activeVersion":  null
+}

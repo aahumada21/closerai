@@ -1,0 +1,397 @@
+﻿{
+    "updatedAt":  "2026-05-12T14:12:48.000Z",
+    "createdAt":  "2026-04-07T16:59:00.165Z",
+    "id":  "LgGXLAOmYRtWNsSL",
+    "name":  "WA Reminders",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "minutes"
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       -256,
+                                       -96
+                                   ],
+                      "id":  "7794a96d-6d55-4d99-a8ed-8b349875d8b5",
+                      "name":  "Cron 5m 1h recordatorio"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "1952b81d-1847-450d-afe6-30263ef825b2",
+                                                                                     "name":  "allowedWeekdays",
+                                                                                     "value":  "=[\"tuesday\",\"thursday\",\"sunday\"]",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "15f629fa-3cda-4f54-a829-0b33ddd0acc1",
+                                                                                     "name":  "slotStartHour",
+                                                                                     "value":  9,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "065eb91a-be54-45c3-b207-fddd73d55142",
+                                                                                     "name":  "slotDurationHours",
+                                                                                     "value":  2,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "a545c887-8ab8-4566-90ce-b51cd517fec4",
+                                                                                     "name":  "lookaheadDays",
+                                                                                     "value":  14,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "f6073265-9437-461c-824d-318bd563b416",
+                                                                                     "name":  "reminderTypes",
+                                                                                     "value":  "=[\"R24\",\"R2\"]",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "c8bbd0d9-0e47-499c-8389-fb0738a5062b",
+                                                                                     "name":  "r24HoursBefore",
+                                                                                     "value":  24,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "bb16929d-d7ce-4043-9b25-123c14dcc89d",
+                                                                                     "name":  "r2HoursBefore",
+                                                                                     "value":  2,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "f6c4264e-ff26-4124-9ccd-5dcfa86ac404",
+                                                                                     "name":  "windowMinutes",
+                                                                                     "value":  6,
+                                                                                     "type":  "number"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "2c4c1573-96c0-4c87-8e8a-0e04ea092af0",
+                                                                                     "name":  "dedupeKeyPrefix",
+                                                                                     "value":  "reminder_",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "786f2613-7cdf-465b-9af0-7b3c14acbc07",
+                                                                                     "name":  "nowIso",
+                                                                                     "value":  "={{ $now.toISO() }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "727e7ce3-8db9-472e-9a96-76172d9c69bf",
+                                                                                     "name":  "TimeMaxIso (String)",
+                                                                                     "value":  "={{ $now.plus({ days: $json.lookaheadDays }).toISO() }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "3f34bcb0-e219-4a5b-96c9-f8e00d00af9f",
+                                                                                     "name":  "debug",
+                                                                                     "value":  "true",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       -48,
+                                       -96
+                                   ],
+                      "id":  "af5bcd6e-00c2-4976-8e97-b0a5d8ebc5a3",
+                      "name":  "Set Config"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "getAll",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com",
+                                                          "mode":  "list",
+                                                          "cachedResultName":  "Ahumada Detailing"
+                                                      },
+                                         "returnAll":  true,
+                                         "timeMin":  "={{ $now.toISO() }}",
+                                         "timeMax":  "={{ $now.plus({ days: 14 }).toFormat(\u0027yyyy-MM-dd\u0027) }}",
+                                         "options":  {
+                                                         "timeZone":  {
+                                                                          "__rl":  true,
+                                                                          "value":  "America/Santiago",
+                                                                          "mode":  "list",
+                                                                          "cachedResultName":  "America/Santiago"
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       160,
+                                       -96
+                                   ],
+                      "id":  "3505510a-31b2-4ce9-9fd7-03ebff4cb0b2",
+                      "name":  "GC - Get events (14 días)",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "mpmI0f0dGSSsN1Rj",
+                                                                          "name":  "Google Calendar account"
+                                                                      }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Function Node: Detectar recordatorios (R24 / R2) + Parseo teléfono\n// Output: solo los eventos que están dentro de la ventana de envío.\n\nconst DEFAULTS = {\n  lookaheadDays: 14,\n  windowMinutes: 6,     // Cron cada 5 min -\u003e 6 min de tolerancia\n  r24HoursBefore: 24,\n  r2HoursBefore: 2,\n  debug: false,         // pon true para ver por qué no sale nada\n};\n\n// Si este Function recibe también el Set Config en el mismo item,\n// puedes leerlo desde $json. Si no, se usan defaults.\nconst cfg = {\n  lookaheadDays: Number($json.lookaheadDays ?? DEFAULTS.lookaheadDays),\n  windowMinutes: Number($json.windowMinutes ?? DEFAULTS.windowMinutes),\n  r24HoursBefore: Number($json.r24HoursBefore ?? DEFAULTS.r24HoursBefore),\n  r2HoursBefore: Number($json.r2HoursBefore ?? DEFAULTS.r2HoursBefore),\n  debug: Boolean($json.debug ?? DEFAULTS.debug),\n};\n\nconst now = new Date();\nconst maxDate = new Date(now.getTime() + cfg.lookaheadDays * 24 * 60 * 60 * 1000);\n\nfunction parsePhoneFromDescription(desc) {\n  if (!desc) return null;\n\n  const m = desc.match(/Tel[eé]fono\\s*:\\s*([+0-9\\s()-]+)/i);\n  if (!m) return null;\n\n  let raw = m[1].trim();\n  raw = raw.replace(/[^\\d+]/g, \u0027\u0027); // deja solo dígitos y +\n\n  if (raw.startsWith(\u0027+\u0027)) return raw;\n  if (raw.startsWith(\u002756\u0027)) return \u0027+\u0027 + raw;\n  if (/^9\\d{8}$/.test(raw)) return \u0027+56\u0027 + raw;  // 9XXXXXXXX -\u003e +569XXXXXXXX\n  if (/^\\d{8}$/.test(raw)) return \u0027+56\u0027 + raw;   // no inventa el 9\n\n  return raw;\n}\n\nfunction withinWindow(targetDate, nowDate, windowMinutes) {\n  const diffMs = Math.abs(targetDate.getTime() - nowDate.getTime());\n  return diffMs \u003c= windowMinutes * 60 * 1000;\n}\n\nconst out = [];\nconst debugRows = [];\n\nfor (const item of items) {\n  const ev = item.json;\n\n  const startStr = ev?.start?.dateTime;\n  if (!startStr) {\n    if (cfg.debug) debugRows.push({ reason: \u0027no_start_datetime\u0027, id: ev?.id, summary: ev?.summary });\n    continue;\n  }\n\n  const start = new Date(startStr);\n  if (Number.isNaN(start.getTime())) {\n    if (cfg.debug) debugRows.push({ reason: \u0027invalid_start_datetime\u0027, id: ev?.id, startStr });\n    continue;\n  }\n\n  if (start \u003c now) {\n    if (cfg.debug) debugRows.push({ reason: \u0027start_in_past\u0027, id: ev?.id, startStr });\n    continue;\n  }\n\n  if (start \u003e maxDate) {\n    if (cfg.debug) debugRows.push({ reason: \u0027beyond_lookahead\u0027, id: ev?.id, startStr });\n    continue;\n  }\n\n  const description = ev.description ?? \u0027\u0027;\n  const phone = parsePhoneFromDescription(description);\n  if (!phone) {\n    if (cfg.debug) debugRows.push({ reason: \u0027no_phone\u0027, id: ev?.id, summary: ev?.summary });\n    continue;\n  }\n\n  const triggerR24 = new Date(start.getTime() - cfg.r24HoursBefore * 60 * 60 * 1000);\n  const triggerR2  = new Date(start.getTime() - cfg.r2HoursBefore  * 60 * 60 * 1000);\n\n  let reminderType = null;\n  if (withinWindow(triggerR24, now, cfg.windowMinutes)) reminderType = \u0027R24\u0027;\n  else if (withinWindow(triggerR2, now, cfg.windowMinutes)) reminderType = \u0027R2\u0027;\n  else {\n    if (cfg.debug) debugRows.push({\n      reason: \u0027not_in_window\u0027,\n      id: ev?.id,\n      startStr,\n      triggerR24: triggerR24.toISOString(),\n      triggerR2: triggerR2.toISOString(),\n      now: now.toISOString(),\n    });\n    continue;\n  }\n\n  const eventId = ev.id;\n  if (!eventId) {\n    if (cfg.debug) debugRows.push({ reason: \u0027no_event_id\u0027, summary: ev?.summary });\n    continue;\n  }\n\n  out.push({\n    json: {\n      eventId,\n      reminderType,\n      dedupeKey: `${eventId}_${reminderType}`,\n      startDateTime: startStr,\n      phone,\n      summary: ev.summary ?? \u0027\u0027,\n      description,\n    }\n  });\n}\n\n// Si debug está activo y no hubo salidas, devolvemos un item con diagnóstico\nif (cfg.debug \u0026\u0026 out.length === 0) {\n  return [{\n    json: {\n      debug: true,\n      now: now.toISOString(),\n      lookaheadMax: maxDate.toISOString(),\n      eventsIn: items.length,\n      reasonsSample: debugRows.slice(0, 20),\n    }\n  }];\n}\n\nreturn out;"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       560,
+                                       -240
+                                   ],
+                      "id":  "2532b97d-119e-4347-a22c-19d0b29232da",
+                      "name":  "FN - Detectar recordatorios (R24/R2) + Parseo teléfono"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "ffc95f6e-6894-4d68-81e8-324f20687619",
+                                                                                     "name":  "dedupeKey",
+                                                                                     "value":  "={{ $json.eventId + \u0027_\u0027 + $json.reminderType }}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       784,
+                                       -224
+                                   ],
+                      "id":  "473b2bd3-3401-4a3c-973e-fb7209e68e53",
+                      "name":  "Set - DedupeKey"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT 1\nFROM reminders_sent\nWHERE dedupe_key = :dedupeKey\nLIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "=dedupeKey = {{$json.dedupeKey}}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       992,
+                                       -224
+                                   ],
+                      "id":  "c19b55be-938f-4160-8db7-8a25230afb29",
+                      "name":  "DB - Check reminder sent",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "E56aJP2By1kfG8oi",
+                                                           "name":  "Postgres account"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "5c746d44-3d78-407a-beb9-dfbaec3962f6",
+                                                                                   "leftValue":  "={{$items(\"DB - Check reminder sent\").length \u003e 0}}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       1200,
+                                       -224
+                                   ],
+                      "id":  "ff1b6677-1e21-4b64-b6e0-88a0b2553468",
+                      "name":  "IF - Already sent?"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO reminders_sent (\n  dedupe_key,\n  event_id,\n  reminder_type,\n  phone,\n  start_datetime,\n  sent_at\n) VALUES (\n  :dedupeKey,\n  :eventId,\n  :reminderType,\n  :phone,\n  :startDateTime,\n  NOW()\n);",
+                                         "options":  {
+                                                         "queryReplacement":  "=dedupeKey = {{$json.dedupeKey}} eventId = {{$json.eventId}} reminderType = {{$json.reminderType}} phone = {{$json.phone}} startDateTime = {{$json.startDateTime}}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       1408,
+                                       -128
+                                   ],
+                      "id":  "02ee758d-db1f-43ed-bb29-63048b7e147e",
+                      "name":  "DB - Insert reminder sent",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "E56aJP2By1kfG8oi",
+                                                           "name":  "Postgres account"
+                                                       }
+                                      }
+                  }
+              ],
+    "connections":  {
+                        "Cron 5m 1h recordatorio":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Set Config",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Set Config":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "GC - Get events (14 días)",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "GC - Get events (14 días)":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "FN - Detectar recordatorios (R24/R2) + Parseo teléfono",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "FN - Detectar recordatorios (R24/R2) + Parseo teléfono":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "Set - DedupeKey",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                        "Set - DedupeKey":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "DB - Check reminder sent",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "DB - Check reminder sent":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "IF - Already sent?",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "IF - Already sent?":  {
+                                                   "main":  [
+                                                                [
+
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "DB - Insert reminder sent",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "10748cd0-f172-4c9f-8815-a8f26466c3a2",
+    "activeVersionId":  null,
+    "versionCounter":  138,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-04-07T16:59:00.170Z",
+                       "createdAt":  "2026-04-07T16:59:00.170Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "LgGXLAOmYRtWNsSL",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

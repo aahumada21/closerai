@@ -1,0 +1,105 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:01:54.000Z",
+    "createdAt":  "2026-05-12T18:38:28.115Z",
+    "id":  "OnUEZ6Ps3DwEPB4i",
+    "name":  "6.19 answer_objection",
+    "description":  null,
+    "active":  false,
+    "isArchived":  true,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}",
+                                         "inputSource":  "jsonExample"
+                                     },
+                      "id":  "5d99a08b-93d4-44ae-b6ff-6b669cfb22f8",
+                      "name":  "6.19 answer_objection",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       260,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowanswer_objectioninput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "02d0455c-e5f5-4c5d-bd1d-44ef2a707bff",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const msg = (\n  $json.execution_context?.message ||\n  $json.decision?.message ||\n  \"\"\n).trim();\n\nconst isWillThink = (() =\u003e {\n  const t = String($json.context_packet?.conversation?.latest_user_message || \"\").toLowerCase();\n  return t.includes(\"lo voy a pensar\") || t.includes(\"lo pensare\") || t.includes(\"lo pensar\") || t.includes(\"despues veo\") || t.includes(\"despu�s veo\");\n})();\n\nconst fallback = isWillThink\n  ? \"Perfecto, t�mate tu tiempo. Cualquier cosa me dices y te ayudo feliz. Si te parece, puedo enviarte los horarios disponibles o agendar cuando te acomode. �Qu� prefieres?\"\n  : \"Perfecto. Cualquier cosa me dices y te ayudo feliz. �Qu� te gustar�a revisar?\";\n\nreturn [\n  {\n    json: {\n      ...$json,\n      message_to_send: msg || fallback,\n      db_operations: [\"messages\", \"lead_state\"],\n      state_update: {\n        ...($json.execution_context?.state_update || {}),\n        stage: \"closing\",\n        intent_last: \"objection_answered\",\n        next_goal: \"book_appointment\",\n        last_bot_action: \"answer_objection\",\n        missing_fields: []\n      }\n    }\n  }\n];"
+                                     },
+                      "id":  "827118fd-a51a-4aeb-b101-623fbdd8c148",
+                      "name":  "answer_objection",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       700,
+                                       360
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "normalize_input":  {
+                                                "main":  [
+                                                             {
+                                                                 "node":  "answer_objection",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                            },
+                        "6.19 answer_objection":  {
+                                                      "main":  [
+                                                                   {
+                                                                       "node":  "normalize_input",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                  }
+                    },
+    "settings":  {
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "90986c62-4c2c-406a-a417-a638930a2066",
+    "activeVersionId":  null,
+    "versionCounter":  2,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-12T18:38:28.126Z",
+                       "createdAt":  "2026-05-12T18:38:28.126Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "OnUEZ6Ps3DwEPB4i",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  null
+}

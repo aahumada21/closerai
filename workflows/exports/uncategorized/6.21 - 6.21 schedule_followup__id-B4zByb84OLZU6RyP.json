@@ -1,0 +1,683 @@
+﻿{
+    "updatedAt":  "2026-05-13T14:30:17.309Z",
+    "createdAt":  "2026-05-13T14:04:04.244Z",
+    "id":  "B4zByb84OLZU6RyP",
+    "name":  "6.21 schedule_followup",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "jsonExample",
+                                         "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                     },
+                      "id":  "73ac8ce4-9242-4433-8276-066d62b1cc6b",
+                      "name":  "6.21 schedule_followup",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowschedule_followupinput_normalized\"\n  ]\n}];"
+                                     },
+                      "id":  "04545c7b-9561-4ba1-8bce-e60aa87be4a8",
+                      "name":  "normalize_input",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       224,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{\n  ...$json,\n  db_operations: [\"followups\"],\n  followup: {\n    type: $json.execution_context.followup_type,\n    scheduled_for: $json.execution_context.scheduled_for\n  },\n  state_update: {\n    ...$json.execution_context.state_update,\n    last_bot_action: \"schedule_followup\"\n  }\n}];"
+                                     },
+                      "id":  "795af40e-316d-4ae9-b7e4-fcf031fd4bec",
+                      "name":  "schedule_followup",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       448,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "schema":  {
+                                                        "__rl":  true,
+                                                        "mode":  "list",
+                                                        "value":  "public"
+                                                    },
+                                         "table":  {
+                                                       "__rl":  true,
+                                                       "value":  "followups",
+                                                       "mode":  "list",
+                                                       "cachedResultName":  "followups"
+                                                   },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "lead_id":  "={{$json.execution_context.lead_id}}",
+                                                                       "scheduled_for":  "={{$json.followup?.scheduled_for}}",
+                                                                       "status":  "pending",
+                                                                       "created_at":  "={{new Date().toISOString()}}",
+                                                                       "followup_type":  "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+                                                                       "message_template_key":  "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+                                                                       "metadata":  "={{ { source: \"action_executor\", action: $json.execution_context?.action, stage: $json.context_packet?.state?.stage || null, lead_id: $json.execution_context?.lead_id || null } }}",
+                                                                       "dedupe_key":  "={{ $json.execution_context.lead_id + \"__\" + ($json.followup?.type || $json.execution_context?.followup_type || \"generic_followup\") + \"__\" + ($json.followup?.scheduled_for || $json.execution_context?.scheduled_for) }}"
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "id"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "id",
+                                                                            "displayName":  "id",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  true,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "lead_id",
+                                                                            "displayName":  "lead_id",
+                                                                            "required":  true,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "scheduled_for",
+                                                                            "displayName":  "scheduled_for",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "status",
+                                                                            "displayName":  "status",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "created_at",
+                                                                            "displayName":  "created_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "followup_type",
+                                                                            "displayName":  "followup_type",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "message_template_key",
+                                                                            "displayName":  "message_template_key",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "metadata",
+                                                                            "displayName":  "metadata",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "object",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "executed_at",
+                                                                            "displayName":  "executed_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "skipped_reason",
+                                                                            "displayName":  "skipped_reason",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "processing_started_at",
+                                                                            "displayName":  "processing_started_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "dedupe_key",
+                                                                            "displayName":  "dedupe_key",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "completed_at",
+                                                                            "displayName":  "completed_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "failed_at",
+                                                                            "displayName":  "failed_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "cancelled_at",
+                                                                            "displayName":  "cancelled_at",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "dateTime",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       672,
+                                       0
+                                   ],
+                      "id":  "f3927bd5-95ae-442b-bd4c-5541aef1d14c",
+                      "name":  "insert_followup",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "a9C9SXdbhsOBvUzF",
+                                                           "name":  "Postgres account 2"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "combine",
+                                         "combineBy":  "combineByPosition",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       880,
+                                       0
+                                   ],
+                      "id":  "922fcb5a-209f-49ac-9b90-f22d3aeff40f",
+                      "name":  "merge_followup_with_context"
+                  }
+              ],
+    "connections":  {
+                        "6.21 schedule_followup":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "normalize_input",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "normalize_input":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "schedule_followup",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "insert_followup":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "merge_followup_with_context",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "schedule_followup":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "insert_followup",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   },
+                                                                   {
+                                                                       "node":  "merge_followup_with_context",
+                                                                       "type":  "main",
+                                                                       "index":  1
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "24e491f5-e907-486f-8f67-960f9d38bd94",
+    "activeVersionId":  "24e491f5-e907-486f-8f67-960f9d38bd94",
+    "versionCounter":  13,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-13T14:04:04.255Z",
+                       "createdAt":  "2026-05-13T14:04:04.255Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "B4zByb84OLZU6RyP",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+                 {
+                     "updatedAt":  "2026-04-13T16:53:56.407Z",
+                     "createdAt":  "2026-04-13T16:53:56.407Z",
+                     "id":  "inpDkRIlMRIcsEPo",
+                     "name":  "Closer"
+                 }
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-13T14:30:18.000Z",
+                          "createdAt":  "2026-05-13T14:30:17.311Z",
+                          "versionId":  "24e491f5-e907-486f-8f67-960f9d38bd94",
+                          "workflowId":  "B4zByb84OLZU6RyP",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "jsonExample",
+                                                               "jsonExample":  "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+                                                           },
+                                            "id":  "73ac8ce4-9242-4433-8276-066d62b1cc6b",
+                                            "name":  "6.21 schedule_followup",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             0,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "function parseMaybeJson(value, fallback = {}) {\n  if (value \u0026\u0026 typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowschedule_followupinput_normalized\"\n  ]\n}];"
+                                                           },
+                                            "id":  "04545c7b-9561-4ba1-8bce-e60aa87be4a8",
+                                            "name":  "normalize_input",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             224,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "return [{\n  ...$json,\n  db_operations: [\"followups\"],\n  followup: {\n    type: $json.execution_context.followup_type,\n    scheduled_for: $json.execution_context.scheduled_for\n  },\n  state_update: {\n    ...$json.execution_context.state_update,\n    last_bot_action: \"schedule_followup\"\n  }\n}];"
+                                                           },
+                                            "id":  "795af40e-316d-4ae9-b7e4-fcf031fd4bec",
+                                            "name":  "schedule_followup",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             448,
+                                                             0
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "schema":  {
+                                                                              "__rl":  true,
+                                                                              "mode":  "list",
+                                                                              "value":  "public"
+                                                                          },
+                                                               "table":  {
+                                                                             "__rl":  true,
+                                                                             "value":  "followups",
+                                                                             "mode":  "list",
+                                                                             "cachedResultName":  "followups"
+                                                                         },
+                                                               "columns":  {
+                                                                               "mappingMode":  "defineBelow",
+                                                                               "value":  {
+                                                                                             "lead_id":  "={{$json.execution_context.lead_id}}",
+                                                                                             "scheduled_for":  "={{$json.followup?.scheduled_for}}",
+                                                                                             "status":  "pending",
+                                                                                             "created_at":  "={{new Date().toISOString()}}",
+                                                                                             "followup_type":  "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+                                                                                             "message_template_key":  "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+                                                                                             "metadata":  "={{ { source: \"action_executor\", action: $json.execution_context?.action, stage: $json.context_packet?.state?.stage || null, lead_id: $json.execution_context?.lead_id || null } }}",
+                                                                                             "dedupe_key":  "={{ $json.execution_context.lead_id + \"__\" + ($json.followup?.type || $json.execution_context?.followup_type || \"generic_followup\") + \"__\" + ($json.followup?.scheduled_for || $json.execution_context?.scheduled_for) }}"
+                                                                                         },
+                                                                               "matchingColumns":  [
+                                                                                                       "id"
+                                                                                                   ],
+                                                                               "schema":  [
+                                                                                              {
+                                                                                                  "id":  "id",
+                                                                                                  "displayName":  "id",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  true,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "lead_id",
+                                                                                                  "displayName":  "lead_id",
+                                                                                                  "required":  true,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "scheduled_for",
+                                                                                                  "displayName":  "scheduled_for",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "status",
+                                                                                                  "displayName":  "status",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "created_at",
+                                                                                                  "displayName":  "created_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "followup_type",
+                                                                                                  "displayName":  "followup_type",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "message_template_key",
+                                                                                                  "displayName":  "message_template_key",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "metadata",
+                                                                                                  "displayName":  "metadata",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "object",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "executed_at",
+                                                                                                  "displayName":  "executed_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "skipped_reason",
+                                                                                                  "displayName":  "skipped_reason",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "processing_started_at",
+                                                                                                  "displayName":  "processing_started_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "dedupe_key",
+                                                                                                  "displayName":  "dedupe_key",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "string",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  false
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "completed_at",
+                                                                                                  "displayName":  "completed_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "failed_at",
+                                                                                                  "displayName":  "failed_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              },
+                                                                                              {
+                                                                                                  "id":  "cancelled_at",
+                                                                                                  "displayName":  "cancelled_at",
+                                                                                                  "required":  false,
+                                                                                                  "defaultMatch":  false,
+                                                                                                  "display":  true,
+                                                                                                  "type":  "dateTime",
+                                                                                                  "canBeUsedToMatch":  true,
+                                                                                                  "removed":  true
+                                                                                              }
+                                                                                          ],
+                                                                               "attemptToConvertTypes":  false,
+                                                                               "convertFieldsToString":  false
+                                                                           },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.6,
+                                            "position":  [
+                                                             672,
+                                                             0
+                                                         ],
+                                            "id":  "f3927bd5-95ae-442b-bd4c-5541aef1d14c",
+                                            "name":  "insert_followup",
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "a9C9SXdbhsOBvUzF",
+                                                                                 "name":  "Postgres account 2"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "combine",
+                                                               "combineBy":  "combineByPosition",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.2,
+                                            "position":  [
+                                                             880,
+                                                             0
+                                                         ],
+                                            "id":  "922fcb5a-209f-49ac-9b90-f22d3aeff40f",
+                                            "name":  "merge_followup_with_context"
+                                        }
+                                    ],
+                          "connections":  {
+                                              "6.21 schedule_followup":  {
+                                                                             "main":  [
+                                                                                          [
+                                                                                              {
+                                                                                                  "node":  "normalize_input",
+                                                                                                  "type":  "main",
+                                                                                                  "index":  0
+                                                                                              }
+                                                                                          ]
+                                                                                      ]
+                                                                         },
+                                              "normalize_input":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "schedule_followup",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "insert_followup":  {
+                                                                      "main":  [
+                                                                                   [
+                                                                                       {
+                                                                                           "node":  "merge_followup_with_context",
+                                                                                           "type":  "main",
+                                                                                           "index":  0
+                                                                                       }
+                                                                                   ]
+                                                                               ]
+                                                                  },
+                                              "schedule_followup":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "insert_followup",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         },
+                                                                                         {
+                                                                                             "node":  "merge_followup_with_context",
+                                                                                             "type":  "main",
+                                                                                             "index":  1
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    }
+                                          },
+                          "authors":  "Agustín Ahumada",
+                          "name":  "Version 24e491f5",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-13T14:30:18.730Z",
+                                                             "id":  586,
+                                                             "workflowId":  "B4zByb84OLZU6RyP",
+                                                             "versionId":  "24e491f5-e907-486f-8f67-960f9d38bd94",
+                                                             "event":  "activated",
+                                                             "userId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                                         }
+                                                     ]
+                      }
+}
