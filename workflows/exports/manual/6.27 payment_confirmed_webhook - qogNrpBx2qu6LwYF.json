@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-08T17:07:45.873Z",
+  "updatedAt": "2026-07-08T21:11:17.073Z",
   "createdAt": "2026-07-08T17:07:45.873Z",
   "id": "qogNrpBx2qu6LwYF",
   "name": "6.27 payment_confirmed_webhook",
@@ -117,7 +117,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT ls.lead_id, l.phone, l.channel FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ $json.commerceOrder }}' LIMIT 1",
+        "query": "SELECT ls.lead_id, l.phone, l.channel, ls.pending_booking_data, ls.payment_mode, ls.payment_preference FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ \\.commerceOrder }}' LIMIT 1",
         "options": {}
       }
     },
@@ -152,7 +152,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\nconst msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: \"payment_confirmed\",\n    message: msg,\n    state_update: { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" }\n  },\n  message_to_send: msg\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+        "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\n\n// Check if there is a pending booking to confirm in GCal (prepago_required mode)\nconst pendingBooking = d.pending_booking_data || null;\nconst isPrepagoreRequired = d.payment_mode === \"prepago_required\" || (pendingBooking && pendingBooking.lead_id);\n\nlet msg;\nlet stateUpdate;\n\nif (isPrepagoreRequired && pendingBooking) {\n  const dateText = (pendingBooking.booking_date && pendingBooking.booking_time)\n    ? \" para el \" + pendingBooking.booking_date + \" a las \" + pendingBooking.booking_time\n    : \"\";\n  msg = \"Pago confirmado! Gracias. Tu turno\" + dateText + \" esta reservado. Te esperamos!\";\n  stateUpdate = {\n    payment_status: \"paid\",\n    last_bot_action: \"booking_confirmed_after_payment\",\n    pending_booking_data: null\n  };\n} else {\n  msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\n  stateUpdate = { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" };\n}\n\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: isPrepagoreRequired && pendingBooking ? \"confirm_booking_after_payment\" : \"payment_confirmed\",\n    message: msg,\n    state_update: stateUpdate,\n    // Pass booking data for GCal creation (picked up by Call 6.5 if needed)\n    booking_date: pendingBooking && pendingBooking.booking_date,\n    booking_time: pendingBooking && pendingBooking.booking_time,\n    slot_id: pendingBooking && pendingBooking.slot_id,\n    service_interest: pendingBooking && pendingBooking.service_interest,\n    vehicle_type: pendingBooking && pendingBooking.vehicle_type,\n    district: pendingBooking && pendingBooking.district,\n    duration_minutes: (pendingBooking && pendingBooking.duration_minutes) || 120,\n    calendar_id: pendingBooking && pendingBooking.calendar_id,\n    service_address: pendingBooking && pendingBooking.service_address,\n    address_reference: pendingBooking && pendingBooking.address_reference,\n    address_confirmed: pendingBooking && pendingBooking.address_confirmed,\n    availability_confirmed: true\n  },\n  pending_booking: pendingBooking,\n  has_pending_booking: !!(isPrepagoreRequired && pendingBooking),\n  message_to_send: msg\n};\n\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
       }
     },
     {
@@ -161,8 +161,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 2,
       "position": [
-        1800,
-        200
+        2020,
+        300
       ],
       "parameters": {
         "workflowId": {
@@ -180,8 +180,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2020,
-        200
+        2240,
+        300
       ],
       "parameters": {
         "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and processed\" }];"
@@ -199,6 +199,135 @@
       "parameters": {
         "jsCode": "return [{ status: \"not_paid\", message: \"Payment not yet confirmed\" }];"
       }
+    },
+    {
+      "position": [
+        1800,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "id": "if-has-pending-booking",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_pending_booking }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "id": "check_has_pending_booking",
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "name": "IF has_pending_booking"
+    },
+    {
+      "position": [
+        2020,
+        80
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "prep-for-65-node",
+      "parameters": {
+        "jsCode": "const d = $json;\nconst ctx = d.execution_context || {};\nconst pending = d.pending_booking || {};\nconst payloadObj = {\n  ...d,\n  execution_context: {\n    lead_id: ctx.lead_id || pending.lead_id,\n    channel: ctx.channel || pending.channel || \"whatsapp\",\n    phone: ctx.phone || pending.phone,\n    action: \"confirm_booking\",\n    booking_date: ctx.booking_date || pending.booking_date,\n    booking_time: ctx.booking_time || pending.booking_time,\n    slot_id: ctx.slot_id || pending.slot_id,\n    service_interest: ctx.service_interest || pending.service_interest,\n    vehicle_type: ctx.vehicle_type || pending.vehicle_type,\n    district: ctx.district || pending.district,\n    duration_minutes: ctx.duration_minutes || pending.duration_minutes || 120,\n    calendar_id: ctx.calendar_id || pending.calendar_id || \"primary\",\n    service_address: ctx.service_address || pending.service_address,\n    address_reference: ctx.address_reference || pending.address_reference,\n    address_confirmed: true,\n    availability_confirmed: true,\n    state_update: { payment_status: \"paid\", pending_booking_data: null },\n    original_payment_message: d.message_to_send\n  },\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+      },
+      "name": "prep_for_65"
+    },
+    {
+      "position": [
+        2240,
+        80
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2,
+      "id": "call-65-after-payment",
+      "parameters": {
+        "workflowId": {
+          "value": "c4f365f3-8df3-49b1-8c88-8f4849fe1dd9",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Call 6.5 confirm_booking_executor"
+    },
+    {
+      "position": [
+        2460,
+        80
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "build-post-payment-msg",
+      "parameters": {
+        "jsCode": "const d = $json;\nconst ctx = d.execution_context || {};\nconst bookingMsg = d.message_to_send || d.message || ctx.message || \"Tu reserva fue confirmada!\";\nconst originalMsg = ctx.original_payment_message || \"\";\nconst finalMsg = originalMsg ? \"Pago recibido!\\n\\n\" + bookingMsg : bookingMsg;\nreturn [{\n  ...d,\n  execution_context: {\n    ...ctx,\n    message: finalMsg,\n    action: \"confirm_booking_after_payment\",\n    state_update: {\n      ...(d.state_update || ctx.state_update || {}),\n      payment_status: \"paid\",\n      pending_booking_data: null,\n      last_bot_action: \"booking_confirmed_after_payment\"\n    }\n  },\n  db_operations: [\"messages\", \"lead_state\"]\n}];"
+      },
+      "name": "build_post_payment_msg"
+    },
+    {
+      "position": [
+        2780,
+        80
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2,
+      "id": "call-61-after-payment",
+      "parameters": {
+        "workflowId": {
+          "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Call 6.1 send_after_payment"
+    },
+    {
+      "position": [
+        3000,
+        80
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "respond-ok-payment",
+      "parameters": {
+        "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and booking created\" }];"
+      },
+      "name": "respond_ok_payment"
+    },
+    {
+      "parameters": {
+        "query": "UPDATE lead_state SET stage = 'booked', last_bot_action = 'booking_confirmed_after_payment', pending_booking_data = NULL, payment_status = 'paid', updated_at = NOW() WHERE lead_id = '{{ \\.execution_context.lead_id }}'::uuid",
+        "options": {},
+        "operation": "executeQuery"
+      },
+      "type": "n8n-nodes-base.postgres",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "typeVersion": 2.5,
+      "id": "update-lead-state-after-booking",
+      "position": [
+        2570,
+        80
+      ],
+      "name": "update_lead_state_after_booking"
     }
   ],
   "connections": {
@@ -279,7 +408,7 @@
       "main": [
         [
           {
-            "node": "Call 6.1 send_confirmation",
+            "node": "IF has_pending_booking",
             "type": "main",
             "index": 0
           }
@@ -296,6 +425,79 @@
           }
         ]
       ]
+    },
+    "IF has_pending_booking": {
+      "main": [
+        [
+          {
+            "node": "prep_for_65",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call 6.1 send_confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prep_for_65": {
+      "main": [
+        [
+          {
+            "node": "Call 6.5 confirm_booking_executor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.5 confirm_booking_executor": {
+      "main": [
+        [
+          {
+            "node": "build_post_payment_msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_post_payment_msg": {
+      "main": [
+        [
+          {
+            "node": "update_lead_state_after_booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.1 send_after_payment": {
+      "main": [
+        [
+          {
+            "node": "respond_ok_payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_lead_state_after_booking": {
+      "main": [
+        [
+          {
+            "node": "Call 6.1 send_after_payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -304,9 +506,9 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
-  "activeVersionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
-  "versionCounter": 3,
+  "versionId": "e44e2dab-fb83-4178-a93e-1637504373d4",
+  "activeVersionId": "e44e2dab-fb83-4178-a93e-1637504373d4",
+  "versionCounter": 12,
   "triggerCount": 1,
   "shared": [
     {
@@ -329,9 +531,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-08T17:07:45.89Z",
-    "createdAt": "2026-07-08T17:07:45.89Z",
-    "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+    "updatedAt": "2026-07-08T21:11:17.084Z",
+    "createdAt": "2026-07-08T21:11:17.084Z",
+    "versionId": "e44e2dab-fb83-4178-a93e-1637504373d4",
     "workflowId": "qogNrpBx2qu6LwYF",
     "nodes": [
       {
@@ -444,7 +646,7 @@
         },
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT ls.lead_id, l.phone, l.channel FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ $json.commerceOrder }}' LIMIT 1",
+          "query": "SELECT ls.lead_id, l.phone, l.channel, ls.pending_booking_data, ls.payment_mode, ls.payment_preference FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ \\.commerceOrder }}' LIMIT 1",
           "options": {}
         }
       },
@@ -479,7 +681,7 @@
           200
         ],
         "parameters": {
-          "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\nconst msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: \"payment_confirmed\",\n    message: msg,\n    state_update: { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" }\n  },\n  message_to_send: msg\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+          "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\n\n// Check if there is a pending booking to confirm in GCal (prepago_required mode)\nconst pendingBooking = d.pending_booking_data || null;\nconst isPrepagoreRequired = d.payment_mode === \"prepago_required\" || (pendingBooking && pendingBooking.lead_id);\n\nlet msg;\nlet stateUpdate;\n\nif (isPrepagoreRequired && pendingBooking) {\n  const dateText = (pendingBooking.booking_date && pendingBooking.booking_time)\n    ? \" para el \" + pendingBooking.booking_date + \" a las \" + pendingBooking.booking_time\n    : \"\";\n  msg = \"Pago confirmado! Gracias. Tu turno\" + dateText + \" esta reservado. Te esperamos!\";\n  stateUpdate = {\n    payment_status: \"paid\",\n    last_bot_action: \"booking_confirmed_after_payment\",\n    pending_booking_data: null\n  };\n} else {\n  msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\n  stateUpdate = { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" };\n}\n\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: isPrepagoreRequired && pendingBooking ? \"confirm_booking_after_payment\" : \"payment_confirmed\",\n    message: msg,\n    state_update: stateUpdate,\n    // Pass booking data for GCal creation (picked up by Call 6.5 if needed)\n    booking_date: pendingBooking && pendingBooking.booking_date,\n    booking_time: pendingBooking && pendingBooking.booking_time,\n    slot_id: pendingBooking && pendingBooking.slot_id,\n    service_interest: pendingBooking && pendingBooking.service_interest,\n    vehicle_type: pendingBooking && pendingBooking.vehicle_type,\n    district: pendingBooking && pendingBooking.district,\n    duration_minutes: (pendingBooking && pendingBooking.duration_minutes) || 120,\n    calendar_id: pendingBooking && pendingBooking.calendar_id,\n    service_address: pendingBooking && pendingBooking.service_address,\n    address_reference: pendingBooking && pendingBooking.address_reference,\n    address_confirmed: pendingBooking && pendingBooking.address_confirmed,\n    availability_confirmed: true\n  },\n  pending_booking: pendingBooking,\n  has_pending_booking: !!(isPrepagoreRequired && pendingBooking),\n  message_to_send: msg\n};\n\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
         }
       },
       {
@@ -488,8 +690,8 @@
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 2,
         "position": [
-          1800,
-          200
+          2020,
+          300
         ],
         "parameters": {
           "workflowId": {
@@ -507,8 +709,8 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          2020,
-          200
+          2240,
+          300
         ],
         "parameters": {
           "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and processed\" }];"
@@ -526,6 +728,135 @@
         "parameters": {
           "jsCode": "return [{ status: \"not_paid\", message: \"Payment not yet confirmed\" }];"
         }
+      },
+      {
+        "position": [
+          1800,
+          200
+        ],
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "id": "if-has-pending-booking",
+        "parameters": {
+          "conditions": {
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.has_pending_booking }}",
+                "operator": {
+                  "operation": "equals",
+                  "type": "boolean"
+                },
+                "id": "check_has_pending_booking",
+                "rightValue": true
+              }
+            ],
+            "options": {
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            }
+          }
+        },
+        "name": "IF has_pending_booking"
+      },
+      {
+        "position": [
+          2020,
+          80
+        ],
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "id": "prep-for-65-node",
+        "parameters": {
+          "jsCode": "const d = $json;\nconst ctx = d.execution_context || {};\nconst pending = d.pending_booking || {};\nconst payloadObj = {\n  ...d,\n  execution_context: {\n    lead_id: ctx.lead_id || pending.lead_id,\n    channel: ctx.channel || pending.channel || \"whatsapp\",\n    phone: ctx.phone || pending.phone,\n    action: \"confirm_booking\",\n    booking_date: ctx.booking_date || pending.booking_date,\n    booking_time: ctx.booking_time || pending.booking_time,\n    slot_id: ctx.slot_id || pending.slot_id,\n    service_interest: ctx.service_interest || pending.service_interest,\n    vehicle_type: ctx.vehicle_type || pending.vehicle_type,\n    district: ctx.district || pending.district,\n    duration_minutes: ctx.duration_minutes || pending.duration_minutes || 120,\n    calendar_id: ctx.calendar_id || pending.calendar_id || \"primary\",\n    service_address: ctx.service_address || pending.service_address,\n    address_reference: ctx.address_reference || pending.address_reference,\n    address_confirmed: true,\n    availability_confirmed: true,\n    state_update: { payment_status: \"paid\", pending_booking_data: null },\n    original_payment_message: d.message_to_send\n  },\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+        },
+        "name": "prep_for_65"
+      },
+      {
+        "position": [
+          2240,
+          80
+        ],
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 2,
+        "id": "call-65-after-payment",
+        "parameters": {
+          "workflowId": {
+            "value": "c4f365f3-8df3-49b1-8c88-8f4849fe1dd9",
+            "mode": "id"
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "name": "Call 6.5 confirm_booking_executor"
+      },
+      {
+        "position": [
+          2460,
+          80
+        ],
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "id": "build-post-payment-msg",
+        "parameters": {
+          "jsCode": "const d = $json;\nconst ctx = d.execution_context || {};\nconst bookingMsg = d.message_to_send || d.message || ctx.message || \"Tu reserva fue confirmada!\";\nconst originalMsg = ctx.original_payment_message || \"\";\nconst finalMsg = originalMsg ? \"Pago recibido!\\n\\n\" + bookingMsg : bookingMsg;\nreturn [{\n  ...d,\n  execution_context: {\n    ...ctx,\n    message: finalMsg,\n    action: \"confirm_booking_after_payment\",\n    state_update: {\n      ...(d.state_update || ctx.state_update || {}),\n      payment_status: \"paid\",\n      pending_booking_data: null,\n      last_bot_action: \"booking_confirmed_after_payment\"\n    }\n  },\n  db_operations: [\"messages\", \"lead_state\"]\n}];"
+        },
+        "name": "build_post_payment_msg"
+      },
+      {
+        "position": [
+          2780,
+          80
+        ],
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 2,
+        "id": "call-61-after-payment",
+        "parameters": {
+          "workflowId": {
+            "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+            "mode": "id"
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "name": "Call 6.1 send_after_payment"
+      },
+      {
+        "position": [
+          3000,
+          80
+        ],
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "id": "respond-ok-payment",
+        "parameters": {
+          "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and booking created\" }];"
+        },
+        "name": "respond_ok_payment"
+      },
+      {
+        "parameters": {
+          "query": "UPDATE lead_state SET stage = 'booked', last_bot_action = 'booking_confirmed_after_payment', pending_booking_data = NULL, payment_status = 'paid', updated_at = NOW() WHERE lead_id = '{{ \\.execution_context.lead_id }}'::uuid",
+          "options": {},
+          "operation": "executeQuery"
+        },
+        "type": "n8n-nodes-base.postgres",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "typeVersion": 2.5,
+        "id": "update-lead-state-after-booking",
+        "position": [
+          2570,
+          80
+        ],
+        "name": "update_lead_state_after_booking"
       }
     ],
     "connections": {
@@ -606,7 +937,7 @@
         "main": [
           [
             {
-              "node": "Call 6.1 send_confirmation",
+              "node": "IF has_pending_booking",
               "type": "main",
               "index": 0
             }
@@ -623,6 +954,79 @@
             }
           ]
         ]
+      },
+      "IF has_pending_booking": {
+        "main": [
+          [
+            {
+              "node": "prep_for_65",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Call 6.1 send_confirmation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "prep_for_65": {
+        "main": [
+          [
+            {
+              "node": "Call 6.5 confirm_booking_executor",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.5 confirm_booking_executor": {
+        "main": [
+          [
+            {
+              "node": "build_post_payment_msg",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_post_payment_msg": {
+        "main": [
+          [
+            {
+              "node": "update_lead_state_after_booking",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.1 send_after_payment": {
+        "main": [
+          [
+            {
+              "node": "respond_ok_payment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "update_lead_state_after_booking": {
+        "main": [
+          [
+            {
+              "node": "Call 6.1 send_after_payment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -631,11 +1035,19 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-08T17:07:46.745Z",
-        "id": 1854,
+        "createdAt": "2026-07-08T21:11:17.467Z",
+        "id": 1896,
         "workflowId": "qogNrpBx2qu6LwYF",
-        "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+        "versionId": "e44e2dab-fb83-4178-a93e-1637504373d4",
         "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-08T21:11:17.296Z",
+        "id": 1895,
+        "workflowId": "qogNrpBx2qu6LwYF",
+        "versionId": "e44e2dab-fb83-4178-a93e-1637504373d4",
+        "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }
     ]
