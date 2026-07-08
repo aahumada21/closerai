@@ -110,6 +110,48 @@ Cuando se solicite un workflow nuevo o un cambio:
 ## Encoding
 Todo documento `.md` en este repo debe mantenerse en **UTF-8** (para evitar caracteres corruptos).
 
+Regla adicional (workflows/export JSON):
+- Los exports en `workflows/` deben escribirse en **UTF-8** (PowerShell: `Set-Content -Encoding UTF8`).
+- En `Code` nodes (`parameters.jsCode`), **evitar caracteres no-ASCII** en strings “visibles” (tildes/`ñ`) porque algunos caminos de export/import pueden degradarlos a `�` y romper reglas/QA. Preferir mensajes sin tildes (`manana`, `ningun`, `aca`).
+- Antes de subir a n8n, correr: `powershell -ExecutionPolicy Bypass -File scripts\\check_workflow_exports.ps1` (falla si detecta `�` o JSON inválido).
+
+---
+
+## Patrones QA descubiertos — `3 rules_engine` (FASE 3, 2026-07-08)
+
+### Afirmativas reconocidas por `isAffirmativeReply` (extracto relevante)
+Palabras y frases que el bot interpreta como "aceptar / proceder con agendamiento":
+- Exactas (t ===): `si`, `ok`, `dale`, `bueno`, `perfecto`, `ya`, `agendemos`, `agendar`, `agenda`, `claro`, `listo`, `genial`, `excelente`, `joya`, `chevere`, `bacano`, `adelante`, `confirmo`, `trato`, `va`
+- Includes: `quiero agendar`, `me interesa`, `dale perfecto`, `vamos pa eso`, `me parece bien`, `arranquemos`, `mandame una hora`, `me decido`, `me anoto`, `esta re bien`, `me apunto`, `de acuerdo`, `sin problema`, `pero va`, `igual va`, `pero si`, `pero dale`, `me quedo con ese/eso`, `me convence`, `es perfecto`, `esta perfecto`, etc.
+
+### Guard anti-re-cotización (cheaper-alt)
+Cuando el usuario menciona "precio" + keywords de alternativa, las siguientes reglas deben retornar `null` (no re-cotizar):
+- `rulePriceWithCompleteContextImmediate` → guard `_pciAsksCheaper`
+- `ruleBusinessFaqRouter` → guard `_asksCheaper`
+- `ruleQuoteRequest` → guard `_rqAsksCheaper`
+- `ruleSendQuoteWhenCommercialContextComplete` → guard `_sqAsksCheaper`
+- Keywords: `mas barato`, `mas economico/a`, `mas accesible`, `menor precio`, `alternativa`, `no puedo pagar`, `elevado`, `se me va del presupuesto`, `muy caro`, `esta caro`, etc.
+
+### Guard anti-re-cotización (booking signal en PCI)
+`_pciIsBookingSignal` ahora incluye `isAffirmativeReply(ctx.text)` — cualquier frase afirmativa + "precio" no dispara re-cotización sino que deja pasar a `ruleQuoteAcceptedOfferSlots`.
+
+### FAQ `payment_methods` — keys clave
+`"pago"`, `"pagar"`, `"paga"`, `"se paga"`, `"transferencia"`, `"transferir"`, `"tarjeta"`, `"efectivo"`, `"debito"`, `"credito"`, `"medio de pago"`, `"metodo de pago"`.
+
+### FAQ `home_service` — keys clave
+Añadir siempre: `"domicilio"`, `"van a la casa"`, `"pueden venir"`, `"local"`, `"tienen local"`, `"tienen sede"`, `"donde atienden"`, `"donde quedan"`.
+
+### Deploy correcto de `3 rules_engine`
+CRÍTICO: nunca buscar "primer nodo con jsCode" — devuelve `extract_context` (no `rules_evaluation`). Siempre patchear **por nombre**:
+```powershell
+$resp = Invoke-RestMethod -Uri "$env:N8N_API_URL/api/v1/workflows/$wfId" -Headers @{"X-N8N-API-KEY"=$env:N8N_API_KEY}
+$origExtractCtx = ($resp.nodes | Where-Object { $_.name -eq "extract_context" } | Select-Object -First 1).parameters.jsCode
+foreach ($nodeSet in @($wf.nodes, $wf.activeVersion.nodes)) {
+  ($nodeSet | Where-Object { $_.name -eq "extract_context" } | Select-Object -First 1).parameters.jsCode = $origExtractCtx
+  ($nodeSet | Where-Object { $_.name -eq "rules_evaluation" } | Select-Object -First 1).parameters.jsCode = $jsCode
+}
+```
+
 ---
 
 ## Pendiente de integrar (cuando me lo compartas)
