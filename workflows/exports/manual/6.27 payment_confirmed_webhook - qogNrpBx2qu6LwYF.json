@@ -1,0 +1,643 @@
+{
+  "updatedAt": "2026-07-08T17:07:45.873Z",
+  "createdAt": "2026-07-08T17:07:45.873Z",
+  "id": "qogNrpBx2qu6LwYF",
+  "name": "6.27 payment_confirmed_webhook",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "a411bfd4-f0f0-4a21-bac5-347ee0acbf89",
+      "name": "Webhook Flow Payment",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {
+        "path": "flow-payment-confirmed",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "flow-payment-confirmed"
+    },
+    {
+      "id": "c9b79490-0beb-4523-b50c-45cdcad29602",
+      "name": "verify_and_get_status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const crypto = require(\"crypto\");\nconst body = $json.body || $json;\nconst token = body.token || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst statusParams = { apiKey: flowApiKey, token: token };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(function(k) { return k + statusParams[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{ token, flow_status_url: flowApiUrl + \"/payment/getStatus\", status_params: { apiKey: flowApiKey, token, s: signature }, original_body: body }];"
+      }
+    },
+    {
+      "id": "92a48fde-0d9f-41d5-880b-2b7d0893bcbe",
+      "name": "HTTP: GET flow getStatus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.flow_status_url }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $json.status_params.apiKey }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $json.status_params.token }}"
+            },
+            {
+              "name": "s",
+              "value": "={{ $json.status_params.s }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "487eb9f1-bf9d-4718-a4cb-92cea5dfb664",
+      "name": "IF payment_confirmed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "payment_status_check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "53f4ecb2-d5e0-4159-a58a-c6afc9a4cd85",
+      "name": "find_lead_by_order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ls.lead_id, l.phone, l.channel FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ $json.commerceOrder }}' LIMIT 1",
+        "options": {}
+      }
+    },
+    {
+      "id": "e093515a-6d7a-4407-9f36-a4f102e0a112",
+      "name": "update_payment_confirmed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE lead_state SET payment_status='paid', last_bot_action='payment_confirmed', updated_at=NOW() WHERE lead_id='{{ $json.lead_id }}'",
+        "options": {}
+      }
+    },
+    {
+      "id": "069fa122-9440-4681-9b7d-ea1bbfbd2b2f",
+      "name": "build_confirmation_msg",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\nconst msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: \"payment_confirmed\",\n    message: msg,\n    state_update: { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" }\n  },\n  message_to_send: msg\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+      }
+    },
+    {
+      "id": "35a61170-04ed-4210-8dda-df851f5331a5",
+      "name": "Call 6.1 send_confirmation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        200
+      ],
+      "parameters": {
+        "workflowId": {
+          "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "7e6b406a-1cd0-4ca5-af62-f3dc5b19918d",
+      "name": "respond_ok",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        200
+      ],
+      "parameters": {
+        "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and processed\" }];"
+      }
+    },
+    {
+      "id": "7180a72b-0553-4aeb-b594-faea114ff9fd",
+      "name": "respond_not_paid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        400
+      ],
+      "parameters": {
+        "jsCode": "return [{ status: \"not_paid\", message: \"Payment not yet confirmed\" }];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Flow Payment": {
+      "main": [
+        [
+          {
+            "node": "verify_and_get_status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "verify_and_get_status": {
+      "main": [
+        [
+          {
+            "node": "HTTP: GET flow getStatus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: GET flow getStatus": {
+      "main": [
+        [
+          {
+            "node": "IF payment_confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF payment_confirmed": {
+      "main": [
+        [
+          {
+            "node": "find_lead_by_order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "respond_not_paid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_lead_by_order": {
+      "main": [
+        [
+          {
+            "node": "update_payment_confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_payment_confirmed": {
+      "main": [
+        [
+          {
+            "node": "build_confirmation_msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_confirmation_msg": {
+      "main": [
+        [
+          {
+            "node": "Call 6.1 send_confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.1 send_confirmation": {
+      "main": [
+        [
+          {
+            "node": "respond_ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+  "activeVersionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-07-08T17:07:45.886Z",
+      "createdAt": "2026-07-08T17:07:45.886Z",
+      "role": "workflow:owner",
+      "workflowId": "qogNrpBx2qu6LwYF",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-08T17:07:45.89Z",
+    "createdAt": "2026-07-08T17:07:45.89Z",
+    "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+    "workflowId": "qogNrpBx2qu6LwYF",
+    "nodes": [
+      {
+        "id": "a411bfd4-f0f0-4a21-bac5-347ee0acbf89",
+        "name": "Webhook Flow Payment",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          260,
+          300
+        ],
+        "parameters": {
+          "path": "flow-payment-confirmed",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "webhookId": "flow-payment-confirmed"
+      },
+      {
+        "id": "c9b79490-0beb-4523-b50c-45cdcad29602",
+        "name": "verify_and_get_status",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ],
+        "parameters": {
+          "jsCode": "const crypto = require(\"crypto\");\nconst body = $json.body || $json;\nconst token = body.token || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst statusParams = { apiKey: flowApiKey, token: token };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(function(k) { return k + statusParams[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{ token, flow_status_url: flowApiUrl + \"/payment/getStatus\", status_params: { apiKey: flowApiKey, token, s: signature }, original_body: body }];"
+        }
+      },
+      {
+        "id": "92a48fde-0d9f-41d5-880b-2b7d0893bcbe",
+        "name": "HTTP: GET flow getStatus",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          700,
+          300
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.flow_status_url }}",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "apiKey",
+                "value": "={{ $json.status_params.apiKey }}"
+              },
+              {
+                "name": "token",
+                "value": "={{ $json.status_params.token }}"
+              },
+              {
+                "name": "s",
+                "value": "={{ $json.status_params.s }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "487eb9f1-bf9d-4718-a4cb-92cea5dfb664",
+        "name": "IF payment_confirmed",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          920,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "payment_status_check",
+                "leftValue": "={{ $json.status }}",
+                "rightValue": 2,
+                "operator": {
+                  "type": "number",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "53f4ecb2-d5e0-4159-a58a-c6afc9a4cd85",
+        "name": "find_lead_by_order",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          1140,
+          200
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ls.lead_id, l.phone, l.channel FROM lead_state ls JOIN leads l ON ls.lead_id = l.id WHERE ls.flow_order_id = '{{ $json.commerceOrder }}' LIMIT 1",
+          "options": {}
+        }
+      },
+      {
+        "id": "e093515a-6d7a-4407-9f36-a4f102e0a112",
+        "name": "update_payment_confirmed",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          1360,
+          200
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE lead_state SET payment_status='paid', last_bot_action='payment_confirmed', updated_at=NOW() WHERE lead_id='{{ $json.lead_id }}'",
+          "options": {}
+        }
+      },
+      {
+        "id": "069fa122-9440-4681-9b7d-ea1bbfbd2b2f",
+        "name": "build_confirmation_msg",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1580,
+          200
+        ],
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst d = items[0] ? items[0].json : $json;\nconst leadId = d.lead_id || \"\";\nconst phone = d.phone || \"\";\nconst channel = d.channel || \"whatsapp\";\nconst msg = \"Pago confirmado! Gracias. Tu reserva esta asegurada. Te esperamos en la fecha acordada!\";\nconst payloadObj = {\n  execution_context: {\n    lead_id: leadId, phone, channel,\n    action: \"payment_confirmed\",\n    message: msg,\n    state_update: { payment_status: \"paid\", last_bot_action: \"payment_confirmed\" }\n  },\n  message_to_send: msg\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+        }
+      },
+      {
+        "id": "35a61170-04ed-4210-8dda-df851f5331a5",
+        "name": "Call 6.1 send_confirmation",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 2,
+        "position": [
+          1800,
+          200
+        ],
+        "parameters": {
+          "workflowId": {
+            "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+            "mode": "id"
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "7e6b406a-1cd0-4ca5-af62-f3dc5b19918d",
+        "name": "respond_ok",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2020,
+          200
+        ],
+        "parameters": {
+          "jsCode": "return [{ status: \"ok\", message: \"Payment confirmed and processed\" }];"
+        }
+      },
+      {
+        "id": "7180a72b-0553-4aeb-b594-faea114ff9fd",
+        "name": "respond_not_paid",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1140,
+          400
+        ],
+        "parameters": {
+          "jsCode": "return [{ status: \"not_paid\", message: \"Payment not yet confirmed\" }];"
+        }
+      }
+    ],
+    "connections": {
+      "Webhook Flow Payment": {
+        "main": [
+          [
+            {
+              "node": "verify_and_get_status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "verify_and_get_status": {
+        "main": [
+          [
+            {
+              "node": "HTTP: GET flow getStatus",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP: GET flow getStatus": {
+        "main": [
+          [
+            {
+              "node": "IF payment_confirmed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF payment_confirmed": {
+        "main": [
+          [
+            {
+              "node": "find_lead_by_order",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "respond_not_paid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "find_lead_by_order": {
+        "main": [
+          [
+            {
+              "node": "update_payment_confirmed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "update_payment_confirmed": {
+        "main": [
+          [
+            {
+              "node": "build_confirmation_msg",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_confirmation_msg": {
+        "main": [
+          [
+            {
+              "node": "Call 6.1 send_confirmation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.1 send_confirmation": {
+        "main": [
+          [
+            {
+              "node": "respond_ok",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-08T17:07:46.745Z",
+        "id": 1854,
+        "workflowId": "qogNrpBx2qu6LwYF",
+        "versionId": "7b8c1e97-61e1-4a3b-aaca-fc41df2bc3fc",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

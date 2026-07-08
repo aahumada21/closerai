@@ -1,0 +1,503 @@
+{
+  "updatedAt": "2026-07-08T17:07:00.485Z",
+  "createdAt": "2026-07-08T17:06:11.571Z",
+  "id": "wlAAdOqo3vD7O18n",
+  "name": "6.26 payment_request",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "c98c1f1f-1f2c-4f73-be5a-848ade0556d2",
+      "name": "6.26 payment_request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8f51b065-9259-4e9e-9236-6b55cfb7b538",
+      "name": "normalize_payment_input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\nconst payload = parseMaybeJson($json.payload, $json);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"pagos@ahumadadetailing.cl\");\nconst service = firstVal(ctx.service_interest, state.service_interest, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + lead_id + \"-\" + Date.now();\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+      }
+    },
+    {
+      "id": "be189fea-386b-41ce-af94-e215ab744682",
+      "name": "build_flow_signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const crypto = require(\"crypto\");\nconst data = $json;\nconst pCtx = data.payment_context;\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(function(k) { return k + params[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{\n  ...data,\n  flow_params: Object.assign({}, params, { s: signature }),\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
+      }
+    },
+    {
+      "id": "b78d8e22-b5d6-4962-bc44-355692cd89a7",
+      "name": "HTTP: POST flow/payment/create",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        920,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.flow_api_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.flow_params) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9556b5fd-c3ed-407e-9be0-6a24b5b76b13",
+      "name": "build_payment_message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const data = $json;\nconst pCtx = data.payment_context || {};\nconst flowUrl = data.url || \"\";\nconst flowToken = data.token || \"\";\nconst flowOrderId = String(data.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || 0;\nconst service = pCtx.service || \"servicio\";\nconst dateText = (pCtx.booking_date && pCtx.booking_time)\n  ? \"\\nFecha reservada: \" + pCtx.booking_date + \" a las \" + pCtx.booking_time\n  : \"\";\nconst msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n  \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\" +\n  \"\\nServicio: \" + service + dateText +\n  \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\nconst payloadObj = {\n  ...data,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, data.execution_context || {}, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+      }
+    },
+    {
+      "id": "2c61858a-1022-4ae8-83a0-db8093a07a96",
+      "name": "Call 6.1 send_payment_message",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3b2c3418-88a8-451c-8a04-9131091c72ab",
+      "name": "update_lead_state_payment_pending",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $json.flow_order_id }}', flow_payment_url='{{ $json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ ($json.execution_context || {}).lead_id || ($json.payment_context || {}).lead_id }}';",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "id": "7e9bc2d2-96da-4f68-a6cf-0ecef71c3e1c",
+      "name": "return_payment_result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        300
+      ],
+      "parameters": {
+        "jsCode": "return [{ ...($input.all()[0] || {json:$json}).json, payment_request_status: \"sent\" }];"
+      }
+    },
+    {
+      "id": "560aff70-ae06-426b-bb68-7f42632b1dcd",
+      "name": "build_payment_error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const ctx = ($json.execution_context || $json.payment_context || {});\nreturn [{ ...$json, message_to_send: \"Hubo un problema al generar el link de pago. Contactame directamente para coordinar el pago.\", payment_request_status: \"error\" }];"
+      }
+    }
+  ],
+  "connections": {
+    "6.26 payment_request": {
+      "main": [
+        [
+          {
+            "node": "normalize_payment_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_payment_input": {
+      "main": [
+        [
+          {
+            "node": "build_flow_signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_flow_signature": {
+      "main": [
+        [
+          {
+            "node": "HTTP: POST flow/payment/create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: POST flow/payment/create": {
+      "main": [
+        [
+          {
+            "node": "build_payment_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_payment_error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_payment_message": {
+      "main": [
+        [
+          {
+            "node": "Call 6.1 send_payment_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.1 send_payment_message": {
+      "main": [
+        [
+          {
+            "node": "update_lead_state_payment_pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_lead_state_payment_pending": {
+      "main": [
+        [
+          {
+            "node": "return_payment_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+  "activeVersionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+  "versionCounter": 4,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-07-08T17:06:11.613Z",
+      "createdAt": "2026-07-08T17:06:11.613Z",
+      "role": "workflow:owner",
+      "workflowId": "wlAAdOqo3vD7O18n",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-08T17:07:00.497Z",
+    "createdAt": "2026-07-08T17:07:00.497Z",
+    "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+    "workflowId": "wlAAdOqo3vD7O18n",
+    "nodes": [
+      {
+        "id": "c98c1f1f-1f2c-4f73-be5a-848ade0556d2",
+        "name": "6.26 payment_request",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          260,
+          300
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "8f51b065-9259-4e9e-9236-6b55cfb7b538",
+        "name": "normalize_payment_input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ],
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\nconst payload = parseMaybeJson($json.payload, $json);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"pagos@ahumadadetailing.cl\");\nconst service = firstVal(ctx.service_interest, state.service_interest, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + lead_id + \"-\" + Date.now();\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+        }
+      },
+      {
+        "id": "be189fea-386b-41ce-af94-e215ab744682",
+        "name": "build_flow_signature",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          700,
+          300
+        ],
+        "parameters": {
+          "jsCode": "const crypto = require(\"crypto\");\nconst data = $json;\nconst pCtx = data.payment_context;\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(function(k) { return k + params[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{\n  ...data,\n  flow_params: Object.assign({}, params, { s: signature }),\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
+        }
+      },
+      {
+        "id": "b78d8e22-b5d6-4962-bc44-355692cd89a7",
+        "name": "HTTP: POST flow/payment/create",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          920,
+          300
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.flow_api_url }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.flow_params) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "9556b5fd-c3ed-407e-9be0-6a24b5b76b13",
+        "name": "build_payment_message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1140,
+          300
+        ],
+        "parameters": {
+          "jsCode": "const data = $json;\nconst pCtx = data.payment_context || {};\nconst flowUrl = data.url || \"\";\nconst flowToken = data.token || \"\";\nconst flowOrderId = String(data.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || 0;\nconst service = pCtx.service || \"servicio\";\nconst dateText = (pCtx.booking_date && pCtx.booking_time)\n  ? \"\\nFecha reservada: \" + pCtx.booking_date + \" a las \" + pCtx.booking_time\n  : \"\";\nconst msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n  \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\" +\n  \"\\nServicio: \" + service + dateText +\n  \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\nconst payloadObj = {\n  ...data,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, data.execution_context || {}, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+        }
+      },
+      {
+        "id": "2c61858a-1022-4ae8-83a0-db8093a07a96",
+        "name": "Call 6.1 send_payment_message",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 2,
+        "position": [
+          1360,
+          300
+        ],
+        "parameters": {
+          "workflowId": {
+            "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+            "mode": "id"
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "3b2c3418-88a8-451c-8a04-9131091c72ab",
+        "name": "update_lead_state_payment_pending",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          1580,
+          300
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $json.flow_order_id }}', flow_payment_url='{{ $json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ ($json.execution_context || {}).lead_id || ($json.payment_context || {}).lead_id }}';",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "id": "7e9bc2d2-96da-4f68-a6cf-0ecef71c3e1c",
+        "name": "return_payment_result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1800,
+          300
+        ],
+        "parameters": {
+          "jsCode": "return [{ ...($input.all()[0] || {json:$json}).json, payment_request_status: \"sent\" }];"
+        }
+      },
+      {
+        "id": "560aff70-ae06-426b-bb68-7f42632b1dcd",
+        "name": "build_payment_error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1140,
+          500
+        ],
+        "parameters": {
+          "jsCode": "const ctx = ($json.execution_context || $json.payment_context || {});\nreturn [{ ...$json, message_to_send: \"Hubo un problema al generar el link de pago. Contactame directamente para coordinar el pago.\", payment_request_status: \"error\" }];"
+        }
+      }
+    ],
+    "connections": {
+      "6.26 payment_request": {
+        "main": [
+          [
+            {
+              "node": "normalize_payment_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_payment_input": {
+        "main": [
+          [
+            {
+              "node": "build_flow_signature",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_flow_signature": {
+        "main": [
+          [
+            {
+              "node": "HTTP: POST flow/payment/create",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP: POST flow/payment/create": {
+        "main": [
+          [
+            {
+              "node": "build_payment_message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_payment_error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_payment_message": {
+        "main": [
+          [
+            {
+              "node": "Call 6.1 send_payment_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.1 send_payment_message": {
+        "main": [
+          [
+            {
+              "node": "update_lead_state_payment_pending",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "update_lead_state_payment_pending": {
+        "main": [
+          [
+            {
+              "node": "return_payment_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-08T17:07:02.177Z",
+        "id": 1853,
+        "workflowId": "wlAAdOqo3vD7O18n",
+        "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}
