@@ -1,0 +1,310 @@
+{
+  "updatedAt": "2026-06-15T20:55:57.898Z",
+  "createdAt": "2026-06-15T20:55:57.898Z",
+  "id": "cu0EZm9q1wNAVlZN",
+  "name": "instagram_inbound_adapter",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "instagram-meta",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        -220
+      ],
+      "id": "ig-webhook-verify-get",
+      "name": "WEBHOOK verify_get",
+      "webhookId": "de41879b-dc20-4bf8-8053-b762136daaf3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $json.query || {};\nconst expected = String($env.META_VERIFY_TOKEN || '');\nconst mode = String(query['hub.mode'] || '');\nconst token = String(query['hub.verify_token'] || '');\nconst challenge = String(query['hub.challenge'] || '');\nconst ok = mode === 'subscribe' && expected.length > 0 && token === expected;\nreturn [{ json: { response_code: ok ? 200 : 403, response_body: ok ? challenge : 'Invalid verify token' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        -220
+      ],
+      "id": "ig-code-verify-token",
+      "name": "CODE verify_token"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.response_code }}"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -340,
+        -220
+      ],
+      "id": "ig-respond-meta-challenge",
+      "name": "RESPOND meta_challenge"
+    },
+    {
+      "parameters": {
+        "path": "instagram-meta",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        120
+      ],
+      "id": "ig-webhook-events-post",
+      "name": "WEBHOOK events_post",
+      "webhookId": "a0bfa53b-3ac2-42c0-a125-f52379e97821"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst receivedAt = new Date().toISOString();\nconst outputs = [];\n\nfunction toIso(ts) {\n  if (!ts) return receivedAt;\n  const num = Number(ts);\n  if (Number.isFinite(num)) {\n    const millis = num > 9999999999 ? num : num * 1000;\n    return new Date(millis).toISOString();\n  }\n  const parsed = new Date(ts);\n  return Number.isNaN(parsed.getTime()) ? receivedAt : parsed.toISOString();\n}\n\nfunction cleanText(value) {\n  return String(value || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction attachmentInfo(attachment) {\n  const payload = attachment?.payload || {};\n  return {\n    type: attachment?.type || 'unknown',\n    url: payload.url || null,\n    sticker_id: payload.sticker_id || null,\n    reusable_attachment: payload.reusable_attachment || null,\n    raw: attachment || {}\n  };\n}\n\nfunction getEventType(messagingEvent) {\n  if (messagingEvent.message) return 'message';\n  if (messagingEvent.postback) return 'message';\n  if (messagingEvent.delivery) return 'status';\n  if (messagingEvent.read) return 'status';\n  return 'other';\n}\n\nfor (const entry of body.entry || []) {\n  const instagramBusinessAccountId = String(entry.id || '');\n  for (const messagingEvent of entry.messaging || []) {\n    const senderId = String(messagingEvent.sender?.id || '');\n    const recipientId = String(messagingEvent.recipient?.id || instagramBusinessAccountId || '');\n    const externalChannelId = instagramBusinessAccountId || recipientId || null;\n    const eventType = getEventType(messagingEvent);\n    const message = messagingEvent.message || null;\n    const postback = messagingEvent.postback || null;\n    const attachments = Array.isArray(message?.attachments) ? message.attachments.map(attachmentInfo) : [];\n    const quickReply = message?.quick_reply || null;\n    const messageId = String(message?.mid || postback?.mid || messagingEvent.delivery?.mids?.[0] || messagingEvent.read?.mid || '');\n    const text = cleanText(\n      message?.text ||\n      quickReply?.payload ||\n      postback?.title ||\n      postback?.payload ||\n      ''\n    );\n    const messageType = message?.text\n      ? 'text'\n      : attachments[0]?.type || (quickReply ? 'quick_reply' : postback ? 'postback' : eventType);\n\n    if (eventType === 'message') {\n      outputs.push({\n        json: {\n          event_type: 'message',\n          channel: 'instagram',\n          provider: 'instagram_graph_api',\n          external_channel_id: externalChannelId,\n          instagram_business_account_id: externalChannelId,\n          lead_id: senderId ? 'ig_' + senderId : null,\n          from: senderId || null,\n          message_id: messageId || null,\n          timestamp: toIso(messagingEvent.timestamp),\n          message_type: messageType || 'unknown',\n          text,\n          attachments,\n          contact: {\n            external_id: senderId || null,\n            username: ''\n          },\n          source_metadata: {\n            provider: 'instagram_graph_api',\n            external_channel_id: externalChannelId,\n            instagram_business_account_id: externalChannelId,\n            sender_id: senderId || null,\n            recipient_id: recipientId || null\n          },\n          idempotency_key: ['ig_msg', externalChannelId || 'unknown_account', messageId || senderId || 'unknown_message'].join('__'),\n          normalized_ok: !!externalChannelId && !!senderId,\n          raw_message: messagingEvent,\n          raw: body\n        }\n      });\n      continue;\n    }\n\n    if (eventType === 'status') {\n      const status = messagingEvent.delivery ? 'delivered' : 'read';\n      outputs.push({\n        json: {\n          event_type: 'status',\n          channel: 'instagram',\n          provider: 'instagram_graph_api',\n          external_channel_id: externalChannelId,\n          instagram_business_account_id: externalChannelId,\n          message_id: messageId || null,\n          status,\n          timestamp: toIso(messagingEvent.timestamp),\n          recipient_id: senderId || null,\n          lead_id: senderId ? 'ig_' + senderId : null,\n          source_metadata: {\n            provider: 'instagram_graph_api',\n            external_channel_id: externalChannelId,\n            instagram_business_account_id: externalChannelId,\n            sender_id: senderId || null,\n            recipient_id: recipientId || null\n          },\n          idempotency_key: ['ig_status', externalChannelId || 'unknown_account', messageId || senderId || 'unknown_message', status].join('__'),\n          normalized_ok: !!externalChannelId,\n          raw_status: messagingEvent,\n          raw: body\n        }\n      });\n      continue;\n    }\n\n    outputs.push({\n      json: {\n        event_type: 'other',\n        channel: 'instagram',\n        provider: 'instagram_graph_api',\n        external_channel_id: externalChannelId,\n        instagram_business_account_id: externalChannelId,\n        lead_id: senderId ? 'ig_' + senderId : null,\n        message_id: messageId || null,\n        timestamp: toIso(messagingEvent.timestamp),\n        source_metadata: {\n          provider: 'instagram_graph_api',\n          external_channel_id: externalChannelId,\n          instagram_business_account_id: externalChannelId,\n          sender_id: senderId || null,\n          recipient_id: recipientId || null\n        },\n        idempotency_key: ['ig_other', externalChannelId || 'unknown_account', senderId || 'unknown_sender', String(messagingEvent.timestamp || Date.now())].join('__'),\n        normalized_ok: !!externalChannelId,\n        raw_event: messagingEvent,\n        raw: body\n      }\n    });\n  }\n}\n\nif (outputs.length === 0) {\n  outputs.push({\n    json: {\n      event_type: 'other',\n      channel: 'instagram',\n      provider: 'instagram_graph_api',\n      external_channel_id: null,\n      lead_id: null,\n      message_id: null,\n      timestamp: receivedAt,\n      source_metadata: {\n        provider: 'instagram_graph_api',\n        external_channel_id: null\n      },\n      idempotency_key: 'ig_empty__' + receivedAt,\n      normalized_ok: false,\n      not_processed_reason: 'empty_instagram_payload',\n      raw: body\n    }\n  });\n}\n\nreturn outputs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        120
+      ],
+      "id": "ig-code-normalize-event",
+      "name": "CODE normalize_instagram_event"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "gYYvc3jTVgDnAB8K",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/gYYvc3jTVgDnAB8K",
+          "cachedResultName": "2.1 channel_config_resolver"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -340,
+        120
+      ],
+      "id": "ig-call-channel-config-resolver",
+      "name": "Call '2.1 channel_config_resolver'"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('CODE normalize_instagram_event').item.json || {};\nconst resolved = $json || {};\nconst routing = resolved.routing || {};\nconst sourceMetadata = {\n  ...(normalized.source_metadata || {}),\n  provider: routing.provider || normalized.provider || 'instagram_graph_api',\n  external_channel_id: routing.external_channel_id || normalized.external_channel_id || null,\n  instagram_business_account_id: routing.external_channel_id || normalized.instagram_business_account_id || null,\n  organization_id: routing.organization_id || null,\n  agent_id: routing.agent_id || null,\n  channel_resolution_reason: resolved.not_processed_reason || null\n};\n\nreturn [{\n  json: {\n    ...normalized,\n    should_process: resolved.should_process === true,\n    not_processed_reason: resolved.not_processed_reason || normalized.not_processed_reason || null,\n    organization: resolved.organization || {},\n    agent: resolved.agent || {},\n    channel_config: resolved.channel_config || {},\n    routing,\n    source_metadata: sourceMetadata,\n    channel_resolution: {\n      should_process: resolved.should_process === true,\n      not_processed_reason: resolved.not_processed_reason || null,\n      audit: resolved.audit || null\n    },\n    event: normalized,\n    normalized_event: normalized\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        120
+      ],
+      "id": "ig-attach-channel-context",
+      "name": "attach_channel_context"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "should-process-true",
+              "leftValue": "={{ $json.should_process }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "is-message",
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        120
+      ],
+      "id": "ig-if-process-message",
+      "name": "IF should_process_message"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "cachedResultName": "2 lead_loader"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        500,
+        20
+      ],
+      "id": "ig-call-lead-loader",
+      "name": "Call '2 lead_loader'"
+    }
+  ],
+  "connections": {
+    "WEBHOOK verify_get": {
+      "main": [
+        [
+          {
+            "node": "CODE verify_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE verify_token": {
+      "main": [
+        [
+          {
+            "node": "RESPOND meta_challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WEBHOOK events_post": {
+      "main": [
+        [
+          {
+            "node": "CODE normalize_instagram_event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE normalize_instagram_event": {
+      "main": [
+        [
+          {
+            "node": "Call '2.1 channel_config_resolver'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '2.1 channel_config_resolver'": {
+      "main": [
+        [
+          {
+            "node": "attach_channel_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_channel_context": {
+      "main": [
+        [
+          {
+            "node": "IF should_process_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF should_process_message": {
+      "main": [
+        [
+          {
+            "node": "Call '2 lead_loader'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2ccb6d4a-3506-42b7-b0b0-9dbc5250bf95",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-15T20:55:57.906Z",
+      "createdAt": "2026-06-15T20:55:57.906Z",
+      "role": "workflow:owner",
+      "workflowId": "cu0EZm9q1wNAVlZN",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

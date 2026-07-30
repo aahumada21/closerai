@@ -1,0 +1,666 @@
+{
+  "updatedAt": "2026-07-28T20:21:11.521Z",
+  "createdAt": "2026-07-24T14:36:38.779Z",
+  "id": "bRPFQVB8uOwaTUyp",
+  "name": "6.28 check_payment_status",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        368
+      ],
+      "name": "6.28 check_payment_status",
+      "id": "qa-628-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflow_check_payment_status_input_normalized\"\n  ]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        368
+      ],
+      "name": "normalize_input",
+      "id": "qa-628-normalize-input"
+    },
+    {
+      "parameters": {
+        "jsCode": "function sha256(data) {\n  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length,bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0; w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16),s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;}\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const t1=(hh+S1+ch+K[i]+s[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b2)^(a&c)^(b2&c);const t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b2;b2=a;a=(t1+t2)>>>0;}\n    h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b2)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(s){const b=[];for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c<128)b.push(c);else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}}return b;}\nfunction hmacHex(msg,key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ip=kb.map(v=>v^0x36),op=kb.map(v=>v^0x5c);\n  while(ip.length<64)ip.push(0x36); while(op.length<64)op.push(0x5c);\n  const inner=sha256([...ip,...strToBytes(msg)]);\n  const ib=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  return sha256([...op,...ib]).map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst d = $json;\nconst ctx = d.execution_context || {};\nconst leadState = (d.context_packet && d.context_packet.state) || {};\n\nconst flowOrder = leadState.flow_order_id || ctx.flow_order_id || \"\";\nconst paymentUrl = leadState.flow_payment_url || ctx.flow_payment_url || \"\";\nconst localPaymentStatus = leadState.payment_status || \"\";\n\nconst flowApiKey = d.org_flow_api_key || $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = d.org_flow_secret_key || $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = d.org_flow_api_url || $env.FLOW_API_URL || \"https://www.flow.cl/api\";\n\nconst statusParams = { apiKey: flowApiKey, flowOrder: String(flowOrder) };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(k => k + statusParams[k]).join(\"\");\nconst signature = hmacHex(sigString, flowSecretKey);\n\nreturn [{\n  ...d,\n  flow_order_id: String(flowOrder),\n  flow_payment_url: paymentUrl,\n  local_payment_status: localPaymentStatus,\n  flow_status_url: flowApiUrl + \"/payment/getStatusByFlowOrder\",\n  status_params: { apiKey: flowApiKey, flowOrder: String(flowOrder), s: signature }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        368
+      ],
+      "name": "build_status_check_signature",
+      "id": "qa-628-build-signature"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.flow_status_url }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $json.status_params.apiKey }}"
+            },
+            {
+              "name": "flowOrder",
+              "value": "={{ $json.status_params.flowOrder }}"
+            },
+            {
+              "name": "s",
+              "value": "={{ $json.status_params.s }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        896,
+        368
+      ],
+      "name": "HTTP: GET flow getStatusByFlowOrder",
+      "id": "qa-628-http-getstatus",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const statusResp = $json;\nconst prevData = $(\"build_status_check_signature\").first().json;\nconst ctx = prevData.execution_context || {};\nconst leadId = ctx.lead_id || (prevData.context_packet && prevData.context_packet.state && prevData.context_packet.state.lead_id) || \"\";\nconst phone = ctx.phone || \"\";\nconst channel = ctx.channel || \"whatsapp\";\n\nconst flowStatus = Number(statusResp.status);\nconst localPaymentStatus = prevData.local_payment_status || \"\";\nconst paymentUrl = prevData.flow_payment_url || \"\";\n\nlet message = \"\";\nlet needsSelfHeal = false;\n\nif (!prevData.flow_order_id) {\n  message = \"No tengo ningun pago pendiente registrado a tu nombre.\";\n} else if (flowStatus === 2) {\n  if (localPaymentStatus !== \"paid\") {\n    needsSelfHeal = true;\n    message = \"\";\n  } else {\n    message = \"Si, confirmado! Tu pago ya esta registrado. Nos vemos en la fecha acordada.\";\n  }\n} else if (flowStatus === 1) {\n  message = \"Todavia no se ha registrado tu pago en Flow. Si ya pagaste, puede tardar unos minutos en reflejarse. Si no, aqui tienes el link de nuevo:\" +\n    (paymentUrl ? (\"\\n\" + paymentUrl) : \"\");\n} else if (flowStatus === 3) {\n  message = \"Tu pago fue rechazado por Flow. Si quieres, te genero un nuevo link para intentar de nuevo.\";\n} else if (flowStatus === 4) {\n  message = \"Ese link de pago fue anulado. Avisame si quieres que te genere uno nuevo.\";\n} else {\n  message = \"No pude verificar el estado de tu pago en este momento. Intenta de nuevo en un momento.\";\n}\n\nreturn [{\n  channel,\n  phone,\n  message,\n  execution_context: {\n    lead_id: leadId,\n    phone,\n    channel,\n    message,\n    state_update: { last_bot_action: \"check_payment_status\" }\n  },\n  message_to_send: message,\n  flow_order_id: prevData.flow_order_id,\n  flow_payment_url: paymentUrl,\n  needs_self_heal: needsSelfHeal,\n  db_operations: [\"lead_state\"]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        368
+      ],
+      "name": "interpret_and_build_result",
+      "id": "qa-628-interpret"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "needs_self_heal_check",
+              "leftValue": "={{ $json.needs_self_heal }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        368
+      ],
+      "name": "IF needs_self_heal",
+      "id": "qa-628-if-selfheal"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.aahumada.com/webhook/flow-payment-confirmed",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ token: ($json.flow_payment_url.split(\"token=\")[1] || \"\").trim() }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1520,
+        240
+      ],
+      "name": "HTTP: POST self-heal flow-payment-confirmed",
+      "id": "qa-628-http-selfheal"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $(\"interpret_and_build_result\").first().json;\nreturn [{ ...prevData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        368
+      ],
+      "name": "finalize_result",
+      "id": "qa-628-finalize"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api_key, secret_key, api_url\nFROM public.organization_payment_credentials\nWHERE organization_id = $1::uuid AND provider = 'flow' AND is_active = true\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ $json.execution_context?.organization_id || $json.context_packet?.routing?.organization_id || $json.context_packet?.organization?.id || null ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        590,
+        368
+      ],
+      "id": "d23ac343-a9ae-4720-bad8-4732779e95bd",
+      "name": "DB_get_org_payment_credentials",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $(\"normalize_input\").first().json;\nconst row = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    org_flow_api_key: row.api_key || null,\n    org_flow_secret_key: row.secret_key || null,\n    org_flow_api_url: row.api_url || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        368
+      ],
+      "id": "095324a9-3a90-4cc5-94af-e55991911730",
+      "name": "merge_org_payment_credentials"
+    }
+  ],
+  "connections": {
+    "6.28 check_payment_status": {
+      "main": [
+        [
+          {
+            "node": "normalize_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_input": {
+      "main": [
+        [
+          {
+            "node": "DB_get_org_payment_credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_status_check_signature": {
+      "main": [
+        [
+          {
+            "node": "HTTP: GET flow getStatusByFlowOrder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: GET flow getStatusByFlowOrder": {
+      "main": [
+        [
+          {
+            "node": "interpret_and_build_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "interpret_and_build_result": {
+      "main": [
+        [
+          {
+            "node": "IF needs_self_heal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF needs_self_heal": {
+      "main": [
+        [
+          {
+            "node": "HTTP: POST self-heal flow-payment-confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "finalize_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: POST self-heal flow-payment-confirmed": {
+      "main": [
+        [
+          {
+            "node": "finalize_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_get_org_payment_credentials": {
+      "main": [
+        [
+          {
+            "node": "merge_org_payment_credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_org_payment_credentials": {
+      "main": [
+        [
+          {
+            "node": "build_status_check_signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "mFtn3WnwBIU0k5uF"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "9e748ba1-e928-4e49-a68b-63896107540d",
+  "activeVersionId": "9e748ba1-e928-4e49-a68b-63896107540d",
+  "versionCounter": 15,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-07-24T14:36:38.800Z",
+      "createdAt": "2026-07-24T14:36:38.800Z",
+      "role": "workflow:owner",
+      "workflowId": "bRPFQVB8uOwaTUyp",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-28T20:21:11.525Z",
+    "createdAt": "2026-07-28T20:21:11.525Z",
+    "versionId": "9e748ba1-e928-4e49-a68b-63896107540d",
+    "workflowId": "bRPFQVB8uOwaTUyp",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          272,
+          368
+        ],
+        "name": "6.28 check_payment_status",
+        "id": "qa-628-trigger"
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflow_check_payment_status_input_normalized\"\n  ]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          368
+        ],
+        "name": "normalize_input",
+        "id": "qa-628-normalize-input"
+      },
+      {
+        "parameters": {
+          "jsCode": "function sha256(data) {\n  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length,bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0; w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16),s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;}\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const t1=(hh+S1+ch+K[i]+s[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b2)^(a&c)^(b2&c);const t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b2;b2=a;a=(t1+t2)>>>0;}\n    h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b2)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(s){const b=[];for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c<128)b.push(c);else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}}return b;}\nfunction hmacHex(msg,key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ip=kb.map(v=>v^0x36),op=kb.map(v=>v^0x5c);\n  while(ip.length<64)ip.push(0x36); while(op.length<64)op.push(0x5c);\n  const inner=sha256([...ip,...strToBytes(msg)]);\n  const ib=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  return sha256([...op,...ib]).map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst d = $json;\nconst ctx = d.execution_context || {};\nconst leadState = (d.context_packet && d.context_packet.state) || {};\n\nconst flowOrder = leadState.flow_order_id || ctx.flow_order_id || \"\";\nconst paymentUrl = leadState.flow_payment_url || ctx.flow_payment_url || \"\";\nconst localPaymentStatus = leadState.payment_status || \"\";\n\nconst flowApiKey = d.org_flow_api_key || $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = d.org_flow_secret_key || $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = d.org_flow_api_url || $env.FLOW_API_URL || \"https://www.flow.cl/api\";\n\nconst statusParams = { apiKey: flowApiKey, flowOrder: String(flowOrder) };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(k => k + statusParams[k]).join(\"\");\nconst signature = hmacHex(sigString, flowSecretKey);\n\nreturn [{\n  ...d,\n  flow_order_id: String(flowOrder),\n  flow_payment_url: paymentUrl,\n  local_payment_status: localPaymentStatus,\n  flow_status_url: flowApiUrl + \"/payment/getStatusByFlowOrder\",\n  status_params: { apiKey: flowApiKey, flowOrder: String(flowOrder), s: signature }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          688,
+          368
+        ],
+        "name": "build_status_check_signature",
+        "id": "qa-628-build-signature"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.flow_status_url }}",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "apiKey",
+                "value": "={{ $json.status_params.apiKey }}"
+              },
+              {
+                "name": "flowOrder",
+                "value": "={{ $json.status_params.flowOrder }}"
+              },
+              {
+                "name": "s",
+                "value": "={{ $json.status_params.s }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          896,
+          368
+        ],
+        "name": "HTTP: GET flow getStatusByFlowOrder",
+        "id": "qa-628-http-getstatus",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const statusResp = $json;\nconst prevData = $(\"build_status_check_signature\").first().json;\nconst ctx = prevData.execution_context || {};\nconst leadId = ctx.lead_id || (prevData.context_packet && prevData.context_packet.state && prevData.context_packet.state.lead_id) || \"\";\nconst phone = ctx.phone || \"\";\nconst channel = ctx.channel || \"whatsapp\";\n\nconst flowStatus = Number(statusResp.status);\nconst localPaymentStatus = prevData.local_payment_status || \"\";\nconst paymentUrl = prevData.flow_payment_url || \"\";\n\nlet message = \"\";\nlet needsSelfHeal = false;\n\nif (!prevData.flow_order_id) {\n  message = \"No tengo ningun pago pendiente registrado a tu nombre.\";\n} else if (flowStatus === 2) {\n  if (localPaymentStatus !== \"paid\") {\n    needsSelfHeal = true;\n    message = \"\";\n  } else {\n    message = \"Si, confirmado! Tu pago ya esta registrado. Nos vemos en la fecha acordada.\";\n  }\n} else if (flowStatus === 1) {\n  message = \"Todavia no se ha registrado tu pago en Flow. Si ya pagaste, puede tardar unos minutos en reflejarse. Si no, aqui tienes el link de nuevo:\" +\n    (paymentUrl ? (\"\\n\" + paymentUrl) : \"\");\n} else if (flowStatus === 3) {\n  message = \"Tu pago fue rechazado por Flow. Si quieres, te genero un nuevo link para intentar de nuevo.\";\n} else if (flowStatus === 4) {\n  message = \"Ese link de pago fue anulado. Avisame si quieres que te genere uno nuevo.\";\n} else {\n  message = \"No pude verificar el estado de tu pago en este momento. Intenta de nuevo en un momento.\";\n}\n\nreturn [{\n  channel,\n  phone,\n  message,\n  execution_context: {\n    lead_id: leadId,\n    phone,\n    channel,\n    message,\n    state_update: { last_bot_action: \"check_payment_status\" }\n  },\n  message_to_send: message,\n  flow_order_id: prevData.flow_order_id,\n  flow_payment_url: paymentUrl,\n  needs_self_heal: needsSelfHeal,\n  db_operations: [\"lead_state\"]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1104,
+          368
+        ],
+        "name": "interpret_and_build_result",
+        "id": "qa-628-interpret"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "needs_self_heal_check",
+                "leftValue": "={{ $json.needs_self_heal }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1312,
+          368
+        ],
+        "name": "IF needs_self_heal",
+        "id": "qa-628-if-selfheal"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n.aahumada.com/webhook/flow-payment-confirmed",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ token: ($json.flow_payment_url.split(\"token=\")[1] || \"\").trim() }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          1520,
+          240
+        ],
+        "name": "HTTP: POST self-heal flow-payment-confirmed",
+        "id": "qa-628-http-selfheal"
+      },
+      {
+        "parameters": {
+          "jsCode": "const prevData = $(\"interpret_and_build_result\").first().json;\nreturn [{ ...prevData }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1728,
+          368
+        ],
+        "name": "finalize_result",
+        "id": "qa-628-finalize"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT api_key, secret_key, api_url\nFROM public.organization_payment_credentials\nWHERE organization_id = $1::uuid AND provider = 'flow' AND is_active = true\nLIMIT 1;",
+          "options": {
+            "queryReplacement": "={{ [ $json.execution_context?.organization_id || $json.context_packet?.routing?.organization_id || $json.context_packet?.organization?.id || null ] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          590,
+          368
+        ],
+        "id": "d23ac343-a9ae-4720-bad8-4732779e95bd",
+        "name": "DB_get_org_payment_credentials",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const original = $(\"normalize_input\").first().json;\nconst row = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    org_flow_api_key: row.api_key || null,\n    org_flow_secret_key: row.secret_key || null,\n    org_flow_api_url: row.api_url || null\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          640,
+          368
+        ],
+        "id": "095324a9-3a90-4cc5-94af-e55991911730",
+        "name": "merge_org_payment_credentials"
+      }
+    ],
+    "connections": {
+      "6.28 check_payment_status": {
+        "main": [
+          [
+            {
+              "node": "normalize_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_input": {
+        "main": [
+          [
+            {
+              "node": "DB_get_org_payment_credentials",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_status_check_signature": {
+        "main": [
+          [
+            {
+              "node": "HTTP: GET flow getStatusByFlowOrder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP: GET flow getStatusByFlowOrder": {
+        "main": [
+          [
+            {
+              "node": "interpret_and_build_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "interpret_and_build_result": {
+        "main": [
+          [
+            {
+              "node": "IF needs_self_heal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF needs_self_heal": {
+        "main": [
+          [
+            {
+              "node": "HTTP: POST self-heal flow-payment-confirmed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "finalize_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP: POST self-heal flow-payment-confirmed": {
+        "main": [
+          [
+            {
+              "node": "finalize_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_get_org_payment_credentials": {
+        "main": [
+          [
+            {
+              "node": "merge_org_payment_credentials",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_org_payment_credentials": {
+        "main": [
+          [
+            {
+              "node": "build_status_check_signature",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-28T20:21:11.671Z",
+        "id": 2199,
+        "workflowId": "bRPFQVB8uOwaTUyp",
+        "versionId": "9e748ba1-e928-4e49-a68b-63896107540d",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-28T20:21:11.617Z",
+        "id": 2198,
+        "workflowId": "bRPFQVB8uOwaTUyp",
+        "versionId": "9e748ba1-e928-4e49-a68b-63896107540d",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

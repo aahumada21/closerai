@@ -1,0 +1,363 @@
+{
+  "updatedAt": "2026-06-15T20:45:12.453Z",
+  "createdAt": "2026-06-07T15:47:37.586Z",
+  "id": "gYYvc3jTVgDnAB8K",
+  "name": "2.1 channel_config_resolver",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "0dcd74d7-41dc-46ee-933f-1ec9835b4a2f",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== '') {\n      return String(value).trim();\n    }\n  }\n  return '';\n}\n\nfunction compactRaw(value) {\n  if (!value || typeof value !== 'object') return {};\n  return {\n    source: value.source || null,\n    channel: value.channel || value.normalized_event?.channel || null,\n    provider: value.provider || value.routing?.provider || null,\n    external_channel_id: value.external_channel_id || value.phone_number_id || value.routing?.external_channel_id || value.routing?.phone_number_id || value.normalized_event?.external_channel_id || value.normalized_event?.phone_number_id || null,\n    message_id: value.message_id || value.normalized_event?.message_id || value.event?.message_id || null,\n    lead_id: value.lead_id || value.normalized_event?.lead_id || value.event?.lead_id || null\n  };\n}\n\nconst normalizedEvent = input.normalized_event || {};\nconst routing = input.routing || {};\nconst event = input.event || {};\nconst sourceMetadata = input.source_metadata || event.source_metadata || normalizedEvent.source_metadata || {};\nconst metaPayload = input.body || input;\nconst metadata = metaPayload?.entry?.[0]?.changes?.[0]?.value?.metadata || {};\n\nconst externalChannelId = firstValue(\n  input.external_channel_id,\n  routing.external_channel_id,\n  normalizedEvent.external_channel_id,\n  sourceMetadata.external_channel_id,\n  input.phone_number_id,\n  routing.phone_number_id,\n  normalizedEvent.phone_number_id,\n  sourceMetadata.phone_number_id,\n  metadata.phone_number_id\n);\n\nconst phoneNumberId = firstValue(\n  input.phone_number_id,\n  routing.phone_number_id,\n  normalizedEvent.phone_number_id,\n  sourceMetadata.phone_number_id,\n  metadata.phone_number_id,\n  externalChannelId\n);\n\nconst displayPhoneNumber = firstValue(\n  input.display_phone_number,\n  routing.display_phone_number,\n  normalizedEvent.display_phone_number,\n  sourceMetadata.display_phone_number,\n  metadata.display_phone_number\n);\n\nconst channel = firstValue(input.channel, normalizedEvent.channel, event.channel, 'whatsapp');\nconst provider = firstValue(input.provider, routing.provider, sourceMetadata.provider, 'meta_whatsapp_cloud_api');\nconst leadId = firstValue(input.lead_id, normalizedEvent.lead_id, event.lead_id, normalizedEvent.from, event.from);\nconst messageId = firstValue(input.message_id, normalizedEvent.message_id, event.message_id);\n\nreturn [{\n  json: {\n    ...input,\n    resolver_input: {\n      channel,\n      provider,\n      external_channel_id: externalChannelId || null,\n      phone_number_id: phoneNumberId || null,\n      display_phone_number: displayPhoneNumber || null,\n      lead_id: leadId || null,\n      message_id: messageId || null,\n      raw: compactRaw(input)\n    }\n  }\n}];"
+      },
+      "id": "ad744835-2694-4756-b3c8-e84187c87adf",
+      "name": "normalize_resolver_input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (\n  SELECT\n    '{{ String($json.resolver_input?.channel || \"whatsapp\").replace(/'/g, \"''\") }}'::text AS channel,\n    '{{ String($json.resolver_input?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}'::text AS provider,\n    NULLIF('{{ String($json.resolver_input?.external_channel_id || \"\").replace(/'/g, \"''\") }}', '')::text AS external_channel_id,\n    NULLIF('{{ String($json.resolver_input?.phone_number_id || \"\").replace(/'/g, \"''\") }}', '')::text AS phone_number_id,\n    NULLIF('{{ String($json.resolver_input?.display_phone_number || \"\").replace(/'/g, \"''\") }}', '')::text AS display_phone_number,\n    NULLIF('{{ String($json.resolver_input?.lead_id || \"\").replace(/'/g, \"''\") }}', '')::text AS lead_id,\n    NULLIF('{{ String($json.resolver_input?.message_id || \"\").replace(/'/g, \"''\") }}', '')::text AS message_id,\n    '{{ JSON.stringify($json.resolver_input?.raw || {}).replace(/'/g, \"''\") }}'::jsonb AS raw\n),\nchannel_candidate AS (\n  SELECT\n    ac.id AS channel_config_id,\n    ac.organization_id AS channel_organization_id,\n    ac.agent_id AS channel_agent_id,\n    ac.channel,\n    ac.provider,\n    ac.external_channel_id,\n    ac.display_name,\n    ac.config AS channel_config,\n    ac.is_active AS channel_is_active,\n    a.id AS agent_id,\n    a.slug AS agent_slug,\n    a.name AS agent_name,\n    a.role AS agent_role,\n    a.personality,\n    a.model_config,\n    a.policies,\n    a.is_active AS agent_is_active,\n    o.id AS organization_id,\n    o.slug AS organization_slug,\n    o.name AS organization_name,\n    o.timezone,\n    o.locale,\n    o.is_active AS organization_is_active\n  FROM input i\n  LEFT JOIN public.agent_channels ac\n    ON ac.provider = i.provider\n   AND ac.external_channel_id = i.external_channel_id\n  LEFT JOIN public.agents a\n    ON a.id = ac.agent_id\n  LEFT JOIN public.organizations o\n    ON o.id = ac.organization_id\n  LIMIT 1\n),\nevaluated AS (\n  SELECT\n    i.channel,\n    i.provider,\n    i.external_channel_id,\n    i.phone_number_id,\n    i.display_phone_number,\n    i.lead_id,\n    i.message_id,\n    i.raw,\n    c.channel_config_id,\n    c.channel_organization_id,\n    c.channel_agent_id,\n    c.display_name,\n    c.channel_config,\n    c.channel_is_active,\n    c.agent_id,\n    c.agent_slug,\n    c.agent_name,\n    c.agent_role,\n    c.personality,\n    c.model_config,\n    c.policies,\n    c.agent_is_active,\n    c.organization_id,\n    c.organization_slug,\n    c.organization_name,\n    c.timezone,\n    c.locale,\n    c.organization_is_active,\n    CASE\n      WHEN i.external_channel_id IS NULL THEN 'missing_external_channel_id'\n      WHEN c.channel_config_id IS NULL THEN 'agent_channel_not_found'\n      WHEN COALESCE(c.channel_is_active, false) = false THEN 'agent_channel_inactive'\n      WHEN c.agent_id IS NULL THEN 'agent_not_found'\n      WHEN COALESCE(c.agent_is_active, false) = false THEN 'agent_inactive'\n      WHEN c.organization_id IS NULL THEN 'organization_not_found'\n      WHEN COALESCE(c.organization_is_active, false) = false THEN 'organization_inactive'\n      WHEN lower(COALESCE(c.channel_config->>'inbound_enabled', 'true')) IN ('false', '0', 'no', 'off') THEN 'channel_inbound_disabled'\n      ELSE NULL\n    END AS not_processed_reason\n  FROM input i\n  LEFT JOIN channel_candidate c ON true\n)\nSELECT\n  (not_processed_reason IS NULL) AS found,\n  (not_processed_reason IS NULL) AS should_process,\n  not_processed_reason,\n  not_processed_reason AS error_code,\n  CASE\n    WHEN not_processed_reason IS NULL THEN NULL\n    WHEN not_processed_reason = 'missing_external_channel_id' THEN 'external_channel_id is required'\n    WHEN not_processed_reason = 'agent_channel_not_found' THEN 'no agent_channel configured for provider and external_channel_id'\n    WHEN not_processed_reason = 'agent_channel_inactive' THEN 'agent_channel is inactive'\n    WHEN not_processed_reason = 'agent_not_found' THEN 'agent referenced by channel was not found'\n    WHEN not_processed_reason = 'agent_inactive' THEN 'agent is inactive'\n    WHEN not_processed_reason = 'organization_not_found' THEN 'organization referenced by channel was not found'\n    WHEN not_processed_reason = 'organization_inactive' THEN 'organization is inactive'\n    WHEN not_processed_reason = 'channel_inbound_disabled' THEN 'channel inbound is disabled'\n    ELSE 'channel config resolution failed'\n  END AS error_message,\n  jsonb_build_object(\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'phone_number_id', phone_number_id,\n    'display_phone_number', display_phone_number,\n    'lead_id', lead_id,\n    'message_id', message_id,\n    'raw', raw\n  ) AS input,\n  CASE WHEN organization_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', organization_id,\n    'slug', organization_slug,\n    'name', organization_name,\n    'timezone', timezone,\n    'locale', locale,\n    'is_active', organization_is_active\n  ) END AS organization,\n  CASE WHEN agent_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', agent_id,\n    'slug', agent_slug,\n    'name', agent_name,\n    'role', agent_role,\n    'personality', personality,\n    'model_config', model_config,\n    'policies', policies,\n    'is_active', agent_is_active\n  ) END AS agent,\n  CASE WHEN channel_config_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', channel_config_id,\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'display_name', display_name,\n    'is_active', channel_is_active,\n    'config', COALESCE(channel_config, '{}'::jsonb),\n    'resolution_source', 'agent_channels'\n  ) END AS channel_config,\n  jsonb_build_object(\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'phone_number_id', phone_number_id,\n    'organization_id', organization_id,\n    'agent_id', agent_id,\n    'environment', COALESCE(channel_config->>'environment', 'production'),\n    'resolution_source', CASE WHEN channel_config_id IS NULL THEN NULL ELSE 'agent_channels' END\n  ) AS routing\nFROM evaluated;",
+        "options": {}
+      },
+      "id": "f0ec7eb1-8922-495f-a654-8aee0a10619b",
+      "name": "db_resolve_agent_channel",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json || {};\n\nfunction asObject(value, fallback = {}) {\n  if (value === null || value === undefined) return fallback;\n  if (typeof value === 'object' && !Array.isArray(value)) return value;\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;\n    } catch {\n      return fallback;\n    }\n  }\n  return fallback;\n}\n\nfunction asBool(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  const text = String(value || '').toLowerCase();\n  if (text === 'true') return true;\n  if (text === 'false') return false;\n  return false;\n}\n\nfunction safePart(value, fallback) {\n  const text = String(value || fallback || '').trim();\n  return text.replace(/[^a-zA-Z0-9_.:-]/g, '_') || fallback;\n}\n\nconst input = asObject(row.input, {});\nconst organization = asObject(row.organization, {});\nconst agent = asObject(row.agent, {});\nconst channelConfig = asObject(row.channel_config, {});\nconst routing = asObject(row.routing, {});\nconst shouldProcess = asBool(row.should_process);\nconst notProcessedReason = shouldProcess ? null : (row.not_processed_reason || row.error_code || 'channel_not_processable');\nconst channel = routing.channel || input.channel || 'whatsapp';\nconst provider = routing.provider || input.provider || 'meta_whatsapp_cloud_api';\nconst externalChannelId = routing.external_channel_id || input.external_channel_id || input.phone_number_id || null;\nconst leadId = input.lead_id || null;\nconst messageId = input.message_id || null;\nconst idempotencyKey = [\n  'channel_config',\n  safePart(provider, 'provider'),\n  safePart(externalChannelId, 'missing_external_channel_id'),\n  safePart(messageId || leadId, 'no_message')\n].join('__');\n\nreturn [{\n  json: {\n    should_process: shouldProcess,\n    not_processed_reason: notProcessedReason,\n    organization,\n    agent,\n    channel_config: channelConfig,\n    routing: {\n      channel,\n      provider,\n      external_channel_id: externalChannelId,\n      phone_number_id: routing.phone_number_id || input.phone_number_id || null,\n      organization_id: routing.organization_id || organization.id || null,\n      agent_id: routing.agent_id || agent.id || null,\n      environment: routing.environment || channelConfig.config?.environment || 'production',\n      resolution_source: routing.resolution_source || channelConfig.resolution_source || null\n    },\n    input,\n    error_code: shouldProcess ? null : (row.error_code || notProcessedReason),\n    error_message: shouldProcess ? null : (row.error_message || notProcessedReason),\n    audit: {\n      event_type: shouldProcess ? 'channel_config_resolved' : 'channel_config_discarded',\n      reason_code: notProcessedReason,\n      idempotency_key: idempotencyKey,\n      normalized_ok: shouldProcess,\n      channel,\n      provider,\n      external_channel_id: externalChannelId,\n      lead_id: leadId,\n      message_id: messageId,\n      organization_id: routing.organization_id || organization.id || null,\n      agent_id: routing.agent_id || agent.id || null,\n      resolved_at: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "319df90d-7cef-443b-bcbf-0a440a9359ac",
+      "name": "build_resolver_output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.channel_event_logs (\n  organization_id,\n  agent_id,\n  channel,\n  provider,\n  external_channel_id,\n  event_type,\n  message_id,\n  lead_id,\n  idempotency_key,\n  normalized_ok,\n  error,\n  normalized_event,\n  raw\n)\nVALUES (\n  NULLIF('{{ String($json.routing?.organization_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n  NULLIF('{{ String($json.routing?.agent_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n  '{{ String($json.routing?.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n  '{{ String($json.routing?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}',\n  NULLIF('{{ String($json.routing?.external_channel_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.audit?.event_type || \"channel_config_discarded\").replace(/'/g, \"''\") }}',\n  NULLIF('{{ String($json.audit?.message_id || \"\").replace(/'/g, \"''\") }}', ''),\n  NULLIF('{{ String($json.audit?.lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.audit?.idempotency_key || \"\").replace(/'/g, \"''\") }}',\n  {{ $json.should_process ? 'true' : 'false' }},\n  NULLIF('{{ String($json.not_processed_reason || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ JSON.stringify($json).replace(/'/g, \"''\") }}'::jsonb,\n  '{{ JSON.stringify($json.input?.raw || {}).replace(/'/g, \"''\") }}'::jsonb\n)\nON CONFLICT (idempotency_key) DO UPDATE SET\n  normalized_ok = EXCLUDED.normalized_ok,\n  error = EXCLUDED.error,\n  normalized_event = EXCLUDED.normalized_event,\n  raw = EXCLUDED.raw,\n  event_received_at = now()\nRETURNING id, event_type, normalized_ok, error;",
+        "options": {}
+      },
+      "id": "a754b22d-0cc2-4eaa-b29e-e4537b912e08",
+      "name": "log_channel_event_resolution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resolverItems = $items('build_resolver_output', 0, 0);\nconst output = resolverItems?.[0]?.json || $json || {};\nreturn [{ json: output }];"
+      },
+      "id": "eda47315-8cf2-4fa2-bd62-190a9fd1d556",
+      "name": "return_resolver_output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "normalize_resolver_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_resolver_input": {
+      "main": [
+        [
+          {
+            "node": "db_resolve_agent_channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_resolve_agent_channel": {
+      "main": [
+        [
+          {
+            "node": "build_resolver_output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_resolver_output": {
+      "main": [
+        [
+          {
+            "node": "log_channel_event_resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "log_channel_event_resolution": {
+      "main": [
+        [
+          {
+            "node": "return_resolver_output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "615f0ebc-7977-4085-8842-fcec3bf171e6",
+  "activeVersionId": "615f0ebc-7977-4085-8842-fcec3bf171e6",
+  "versionCounter": 23,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-07T15:47:37.599Z",
+      "createdAt": "2026-06-07T15:47:37.599Z",
+      "role": "workflow:owner",
+      "workflowId": "gYYvc3jTVgDnAB8K",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-15T15:45:36.409Z",
+    "createdAt": "2026-06-15T15:45:36.409Z",
+    "versionId": "615f0ebc-7977-4085-8842-fcec3bf171e6",
+    "workflowId": "gYYvc3jTVgDnAB8K",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "0dcd74d7-41dc-46ee-933f-1ec9835b4a2f",
+        "name": "When Executed by Another Workflow",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          240,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== '') {\n      return String(value).trim();\n    }\n  }\n  return '';\n}\n\nfunction compactRaw(value) {\n  if (!value || typeof value !== 'object') return {};\n  return {\n    source: value.source || null,\n    channel: value.channel || value.normalized_event?.channel || null,\n    provider: value.provider || value.routing?.provider || null,\n    external_channel_id: value.external_channel_id || value.phone_number_id || value.routing?.external_channel_id || value.routing?.phone_number_id || value.normalized_event?.external_channel_id || value.normalized_event?.phone_number_id || null,\n    message_id: value.message_id || value.normalized_event?.message_id || value.event?.message_id || null,\n    lead_id: value.lead_id || value.normalized_event?.lead_id || value.event?.lead_id || null\n  };\n}\n\nconst normalizedEvent = input.normalized_event || {};\nconst routing = input.routing || {};\nconst event = input.event || {};\nconst sourceMetadata = input.source_metadata || event.source_metadata || normalizedEvent.source_metadata || {};\nconst metaPayload = input.body || input;\nconst metadata = metaPayload?.entry?.[0]?.changes?.[0]?.value?.metadata || {};\n\nconst externalChannelId = firstValue(\n  input.external_channel_id,\n  routing.external_channel_id,\n  normalizedEvent.external_channel_id,\n  sourceMetadata.external_channel_id,\n  input.phone_number_id,\n  routing.phone_number_id,\n  normalizedEvent.phone_number_id,\n  sourceMetadata.phone_number_id,\n  metadata.phone_number_id\n);\n\nconst phoneNumberId = firstValue(\n  input.phone_number_id,\n  routing.phone_number_id,\n  normalizedEvent.phone_number_id,\n  sourceMetadata.phone_number_id,\n  metadata.phone_number_id,\n  externalChannelId\n);\n\nconst displayPhoneNumber = firstValue(\n  input.display_phone_number,\n  routing.display_phone_number,\n  normalizedEvent.display_phone_number,\n  sourceMetadata.display_phone_number,\n  metadata.display_phone_number\n);\n\nconst channel = firstValue(input.channel, normalizedEvent.channel, event.channel, 'whatsapp');\nconst provider = firstValue(input.provider, routing.provider, sourceMetadata.provider, 'meta_whatsapp_cloud_api');\nconst leadId = firstValue(input.lead_id, normalizedEvent.lead_id, event.lead_id, normalizedEvent.from, event.from);\nconst messageId = firstValue(input.message_id, normalizedEvent.message_id, event.message_id);\n\nreturn [{\n  json: {\n    ...input,\n    resolver_input: {\n      channel,\n      provider,\n      external_channel_id: externalChannelId || null,\n      phone_number_id: phoneNumberId || null,\n      display_phone_number: displayPhoneNumber || null,\n      lead_id: leadId || null,\n      message_id: messageId || null,\n      raw: compactRaw(input)\n    }\n  }\n}];"
+        },
+        "id": "ad744835-2694-4756-b3c8-e84187c87adf",
+        "name": "normalize_resolver_input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (\n  SELECT\n    '{{ String($json.resolver_input?.channel || \"whatsapp\").replace(/'/g, \"''\") }}'::text AS channel,\n    '{{ String($json.resolver_input?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}'::text AS provider,\n    NULLIF('{{ String($json.resolver_input?.external_channel_id || \"\").replace(/'/g, \"''\") }}', '')::text AS external_channel_id,\n    NULLIF('{{ String($json.resolver_input?.phone_number_id || \"\").replace(/'/g, \"''\") }}', '')::text AS phone_number_id,\n    NULLIF('{{ String($json.resolver_input?.display_phone_number || \"\").replace(/'/g, \"''\") }}', '')::text AS display_phone_number,\n    NULLIF('{{ String($json.resolver_input?.lead_id || \"\").replace(/'/g, \"''\") }}', '')::text AS lead_id,\n    NULLIF('{{ String($json.resolver_input?.message_id || \"\").replace(/'/g, \"''\") }}', '')::text AS message_id,\n    '{{ JSON.stringify($json.resolver_input?.raw || {}).replace(/'/g, \"''\") }}'::jsonb AS raw\n),\nchannel_candidate AS (\n  SELECT\n    ac.id AS channel_config_id,\n    ac.organization_id AS channel_organization_id,\n    ac.agent_id AS channel_agent_id,\n    ac.channel,\n    ac.provider,\n    ac.external_channel_id,\n    ac.display_name,\n    ac.config AS channel_config,\n    ac.is_active AS channel_is_active,\n    a.id AS agent_id,\n    a.slug AS agent_slug,\n    a.name AS agent_name,\n    a.role AS agent_role,\n    a.personality,\n    a.model_config,\n    a.policies,\n    a.is_active AS agent_is_active,\n    o.id AS organization_id,\n    o.slug AS organization_slug,\n    o.name AS organization_name,\n    o.timezone,\n    o.locale,\n    o.is_active AS organization_is_active\n  FROM input i\n  LEFT JOIN public.agent_channels ac\n    ON ac.provider = i.provider\n   AND ac.external_channel_id = i.external_channel_id\n  LEFT JOIN public.agents a\n    ON a.id = ac.agent_id\n  LEFT JOIN public.organizations o\n    ON o.id = ac.organization_id\n  LIMIT 1\n),\nevaluated AS (\n  SELECT\n    i.channel,\n    i.provider,\n    i.external_channel_id,\n    i.phone_number_id,\n    i.display_phone_number,\n    i.lead_id,\n    i.message_id,\n    i.raw,\n    c.channel_config_id,\n    c.channel_organization_id,\n    c.channel_agent_id,\n    c.display_name,\n    c.channel_config,\n    c.channel_is_active,\n    c.agent_id,\n    c.agent_slug,\n    c.agent_name,\n    c.agent_role,\n    c.personality,\n    c.model_config,\n    c.policies,\n    c.agent_is_active,\n    c.organization_id,\n    c.organization_slug,\n    c.organization_name,\n    c.timezone,\n    c.locale,\n    c.organization_is_active,\n    CASE\n      WHEN i.external_channel_id IS NULL THEN 'missing_external_channel_id'\n      WHEN c.channel_config_id IS NULL THEN 'agent_channel_not_found'\n      WHEN COALESCE(c.channel_is_active, false) = false THEN 'agent_channel_inactive'\n      WHEN c.agent_id IS NULL THEN 'agent_not_found'\n      WHEN COALESCE(c.agent_is_active, false) = false THEN 'agent_inactive'\n      WHEN c.organization_id IS NULL THEN 'organization_not_found'\n      WHEN COALESCE(c.organization_is_active, false) = false THEN 'organization_inactive'\n      WHEN lower(COALESCE(c.channel_config->>'inbound_enabled', 'true')) IN ('false', '0', 'no', 'off') THEN 'channel_inbound_disabled'\n      ELSE NULL\n    END AS not_processed_reason\n  FROM input i\n  LEFT JOIN channel_candidate c ON true\n)\nSELECT\n  (not_processed_reason IS NULL) AS found,\n  (not_processed_reason IS NULL) AS should_process,\n  not_processed_reason,\n  not_processed_reason AS error_code,\n  CASE\n    WHEN not_processed_reason IS NULL THEN NULL\n    WHEN not_processed_reason = 'missing_external_channel_id' THEN 'external_channel_id is required'\n    WHEN not_processed_reason = 'agent_channel_not_found' THEN 'no agent_channel configured for provider and external_channel_id'\n    WHEN not_processed_reason = 'agent_channel_inactive' THEN 'agent_channel is inactive'\n    WHEN not_processed_reason = 'agent_not_found' THEN 'agent referenced by channel was not found'\n    WHEN not_processed_reason = 'agent_inactive' THEN 'agent is inactive'\n    WHEN not_processed_reason = 'organization_not_found' THEN 'organization referenced by channel was not found'\n    WHEN not_processed_reason = 'organization_inactive' THEN 'organization is inactive'\n    WHEN not_processed_reason = 'channel_inbound_disabled' THEN 'channel inbound is disabled'\n    ELSE 'channel config resolution failed'\n  END AS error_message,\n  jsonb_build_object(\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'phone_number_id', phone_number_id,\n    'display_phone_number', display_phone_number,\n    'lead_id', lead_id,\n    'message_id', message_id,\n    'raw', raw\n  ) AS input,\n  CASE WHEN organization_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', organization_id,\n    'slug', organization_slug,\n    'name', organization_name,\n    'timezone', timezone,\n    'locale', locale,\n    'is_active', organization_is_active\n  ) END AS organization,\n  CASE WHEN agent_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', agent_id,\n    'slug', agent_slug,\n    'name', agent_name,\n    'role', agent_role,\n    'personality', personality,\n    'model_config', model_config,\n    'policies', policies,\n    'is_active', agent_is_active\n  ) END AS agent,\n  CASE WHEN channel_config_id IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(\n    'id', channel_config_id,\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'display_name', display_name,\n    'is_active', channel_is_active,\n    'config', COALESCE(channel_config, '{}'::jsonb),\n    'resolution_source', 'agent_channels'\n  ) END AS channel_config,\n  jsonb_build_object(\n    'channel', channel,\n    'provider', provider,\n    'external_channel_id', external_channel_id,\n    'phone_number_id', phone_number_id,\n    'organization_id', organization_id,\n    'agent_id', agent_id,\n    'environment', COALESCE(channel_config->>'environment', 'production'),\n    'resolution_source', CASE WHEN channel_config_id IS NULL THEN NULL ELSE 'agent_channels' END\n  ) AS routing\nFROM evaluated;",
+          "options": {}
+        },
+        "id": "f0ec7eb1-8922-495f-a654-8aee0a10619b",
+        "name": "db_resolve_agent_channel",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          760,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const row = $json || {};\n\nfunction asObject(value, fallback = {}) {\n  if (value === null || value === undefined) return fallback;\n  if (typeof value === 'object' && !Array.isArray(value)) return value;\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;\n    } catch {\n      return fallback;\n    }\n  }\n  return fallback;\n}\n\nfunction asBool(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  const text = String(value || '').toLowerCase();\n  if (text === 'true') return true;\n  if (text === 'false') return false;\n  return false;\n}\n\nfunction safePart(value, fallback) {\n  const text = String(value || fallback || '').trim();\n  return text.replace(/[^a-zA-Z0-9_.:-]/g, '_') || fallback;\n}\n\nconst input = asObject(row.input, {});\nconst organization = asObject(row.organization, {});\nconst agent = asObject(row.agent, {});\nconst channelConfig = asObject(row.channel_config, {});\nconst routing = asObject(row.routing, {});\nconst shouldProcess = asBool(row.should_process);\nconst notProcessedReason = shouldProcess ? null : (row.not_processed_reason || row.error_code || 'channel_not_processable');\nconst channel = routing.channel || input.channel || 'whatsapp';\nconst provider = routing.provider || input.provider || 'meta_whatsapp_cloud_api';\nconst externalChannelId = routing.external_channel_id || input.external_channel_id || input.phone_number_id || null;\nconst leadId = input.lead_id || null;\nconst messageId = input.message_id || null;\nconst idempotencyKey = [\n  'channel_config',\n  safePart(provider, 'provider'),\n  safePart(externalChannelId, 'missing_external_channel_id'),\n  safePart(messageId || leadId, 'no_message')\n].join('__');\n\nreturn [{\n  json: {\n    should_process: shouldProcess,\n    not_processed_reason: notProcessedReason,\n    organization,\n    agent,\n    channel_config: channelConfig,\n    routing: {\n      channel,\n      provider,\n      external_channel_id: externalChannelId,\n      phone_number_id: routing.phone_number_id || input.phone_number_id || null,\n      organization_id: routing.organization_id || organization.id || null,\n      agent_id: routing.agent_id || agent.id || null,\n      environment: routing.environment || channelConfig.config?.environment || 'production',\n      resolution_source: routing.resolution_source || channelConfig.resolution_source || null\n    },\n    input,\n    error_code: shouldProcess ? null : (row.error_code || notProcessedReason),\n    error_message: shouldProcess ? null : (row.error_message || notProcessedReason),\n    audit: {\n      event_type: shouldProcess ? 'channel_config_resolved' : 'channel_config_discarded',\n      reason_code: notProcessedReason,\n      idempotency_key: idempotencyKey,\n      normalized_ok: shouldProcess,\n      channel,\n      provider,\n      external_channel_id: externalChannelId,\n      lead_id: leadId,\n      message_id: messageId,\n      organization_id: routing.organization_id || organization.id || null,\n      agent_id: routing.agent_id || agent.id || null,\n      resolved_at: new Date().toISOString()\n    }\n  }\n}];"
+        },
+        "id": "319df90d-7cef-443b-bcbf-0a440a9359ac",
+        "name": "build_resolver_output",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.channel_event_logs (\n  organization_id,\n  agent_id,\n  channel,\n  provider,\n  external_channel_id,\n  event_type,\n  message_id,\n  lead_id,\n  idempotency_key,\n  normalized_ok,\n  error,\n  normalized_event,\n  raw\n)\nVALUES (\n  NULLIF('{{ String($json.routing?.organization_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n  NULLIF('{{ String($json.routing?.agent_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n  '{{ String($json.routing?.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n  '{{ String($json.routing?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}',\n  NULLIF('{{ String($json.routing?.external_channel_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.audit?.event_type || \"channel_config_discarded\").replace(/'/g, \"''\") }}',\n  NULLIF('{{ String($json.audit?.message_id || \"\").replace(/'/g, \"''\") }}', ''),\n  NULLIF('{{ String($json.audit?.lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.audit?.idempotency_key || \"\").replace(/'/g, \"''\") }}',\n  {{ $json.should_process ? 'true' : 'false' }},\n  NULLIF('{{ String($json.not_processed_reason || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ JSON.stringify($json).replace(/'/g, \"''\") }}'::jsonb,\n  '{{ JSON.stringify($json.input?.raw || {}).replace(/'/g, \"''\") }}'::jsonb\n)\nON CONFLICT (idempotency_key) DO UPDATE SET\n  normalized_ok = EXCLUDED.normalized_ok,\n  error = EXCLUDED.error,\n  normalized_event = EXCLUDED.normalized_event,\n  raw = EXCLUDED.raw,\n  event_received_at = now()\nRETURNING id, event_type, normalized_ok, error;",
+          "options": {}
+        },
+        "id": "a754b22d-0cc2-4eaa-b29e-e4537b912e08",
+        "name": "log_channel_event_resolution",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1320,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const resolverItems = $items('build_resolver_output', 0, 0);\nconst output = resolverItems?.[0]?.json || $json || {};\nreturn [{ json: output }];"
+        },
+        "id": "eda47315-8cf2-4fa2-bd62-190a9fd1d556",
+        "name": "return_resolver_output",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1600,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
+            {
+              "node": "normalize_resolver_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_resolver_input": {
+        "main": [
+          [
+            {
+              "node": "db_resolve_agent_channel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "db_resolve_agent_channel": {
+        "main": [
+          [
+            {
+              "node": "build_resolver_output",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_resolver_output": {
+        "main": [
+          [
+            {
+              "node": "log_channel_event_resolution",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "log_channel_event_resolution": {
+        "main": [
+          [
+            {
+              "node": "return_resolver_output",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-15T20:46:08.716Z",
+        "id": 1250,
+        "workflowId": "gYYvc3jTVgDnAB8K",
+        "versionId": "615f0ebc-7977-4085-8842-fcec3bf171e6",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

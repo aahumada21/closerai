@@ -1,0 +1,900 @@
+{
+  "updatedAt": "2026-07-20T17:55:59.279Z",
+  "createdAt": "2026-05-22T22:29:40.752Z",
+  "id": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+  "name": "9.1 qa_conversation_test_runner",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qa-conversation-test-runner",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -848,
+        -32
+      ],
+      "id": "aa09ddf7-30b7-4671-9aff-ade8b6832404",
+      "name": "qa_runner_webhook",
+      "webhookId": "33d24700-0e99-4acd-af6c-935ed4cf6b90"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        240,
+        16
+      ],
+      "id": "c3070cb4-d7fd-4378-b38d-fb033ed1ab68",
+      "name": "loop_scenarios"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  scenario_key AS id,\n  name,\n  suite,\n  priority,\n  tags,\n  steps,\n  expected_outcome\nFROM public.qa_test_scenarios\nWHERE enabled = true\n  AND (\n    '{{$json.scenario_key}}' = ''\n    OR scenario_key = '{{$json.scenario_key}}'\n  )\nORDER BY\n  priority ASC,\n  scenario_key ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -272,
+        -16
+      ],
+      "id": "f915e90e-cd36-4fdd-ba71-e1110bae6667",
+      "name": "load_qa_scenarios_from_db",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const runStamp = String(Date.now()).slice(-4);\n\nreturn items.map((item, index) => {\n  const scenario = item.json;\n\n  const scenarioNumber = String(index + 1).padStart(3, \"0\");\n\n  // Si el scenario_key viene como n¿mero telefnico (ej: 56990xxxx), salo tal cual\n  const scenarioId = String(scenario.id || \"\");\n  const qaPhone = scenarioId.startsWith(\"56990\")\n    ? scenarioId\n    : `56901${runStamp}${scenarioNumber}`;\n\n  let steps = scenario.steps;\n\n  if (typeof steps === \"string\") {\n    try {\n      steps = JSON.parse(steps);\n    } catch {\n      steps = [];\n    }\n  }\n\n  if (!Array.isArray(steps)) {\n    steps = [];\n  }\n\n  return {\n    json: {\n      id: scenario.id,\n      name: scenario.name,\n      suite: scenario.suite,\n      priority: scenario.priority,\n      tags: scenario.tags || [],\n      steps,\n      phone: qaPhone,\n      run_id: `qa_${new Date().toISOString()}_${scenario.id}`,\n      expected_outcome: scenario.expected_outcome || null,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        -32
+      ],
+      "id": "cddaad0a-5aab-4e57-ad3e-17d14029600d",
+      "name": "prepare_loaded_scenarios"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/34092303-cb4a-4fd2-800e-ac16f650fc52",
+          "cachedResultName": "9.1.1 qa_run_single_conversation"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "expected_outcome": "={{ $json.expected_outcome }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "expected_outcome",
+              "displayName": "expected_outcome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        464,
+        176
+      ],
+      "id": "e02d5c7b-9e9c-449e-9407-73e3ee8d6f1c",
+      "name": "qa_run_single_conversation",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "93938834-70cf-48be-991c-9c52fb0e980f",
+              "name": "use_temp",
+              "value": "={{$json.body?.use_temp ?? true}}",
+              "type": "boolean"
+            },
+            {
+              "id": "94937f85-d6d3-4042-bf90-4d4ab9b22b9b",
+              "name": "temp_prefix",
+              "value": "={{$json.body?.temp_prefix ?? \"56990\"}}",
+              "type": "string"
+            },
+            {
+              "id": "ec83b2cb-f06f-4026-bec2-5429a356bfb2",
+              "name": "temp_table",
+              "value": "public.qa_test_scenarios_temp",
+              "type": "string"
+            },
+            {
+              "id": "66ef5e8a-1006-4227-8d62-b61ef4d38b5f",
+              "name": "scenario_key",
+              "value": "={{$json.body?.scenario_key ?? \"\"}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -640,
+        -48
+      ],
+      "id": "772697d1-e307-4fa4-b97b-6053e0fcc58d",
+      "name": "qa_mode"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "110bdfc1-a55a-4e73-8db0-22afc0ff3847",
+              "leftValue": "={{$json.use_temp}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -464,
+        -32
+      ],
+      "id": "f4af2be9-5766-4912-95a4-0807bf88f9a4",
+      "name": "IF use_temp"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  scenario_key AS id,\n  name,\n  suite,\n  priority,\n  tags,\n  steps,\n  expected_outcome\nFROM public.qa_test_scenarios_temp\nWHERE enabled = true\n  AND (\n    '{{$json.scenario_key}}' = ''\n    OR scenario_key = '{{$json.scenario_key}}'\n  )\n  AND (\n    '{{$json.scenario_key}}' <> ''\n    OR scenario_key LIKE '{{$json.temp_prefix}}%'\n  )\nORDER BY\n  priority ASC,\n  scenario_key ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -256,
+        -208
+      ],
+      "id": "8323cf6a-b986-4d98-ab8c-679d797c8833",
+      "name": "load_qa_scenarios_from_temp",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const runId = String($json.run_id || \"\");\nconst prefix = runId.replace(/_[^_]+$/, \"\");\nreturn [{ run_prefix: prefix }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        -128
+      ],
+      "id": "build-run-prefix-1",
+      "name": "build_run_prefix",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(DISTINCT scenario_id) FILTER (WHERE llm_passed) AS passed, count(DISTINCT scenario_id) AS total FROM public.qa_test_results WHERE run_id LIKE '{{ $json.run_prefix }}%';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        752,
+        -128
+      ],
+      "id": "db-qa-done-summary-1",
+      "name": "DB_qa_done_summary",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const passed = Number($json.passed || 0);\nconst total = Number($json.total || 0);\nconst message = `QA terminado: ${passed} / ${total} escenarios pasaron.`;\nreturn [{ phone: \"56930977617\", message }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -128
+      ],
+      "id": "build-qa-notify-message-1",
+      "name": "build_qa_notify_message"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1024332077436840",
+        "recipientPhoneNumber": "={{$json.phone}}",
+        "textBody": "={{$json.message}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        -128
+      ],
+      "id": "wb-send-notify-1",
+      "name": "WB_Send_Notify",
+      "webhookId": "137e8d6a-ffc9-45d1-984c-10e8c2345489",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "lHyvwqasIbVP59b8",
+          "name": "WhatsApp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "qa_runner_webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "qa_mode",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "loop_scenarios": {
+      "main": [
+        [
+          {
+            "node": "build_run_prefix",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qa_run_single_conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa_run_single_conversation": {
+      "main": [
+        [
+          {
+            "node": "loop_scenarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "load_qa_scenarios_from_db": {
+      "main": [
+        [
+          {
+            "node": "prepare_loaded_scenarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa_mode": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "IF use_temp",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "load_qa_scenarios_from_temp": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "prepare_loaded_scenarios",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "IF use_temp": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "load_qa_scenarios_from_temp",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "load_qa_scenarios_from_db",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "prepare_loaded_scenarios": {
+      "main": [
+        [
+          {
+            "node": "loop_scenarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_run_prefix": {
+      "main": [
+        []
+      ]
+    },
+    "DB_qa_done_summary": {
+      "main": [
+        [
+          {
+            "node": "build_qa_notify_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_qa_notify_message": {
+      "main": [
+        [
+          {
+            "node": "WB_Send_Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+  "activeVersionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+  "versionCounter": 127,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-20T17:55:59.284Z",
+    "createdAt": "2026-07-20T17:55:59.284Z",
+    "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+    "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "qa-conversation-test-runner",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -848,
+          -32
+        ],
+        "id": "aa09ddf7-30b7-4671-9aff-ade8b6832404",
+        "name": "qa_runner_webhook",
+        "webhookId": "33d24700-0e99-4acd-af6c-935ed4cf6b90"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          240,
+          16
+        ],
+        "id": "c3070cb4-d7fd-4378-b38d-fb033ed1ab68",
+        "name": "loop_scenarios"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  scenario_key AS id,\n  name,\n  suite,\n  priority,\n  tags,\n  steps,\n  expected_outcome\nFROM public.qa_test_scenarios\nWHERE enabled = true\n  AND (\n    '{{$json.scenario_key}}' = ''\n    OR scenario_key = '{{$json.scenario_key}}'\n  )\nORDER BY\n  priority ASC,\n  scenario_key ASC;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -272,
+          -16
+        ],
+        "id": "f915e90e-cd36-4fdd-ba71-e1110bae6667",
+        "name": "load_qa_scenarios_from_db",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const runStamp = String(Date.now()).slice(-4);\n\nreturn items.map((item, index) => {\n  const scenario = item.json;\n\n  const scenarioNumber = String(index + 1).padStart(3, \"0\");\n\n  // Si el scenario_key viene como n¿mero telefnico (ej: 56990xxxx), salo tal cual\n  const scenarioId = String(scenario.id || \"\");\n  const qaPhone = scenarioId.startsWith(\"56990\")\n    ? scenarioId\n    : `56901${runStamp}${scenarioNumber}`;\n\n  let steps = scenario.steps;\n\n  if (typeof steps === \"string\") {\n    try {\n      steps = JSON.parse(steps);\n    } catch {\n      steps = [];\n    }\n  }\n\n  if (!Array.isArray(steps)) {\n    steps = [];\n  }\n\n  return {\n    json: {\n      id: scenario.id,\n      name: scenario.name,\n      suite: scenario.suite,\n      priority: scenario.priority,\n      tags: scenario.tags || [],\n      steps,\n      phone: qaPhone,\n      run_id: `qa_${new Date().toISOString()}_${scenario.id}`,\n      expected_outcome: scenario.expected_outcome || null,\n    },\n  };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -64,
+          -32
+        ],
+        "id": "cddaad0a-5aab-4e57-ad3e-17d14029600d",
+        "name": "prepare_loaded_scenarios"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/34092303-cb4a-4fd2-800e-ac16f650fc52",
+            "cachedResultName": "9.1.1 qa_run_single_conversation"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "expected_outcome": "={{ $json.expected_outcome }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "expected_outcome",
+                "displayName": "expected_outcome",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          464,
+          176
+        ],
+        "id": "e02d5c7b-9e9c-449e-9407-73e3ee8d6f1c",
+        "name": "qa_run_single_conversation",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "93938834-70cf-48be-991c-9c52fb0e980f",
+                "name": "use_temp",
+                "value": "={{$json.body?.use_temp ?? true}}",
+                "type": "boolean"
+              },
+              {
+                "id": "94937f85-d6d3-4042-bf90-4d4ab9b22b9b",
+                "name": "temp_prefix",
+                "value": "={{$json.body?.temp_prefix ?? \"56990\"}}",
+                "type": "string"
+              },
+              {
+                "id": "ec83b2cb-f06f-4026-bec2-5429a356bfb2",
+                "name": "temp_table",
+                "value": "public.qa_test_scenarios_temp",
+                "type": "string"
+              },
+              {
+                "id": "66ef5e8a-1006-4227-8d62-b61ef4d38b5f",
+                "name": "scenario_key",
+                "value": "={{$json.body?.scenario_key ?? \"\"}}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -640,
+          -48
+        ],
+        "id": "772697d1-e307-4fa4-b97b-6053e0fcc58d",
+        "name": "qa_mode"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "110bdfc1-a55a-4e73-8db0-22afc0ff3847",
+                "leftValue": "={{$json.use_temp}}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -464,
+          -32
+        ],
+        "id": "f4af2be9-5766-4912-95a4-0807bf88f9a4",
+        "name": "IF use_temp"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  scenario_key AS id,\n  name,\n  suite,\n  priority,\n  tags,\n  steps,\n  expected_outcome\nFROM public.qa_test_scenarios_temp\nWHERE enabled = true\n  AND (\n    '{{$json.scenario_key}}' = ''\n    OR scenario_key = '{{$json.scenario_key}}'\n  )\n  AND (\n    '{{$json.scenario_key}}' <> ''\n    OR scenario_key LIKE '{{$json.temp_prefix}}%'\n  )\nORDER BY\n  priority ASC,\n  scenario_key ASC;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -256,
+          -208
+        ],
+        "id": "8323cf6a-b986-4d98-ab8c-679d797c8833",
+        "name": "load_qa_scenarios_from_temp",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const runId = String($json.run_id || \"\");\nconst prefix = runId.replace(/_[^_]+$/, \"\");\nreturn [{ run_prefix: prefix }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          528,
+          -128
+        ],
+        "id": "build-run-prefix-1",
+        "name": "build_run_prefix",
+        "executeOnce": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT count(DISTINCT scenario_id) FILTER (WHERE llm_passed) AS passed, count(DISTINCT scenario_id) AS total FROM public.qa_test_results WHERE run_id LIKE '{{ $json.run_prefix }}%';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          752,
+          -128
+        ],
+        "id": "db-qa-done-summary-1",
+        "name": "DB_qa_done_summary",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const passed = Number($json.passed || 0);\nconst total = Number($json.total || 0);\nconst message = `QA terminado: ${passed} / ${total} escenarios pasaron.`;\nreturn [{ phone: \"56930977617\", message }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          976,
+          -128
+        ],
+        "id": "build-qa-notify-message-1",
+        "name": "build_qa_notify_message"
+      },
+      {
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1024332077436840",
+          "recipientPhoneNumber": "={{$json.phone}}",
+          "textBody": "={{$json.message}}",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          1200,
+          -128
+        ],
+        "id": "wb-send-notify-1",
+        "name": "WB_Send_Notify",
+        "webhookId": "137e8d6a-ffc9-45d1-984c-10e8c2345489",
+        "credentials": {
+          "whatsAppApi": {
+            "id": "lHyvwqasIbVP59b8",
+            "name": "WhatsApp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "qa_runner_webhook": {
+        "main": [
+          [
+            {
+              "index": 0,
+              "node": "qa_mode",
+              "type": "main"
+            }
+          ]
+        ]
+      },
+      "loop_scenarios": {
+        "main": [
+          [
+            {
+              "node": "build_run_prefix",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "qa_run_single_conversation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "qa_run_single_conversation": {
+        "main": [
+          [
+            {
+              "node": "loop_scenarios",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "load_qa_scenarios_from_db": {
+        "main": [
+          [
+            {
+              "node": "prepare_loaded_scenarios",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "qa_mode": {
+        "main": [
+          [
+            {
+              "index": 0,
+              "node": "IF use_temp",
+              "type": "main"
+            }
+          ]
+        ]
+      },
+      "load_qa_scenarios_from_temp": {
+        "main": [
+          [
+            {
+              "index": 0,
+              "node": "prepare_loaded_scenarios",
+              "type": "main"
+            }
+          ]
+        ]
+      },
+      "IF use_temp": {
+        "main": [
+          [
+            {
+              "index": 0,
+              "node": "load_qa_scenarios_from_temp",
+              "type": "main"
+            }
+          ],
+          [
+            {
+              "index": 0,
+              "node": "load_qa_scenarios_from_db",
+              "type": "main"
+            }
+          ]
+        ]
+      },
+      "prepare_loaded_scenarios": {
+        "main": [
+          [
+            {
+              "node": "loop_scenarios",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_run_prefix": {
+        "main": [
+          []
+        ]
+      },
+      "DB_qa_done_summary": {
+        "main": [
+          [
+            {
+              "node": "build_qa_notify_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_qa_notify_message": {
+        "main": [
+          [
+            {
+              "node": "WB_Send_Notify",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-20T17:55:59.553Z",
+        "id": 2031,
+        "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+        "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-20T17:56:03.605Z",
+        "id": 2033,
+        "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+        "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-20T17:55:59.438Z",
+        "id": 2030,
+        "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+        "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-20T17:55:59.992Z",
+        "id": 2032,
+        "workflowId": "e52fdb10-dbcb-4f10-97f2-ef6248ca2982",
+        "versionId": "16d82528-8c4f-4ca2-8fa1-b18bb269515f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

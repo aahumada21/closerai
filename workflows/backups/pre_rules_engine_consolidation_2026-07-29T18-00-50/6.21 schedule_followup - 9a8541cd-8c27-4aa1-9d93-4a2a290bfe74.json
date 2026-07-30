@@ -1,0 +1,716 @@
+{
+  "updatedAt": "2026-05-28T18:49:54.035Z",
+  "createdAt": "2026-05-22T22:29:40.818Z",
+  "id": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+  "name": "6.21 schedule_followup",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+      },
+      "id": "73ac8ce4-9242-4433-8276-066d62b1cc6b",
+      "name": "6.21 schedule_followup",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowschedule_followupinput_normalized\"\n  ]\n}];"
+      },
+      "id": "04545c7b-9561-4ba1-8bce-e60aa87be4a8",
+      "name": "normalize_input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = $json.decision || {};\nconst ctx = $json.execution_context || {};\n\nconst fallbackMessage = \"Perfecto, ningun problema. Te escribo manana para retomar y, si quieres, agendamos.\";\nconst message =\n  $json.message_to_send ||\n  $json.message ||\n  decision.message ||\n  fallbackMessage;\n\nconst followupType =\n  ctx.followup_type ||\n  decision.followup_type ||\n  $json.followup_type ||\n  \"generic_followup\";\n\nconst scheduledFor =\n  ctx.scheduled_for ||\n  decision.scheduled_for ||\n  $json.scheduled_for ||\n  null;\n\nconst baseStateUpdate = ctx.state_update || $json.state_update || {};\n\nreturn [{\n  ...$json,\n\n  action: \"schedule_followup\",\n\n  message_to_send: message,\n  message,\n\n  db_operations: [\"followups\", \"messages\", \"lead_state\"],\n\n  followup: {\n    type: followupType,\n    scheduled_for: scheduledFor\n  },\n\n  state_update: {\n    ...baseStateUpdate,\n    stage: baseStateUpdate.stage || \"closing\",\n    intent_last: baseStateUpdate.intent_last || \"followup_scheduled\",\n    next_goal: baseStateUpdate.next_goal || \"wait_followup\",\n    last_bot_action: \"schedule_followup\"\n  },\n\n  execution_result: {\n    ...($json.execution_result || {}),\n    success: true,\n    action: \"schedule_followup\",\n    bot: message\n  }\n}];"
+      },
+      "id": "795af40e-316d-4ae9-b7e4-fcf031fd4bec",
+      "name": "schedule_followup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "followups",
+          "mode": "list",
+          "cachedResultName": "followups"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{$json.execution_context.lead_id}}",
+            "scheduled_for": "={{$json.followup?.scheduled_for}}",
+            "status": "pending",
+            "created_at": "={{new Date().toISOString()}}",
+            "followup_type": "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+            "message_template_key": "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+            "metadata": "={{ { source: \"action_executor\", action: $json.execution_context?.action, stage: $json.context_packet?.state?.stage || null, lead_id: $json.execution_context?.lead_id || null } }}",
+            "dedupe_key": "={{ $json.execution_context.lead_id + \"__\" + ($json.followup?.type || $json.execution_context?.followup_type || \"generic_followup\") + \"__\" + ($json.followup?.scheduled_for || $json.execution_context?.scheduled_for) }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scheduled_for",
+              "displayName": "scheduled_for",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followup_type",
+              "displayName": "followup_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message_template_key",
+              "displayName": "message_template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "metadata",
+              "displayName": "metadata",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "executed_at",
+              "displayName": "executed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "skipped_reason",
+              "displayName": "skipped_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "processing_started_at",
+              "displayName": "processing_started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "completed_at",
+              "displayName": "completed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "failed_at",
+              "displayName": "failed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "cancelled_at",
+              "displayName": "cancelled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        0
+      ],
+      "id": "f3927bd5-95ae-442b-bd4c-5541aef1d14c",
+      "name": "insert_followup",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "922fcb5a-209f-49ac-9b90-f22d3aeff40f",
+      "name": "merge_followup_with_context"
+    }
+  ],
+  "connections": {
+    "6.21 schedule_followup": {
+      "main": [
+        [
+          {
+            "node": "normalize_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_input": {
+      "main": [
+        [
+          {
+            "node": "schedule_followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert_followup": {
+      "main": [
+        [
+          {
+            "node": "merge_followup_with_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule_followup": {
+      "main": [
+        [
+          {
+            "node": "insert_followup",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "merge_followup_with_context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+  "activeVersionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+  "versionCounter": 36,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-24T20:31:51.000Z",
+    "createdAt": "2026-05-24T20:31:50.461Z",
+    "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+    "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+        },
+        "id": "73ac8ce4-9242-4433-8276-066d62b1cc6b",
+        "name": "6.21 schedule_followup",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowschedule_followupinput_normalized\"\n  ]\n}];"
+        },
+        "id": "04545c7b-9561-4ba1-8bce-e60aa87be4a8",
+        "name": "normalize_input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const decision = $json.decision || {};\nconst ctx = $json.execution_context || {};\n\nconst fallbackMessage = \"Perfecto, ningun problema. Te escribo manana para retomar y, si quieres, agendamos.\";\nconst message =\n  $json.message_to_send ||\n  $json.message ||\n  decision.message ||\n  fallbackMessage;\n\nconst followupType =\n  ctx.followup_type ||\n  decision.followup_type ||\n  $json.followup_type ||\n  \"generic_followup\";\n\nconst scheduledFor =\n  ctx.scheduled_for ||\n  decision.scheduled_for ||\n  $json.scheduled_for ||\n  null;\n\nconst baseStateUpdate = ctx.state_update || $json.state_update || {};\n\nreturn [{\n  ...$json,\n\n  action: \"schedule_followup\",\n\n  message_to_send: message,\n  message,\n\n  db_operations: [\"followups\", \"messages\", \"lead_state\"],\n\n  followup: {\n    type: followupType,\n    scheduled_for: scheduledFor\n  },\n\n  state_update: {\n    ...baseStateUpdate,\n    stage: baseStateUpdate.stage || \"closing\",\n    intent_last: baseStateUpdate.intent_last || \"followup_scheduled\",\n    next_goal: baseStateUpdate.next_goal || \"wait_followup\",\n    last_bot_action: \"schedule_followup\"\n  },\n\n  execution_result: {\n    ...($json.execution_result || {}),\n    success: true,\n    action: \"schedule_followup\",\n    bot: message\n  }\n}];"
+        },
+        "id": "795af40e-316d-4ae9-b7e4-fcf031fd4bec",
+        "name": "schedule_followup",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "followups",
+            "mode": "list",
+            "cachedResultName": "followups"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{$json.execution_context.lead_id}}",
+              "scheduled_for": "={{$json.followup?.scheduled_for}}",
+              "status": "pending",
+              "created_at": "={{new Date().toISOString()}}",
+              "followup_type": "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+              "message_template_key": "={{$json.followup?.type || $json.execution_context?.followup_type}}",
+              "metadata": "={{ { source: \"action_executor\", action: $json.execution_context?.action, stage: $json.context_packet?.state?.stage || null, lead_id: $json.execution_context?.lead_id || null } }}",
+              "dedupe_key": "={{ $json.execution_context.lead_id + \"__\" + ($json.followup?.type || $json.execution_context?.followup_type || \"generic_followup\") + \"__\" + ($json.followup?.scheduled_for || $json.execution_context?.scheduled_for) }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "scheduled_for",
+                "displayName": "scheduled_for",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "status",
+                "displayName": "status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "followup_type",
+                "displayName": "followup_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "message_template_key",
+                "displayName": "message_template_key",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "metadata",
+                "displayName": "metadata",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "object",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "executed_at",
+                "displayName": "executed_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "skipped_reason",
+                "displayName": "skipped_reason",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "processing_started_at",
+                "displayName": "processing_started_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "dedupe_key",
+                "displayName": "dedupe_key",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "completed_at",
+                "displayName": "completed_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "failed_at",
+                "displayName": "failed_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "cancelled_at",
+                "displayName": "cancelled_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true,
+                "removed": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          672,
+          0
+        ],
+        "id": "f3927bd5-95ae-442b-bd4c-5541aef1d14c",
+        "name": "insert_followup",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          896,
+          0
+        ],
+        "id": "922fcb5a-209f-49ac-9b90-f22d3aeff40f",
+        "name": "merge_followup_with_context"
+      }
+    ],
+    "connections": {
+      "6.21 schedule_followup": {
+        "main": [
+          [
+            {
+              "node": "normalize_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_input": {
+        "main": [
+          [
+            {
+              "node": "schedule_followup",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "insert_followup": {
+        "main": [
+          [
+            {
+              "node": "merge_followup_with_context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "schedule_followup": {
+        "main": [
+          [
+            {
+              "node": "insert_followup",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "merge_followup_with_context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": "Version dbb0824f",
+    "description": "",
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-24T20:31:51.184Z",
+        "id": 698,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-24T21:38:21.102Z",
+        "id": 774,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-27T17:41:25.840Z",
+        "id": 845,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:54.144Z",
+        "id": 953,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-24T21:38:21.073Z",
+        "id": 773,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-27T17:41:25.817Z",
+        "id": 844,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:54.090Z",
+        "id": 952,
+        "workflowId": "9a8541cd-8c27-4aa1-9d93-4a2a290bfe74",
+        "versionId": "dbb0824f-61f0-4a7f-a58c-5db45aff697f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

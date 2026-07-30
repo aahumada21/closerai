@@ -3,3 +3,5 @@
 .env
 **/.env
 
+# graphify (regenerable knowledge graph, run `graphify update .` to rebuild)
+graphify-out/

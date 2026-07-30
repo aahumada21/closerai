@@ -1,0 +1,835 @@
+{
+  "updatedAt": "2026-06-25T19:12:49.499Z",
+  "createdAt": "2026-06-25T19:10:14.524Z",
+  "id": "2FtwTlOI0mzbrXqR",
+  "name": "disconnect_google_calendar",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "disconnect-google-calendar",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "name": "WEBHOOK disconnect_google_calendar",
+      "id": "dgc-webhook",
+      "webhookId": "disconnect-google-calendar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction isUuid(value) {\n  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || \"\"));\n}\n\nconst expectedToken = $env.DISCONNECT_GOOGLE_CALENDAR_TOKEN;\nconst providedToken = header(\"x-disconnect-token\");\n\nconst agentId = String(body.agent_id || \"\").trim();\nconst organizationId = String(body.organization_id || \"\").trim();\n\nlet error = null;\nif (!expectedToken) error = \"missing_disconnect_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_disconnect_token\";\nelse if (!isUuid(agentId) || !isUuid(organizationId)) error = \"invalid_request\";\n\nconst lookupQuery = (!error)\n  ? `\nSELECT\n  EXISTS(SELECT 1 FROM public.agents WHERE id = '${agentId}'::uuid AND organization_id = '${organizationId}'::uuid AND is_active = true) AS agent_valid,\n  EXISTS(SELECT 1 FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS has_connection,\n  (SELECT refresh_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS refresh_token;\n`\n  : \"SELECT false AS agent_valid, false AS has_connection, NULL AS refresh_token;\";\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    agent_id: agentId || null,\n    organization_id: organizationId || null,\n    lookup_query: lookupQuery\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "name": "validate_disconnect_request",
+      "id": "dgc-validate"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.lookup_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        0
+      ],
+      "name": "DB lookup_agent_and_connection",
+      "id": "dgc-db-lookup",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"validate_disconnect_request\").first().json;\nconst lookup = $json || {};\n\nfunction toBool(value) {\n  return value === true || value === \"t\" || value === \"true\";\n}\n\nconst agentValid = toBool(lookup.agent_valid);\nconst hasConnection = toBool(lookup.has_connection);\n\nlet error = ctx.error;\nif (!error && !agentValid) error = \"agent_not_found\";\nelse if (!error && !hasConnection) error = \"no_connection\";\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    agent_id: ctx.agent_id,\n    organization_id: ctx.organization_id,\n    refresh_token: lookup.refresh_token || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "name": "interpret_lookup_result",
+      "id": "dgc-interpret-lookup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "dgc-cond-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ],
+      "name": "IF should_revoke",
+      "id": "dgc-if-should-revoke"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://oauth2.googleapis.com/revoke",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $json.refresh_token }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -100
+      ],
+      "name": "revoke_google_token",
+      "id": "dgc-http-revoke"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nconst statusCode = input.statusCode ?? input.status ?? null;\nconst hasError = !!input.error || (statusCode !== null && Number(statusCode) >= 300);\n\nreturn [{\n  json: {\n    revoke_ok: !hasError,\n    revoke_error_message: hasError ? JSON.stringify(input.error || input) : null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -100
+      ],
+      "name": "check_revoke_result",
+      "id": "dgc-check-revoke"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "dgc-cond-revoke-ok",
+              "leftValue": "={{ $json.revoke_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        -100
+      ],
+      "name": "IF revoke_ok",
+      "id": "dgc-if-revoke-ok"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"interpret_lookup_result\").first().json;\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid uuid before disconnect query: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nconst query = `\nWITH deleted_conn AS (\n  DELETE FROM public.google_calendar_connections\n  WHERE agent_id = ${sqlUuid(ctx.agent_id)}\n  RETURNING agent_id\n),\nupd_agent AS (\n  UPDATE public.agents\n  SET google_calendar_connected = false,\n      google_calendar_email = NULL\n  WHERE id = ${sqlUuid(ctx.agent_id)}\n  RETURNING id\n)\nSELECT (SELECT agent_id FROM deleted_conn) AS agent_id, (SELECT id FROM upd_agent) AS updated_agent_id;\n`;\n\nreturn [{ json: { ...ctx, disconnect_query: query } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -200
+      ],
+      "name": "build_disconnect_query",
+      "id": "dgc-build-disconnect-query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.disconnect_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        -200
+      ],
+      "name": "DB apply_disconnect",
+      "id": "dgc-db-apply",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -200
+      ],
+      "name": "build_success_response",
+      "id": "dgc-build-success"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: \"revoke_failed\",\n    message: input.revoke_error_message || \"Google rechazo la revocacion del token.\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "name": "build_revoke_failed_response",
+      "id": "dgc-build-revoke-failed"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: input.error || \"unknown_error\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ],
+      "name": "build_error_response",
+      "id": "dgc-build-error"
+    }
+  ],
+  "connections": {
+    "WEBHOOK disconnect_google_calendar": {
+      "main": [
+        [
+          {
+            "node": "validate_disconnect_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_disconnect_request": {
+      "main": [
+        [
+          {
+            "node": "DB lookup_agent_and_connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB lookup_agent_and_connection": {
+      "main": [
+        [
+          {
+            "node": "interpret_lookup_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "interpret_lookup_result": {
+      "main": [
+        [
+          {
+            "node": "IF should_revoke",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF should_revoke": {
+      "main": [
+        [
+          {
+            "node": "revoke_google_token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_error_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "revoke_google_token": {
+      "main": [
+        [
+          {
+            "node": "check_revoke_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_revoke_result": {
+      "main": [
+        [
+          {
+            "node": "IF revoke_ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF revoke_ok": {
+      "main": [
+        [
+          {
+            "node": "build_disconnect_query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_revoke_failed_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_disconnect_query": {
+      "main": [
+        [
+          {
+            "node": "DB apply_disconnect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB apply_disconnect": {
+      "main": [
+        [
+          {
+            "node": "build_success_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2cc4dac0-17d6-4ad3-88b4-24eb4b2fb0be",
+  "activeVersionId": "2cc4dac0-17d6-4ad3-88b4-24eb4b2fb0be",
+  "versionCounter": 19,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-25T19:10:14.536Z",
+      "createdAt": "2026-06-25T19:10:14.536Z",
+      "role": "workflow:owner",
+      "workflowId": "2FtwTlOI0mzbrXqR",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-25T19:12:49.505Z",
+    "createdAt": "2026-06-25T19:12:49.505Z",
+    "versionId": "2cc4dac0-17d6-4ad3-88b4-24eb4b2fb0be",
+    "workflowId": "2FtwTlOI0mzbrXqR",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "disconnect-google-calendar",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "name": "WEBHOOK disconnect_google_calendar",
+        "id": "dgc-webhook",
+        "webhookId": "disconnect-google-calendar"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction isUuid(value) {\n  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || \"\"));\n}\n\nconst expectedToken = $env.DISCONNECT_GOOGLE_CALENDAR_TOKEN;\nconst providedToken = header(\"x-disconnect-token\");\n\nconst agentId = String(body.agent_id || \"\").trim();\nconst organizationId = String(body.organization_id || \"\").trim();\n\nlet error = null;\nif (!expectedToken) error = \"missing_disconnect_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_disconnect_token\";\nelse if (!isUuid(agentId) || !isUuid(organizationId)) error = \"invalid_request\";\n\nconst lookupQuery = (!error)\n  ? `\nSELECT\n  EXISTS(SELECT 1 FROM public.agents WHERE id = '${agentId}'::uuid AND organization_id = '${organizationId}'::uuid AND is_active = true) AS agent_valid,\n  EXISTS(SELECT 1 FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS has_connection,\n  (SELECT refresh_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS refresh_token;\n`\n  : \"SELECT false AS agent_valid, false AS has_connection, NULL AS refresh_token;\";\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    agent_id: agentId || null,\n    organization_id: organizationId || null,\n    lookup_query: lookupQuery\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "name": "validate_disconnect_request",
+        "id": "dgc-validate"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.lookup_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          440,
+          0
+        ],
+        "name": "DB lookup_agent_and_connection",
+        "id": "dgc-db-lookup",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $(\"validate_disconnect_request\").first().json;\nconst lookup = $json || {};\n\nfunction toBool(value) {\n  return value === true || value === \"t\" || value === \"true\";\n}\n\nconst agentValid = toBool(lookup.agent_valid);\nconst hasConnection = toBool(lookup.has_connection);\n\nlet error = ctx.error;\nif (!error && !agentValid) error = \"agent_not_found\";\nelse if (!error && !hasConnection) error = \"no_connection\";\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    agent_id: ctx.agent_id,\n    organization_id: ctx.organization_id,\n    refresh_token: lookup.refresh_token || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "name": "interpret_lookup_result",
+        "id": "dgc-interpret-lookup"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "dgc-cond-valid",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          880,
+          0
+        ],
+        "name": "IF should_revoke",
+        "id": "dgc-if-should-revoke"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://oauth2.googleapis.com/revoke",
+          "sendBody": true,
+          "contentType": "form-urlencoded",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "token",
+                "value": "={{ $json.refresh_token }}"
+              }
+            ]
+          },
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1100,
+          -100
+        ],
+        "name": "revoke_google_token",
+        "id": "dgc-http-revoke"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nconst statusCode = input.statusCode ?? input.status ?? null;\nconst hasError = !!input.error || (statusCode !== null && Number(statusCode) >= 300);\n\nreturn [{\n  json: {\n    revoke_ok: !hasError,\n    revoke_error_message: hasError ? JSON.stringify(input.error || input) : null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          -100
+        ],
+        "name": "check_revoke_result",
+        "id": "dgc-check-revoke"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "dgc-cond-revoke-ok",
+                "leftValue": "={{ $json.revoke_ok }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1540,
+          -100
+        ],
+        "name": "IF revoke_ok",
+        "id": "dgc-if-revoke-ok"
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $(\"interpret_lookup_result\").first().json;\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid uuid before disconnect query: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nconst query = `\nWITH deleted_conn AS (\n  DELETE FROM public.google_calendar_connections\n  WHERE agent_id = ${sqlUuid(ctx.agent_id)}\n  RETURNING agent_id\n),\nupd_agent AS (\n  UPDATE public.agents\n  SET google_calendar_connected = false,\n      google_calendar_email = NULL\n  WHERE id = ${sqlUuid(ctx.agent_id)}\n  RETURNING id\n)\nSELECT (SELECT agent_id FROM deleted_conn) AS agent_id, (SELECT id FROM upd_agent) AS updated_agent_id;\n`;\n\nreturn [{ json: { ...ctx, disconnect_query: query } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          -200
+        ],
+        "name": "build_disconnect_query",
+        "id": "dgc-build-disconnect-query"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.disconnect_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1980,
+          -200
+        ],
+        "name": "DB apply_disconnect",
+        "id": "dgc-db-apply",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { ok: true } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2200,
+          -200
+        ],
+        "name": "build_success_response",
+        "id": "dgc-build-success"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: \"revoke_failed\",\n    message: input.revoke_error_message || \"Google rechazo la revocacion del token.\"\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          0
+        ],
+        "name": "build_revoke_failed_response",
+        "id": "dgc-build-revoke-failed"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: input.error || \"unknown_error\"\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          200
+        ],
+        "name": "build_error_response",
+        "id": "dgc-build-error"
+      }
+    ],
+    "connections": {
+      "WEBHOOK disconnect_google_calendar": {
+        "main": [
+          [
+            {
+              "node": "validate_disconnect_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_disconnect_request": {
+        "main": [
+          [
+            {
+              "node": "DB lookup_agent_and_connection",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB lookup_agent_and_connection": {
+        "main": [
+          [
+            {
+              "node": "interpret_lookup_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "interpret_lookup_result": {
+        "main": [
+          [
+            {
+              "node": "IF should_revoke",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF should_revoke": {
+        "main": [
+          [
+            {
+              "node": "revoke_google_token",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_error_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "revoke_google_token": {
+        "main": [
+          [
+            {
+              "node": "check_revoke_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "check_revoke_result": {
+        "main": [
+          [
+            {
+              "node": "IF revoke_ok",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF revoke_ok": {
+        "main": [
+          [
+            {
+              "node": "build_disconnect_query",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_revoke_failed_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_disconnect_query": {
+        "main": [
+          [
+            {
+              "node": "DB apply_disconnect",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB apply_disconnect": {
+        "main": [
+          [
+            {
+              "node": "build_success_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-25T19:12:49.686Z",
+        "id": 1481,
+        "workflowId": "2FtwTlOI0mzbrXqR",
+        "versionId": "2cc4dac0-17d6-4ad3-88b4-24eb4b2fb0be",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-25T19:12:49.646Z",
+        "id": 1480,
+        "workflowId": "2FtwTlOI0mzbrXqR",
+        "versionId": "2cc4dac0-17d6-4ad3-88b4-24eb4b2fb0be",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

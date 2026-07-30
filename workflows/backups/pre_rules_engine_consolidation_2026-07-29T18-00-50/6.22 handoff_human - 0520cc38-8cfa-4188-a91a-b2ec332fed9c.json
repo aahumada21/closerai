@@ -1,0 +1,700 @@
+{
+  "updatedAt": "2026-06-12T16:00:45.014Z",
+  "createdAt": "2026-05-22T22:29:40.822Z",
+  "id": "0520cc38-8cfa-4188-a91a-b2ec332fed9c",
+  "name": "6.22 handoff_human",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+      },
+      "id": "c5647f9e-b7f6-4078-b37e-d4d7a59239c8",
+      "name": "6.22 handoff_human",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        192,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowhandoff_humaninput_normalized\"\n  ]\n}];"
+      },
+      "id": "df0c83f4-edae-4754-b5d3-b3cb1f1c5e5b",
+      "name": "normalize_input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alreadyInHandoff =\n  $json.context_packet?.state?.human_handoff === true ||\n  $json.handoff === true ||\n  $json.meta?.handoff?.human_handoff === true ||\n  $json.context_packet?.state?.last_bot_action === \"human_handoff_already_active\";\n\nconst lockMessage =\n  \"Tu reclamo ya esta derivado al equipo. Una persona lo revisara y te respondera por este mismo chat para ayudarte.\";\n\nconst defaultMessage =\n  $json.execution_context?.message ||\n  \"Te voy a derivar con una persona para ayudarte mejor.\";\n\nconst handoffLocked = alreadyInHandoff;\n\nreturn [{\n  ...$json,\n  handoff_locked: handoffLocked,\n  message_to_send: handoffLocked ? lockMessage : defaultMessage,\n  db_operations: handoffLocked\n    ? [\"messages\", \"lead_state\"]\n    : [\"handoff_cases\", \"messages\", \"lead_state\"],\n  handoff_case: handoffLocked\n    ? null\n    : {\n        lead_id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null,\n        reason: $json.execution_context?.handoff_reason || \"handoff requested\",\n        summary:\n          $json.execution_context?.handoff_summary ||\n          $json.context_packet?.conversation?.latest_user_message ||\n          \"Sin resumen\",\n        lead: { ...($json.context_packet?.lead || {}), id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null },\n        state: { ...($json.context_packet?.state || {}), lead_id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null },\n        conversation: $json.context_packet?.conversation || {},\n        metadata: {\n          source_action: \"handoff_human\",\n          idempotency_key: $json.execution_context?.idempotency_key || null\n        }\n      },\n  state_update: {\n    ...($json.execution_context?.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: handoffLocked ? \"wait_human_response\" : \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: []\n  }\n}];"
+      },
+      "id": "9de5777c-f253-41b5-9d08-ad33796f484a",
+      "name": "handoff_human",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "2360b175-88ae-483d-8551-b2aa36c1c625",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/2360b175-88ae-483d-8551-b2aa36c1c625",
+          "cachedResultName": "8.0 human_handof"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.handoff_case.lead_id }}",
+            "reason": "={{$json.handoff_case.reason}}",
+            "summary": "={{$json.handoff_case.summary}}",
+            "lead": "={{ JSON.stringify($json.handoff_case.lead || {}) }}",
+            "state": "={{ JSON.stringify($json.handoff_case.state || {}) }}",
+            "conversation": "={{ JSON.stringify($json.handoff_case.conversation || {}) }}",
+            "metadata": "={{ JSON.stringify($json.handoff_case.metadata || {}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "lead",
+              "displayName": "lead",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "conversation",
+              "displayName": "conversation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "metadata",
+              "displayName": "metadata",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        960,
+        -128
+      ],
+      "id": "3c7f484e-0e26-4ed2-9b1a-12acac4e479c",
+      "name": "8.0 human_handof"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1392,
+        -128
+      ],
+      "id": "f55e9682-6126-4d46-944f-5dbb5399c1e8",
+      "name": "merge_handoff_with_context"
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  lead_id: $json.lead_id || null,\n  reason: $json.reason || \"handoff_requested\",\n  summary: $json.summary || \"Sin resumen\",\n  lead: parseMaybeJson($json.lead, {}),\n  state: parseMaybeJson($json.state, {}),\n  conversation: parseMaybeJson($json.conversation, {}),\n  metadata: parseMaybeJson($json.metadata, {})\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        -128
+      ],
+      "id": "27ec4ca9-c571-43dc-bd19-face8636feac",
+      "name": "normalize_handoff_input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const handoffCaseId =\n  $json.handoff_case_id ||\n  $json.handoff?.handoff_case_id ||\n  null;\n\nconst assignedTo =\n  $json.assigned_to ||\n  $json.handoff?.assigned_to ||\n  null;\n\nconst assignedTeam =\n  $json.assigned_team ||\n  $json.handoff?.assigned_team ||\n  null;\n\nconst notificationSent =\n  $json.notification_sent === true ||\n  $json.handoff?.notification_sent === true;\n\nconst existingStateUpdate = $json.state_update || {};\nconst handoffLocked = $json.handoff_locked === true;\n\nreturn [\n  {\n    ...$json,\n\n    handoff: true,\n    handoff_case_id: handoffCaseId,\n    assigned_to: assignedTo,\n    assigned_team: assignedTeam,\n    notification_sent: notificationSent,\n\n    state_update: {\n      ...existingStateUpdate,\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: handoffLocked ? \"wait_human_response\" : \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    },\n\n    db_operations: handoffLocked\n      ? [...new Set([...( $json.db_operations || []), \"messages\", \"lead_state\"])]\n      : [...new Set([...( $json.db_operations || []), \"handoff_cases\", \"messages\", \"lead_state\"])],\n\n    notes: [\n      ...($json.notes || []),\n      ...(handoffLocked ? [\"handoff_lock_active\"] : [\"handoff_case_created\"]),\n      notificationSent\n        ? \"handoff_notification_sent\"\n        : \"handoff_notification_not_confirmed\"\n    ]\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -128
+      ],
+      "id": "e46816ac-3b2e-41d7-a146-95000589c584",
+      "name": "normalize_handoff_result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a11f4131-39b1-4176-87d4-0d4b19eb8dd6",
+              "leftValue": "={{ $json.handoff_locked === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        -128
+      ],
+      "id": "8fecceee-12e8-4957-8649-08b1f9dbac5b",
+      "name": "IF handoff_locked"
+    }
+  ],
+  "connections": {
+    "normalize_input": {
+      "main": [
+        [
+          {
+            "node": "handoff_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6.22 handoff_human": {
+      "main": [
+        [
+          {
+            "node": "normalize_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8.0 human_handof": {
+      "main": [
+        [
+          {
+            "node": "normalize_handoff_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_handoff_with_context": {
+      "main": [
+        [
+          {
+            "node": "normalize_handoff_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_handoff_input": {
+      "main": [
+        [
+          {
+            "node": "merge_handoff_with_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "handoff_human": {
+      "main": [
+        [
+          {
+            "node": "IF handoff_locked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF handoff_locked": {
+      "main": [
+        [
+          {
+            "node": "normalize_handoff_result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8.0 human_handof",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "merge_handoff_with_context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "ef8fd65d-dc80-42b7-8c29-e0b09627482e",
+  "activeVersionId": "ef8fd65d-dc80-42b7-8c29-e0b09627482e",
+  "versionCounter": 57,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "0520cc38-8cfa-4188-a91a-b2ec332fed9c",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-12T16:00:45.017Z",
+    "createdAt": "2026-06-12T16:00:45.017Z",
+    "versionId": "ef8fd65d-dc80-42b7-8c29-e0b09627482e",
+    "workflowId": "0520cc38-8cfa-4188-a91a-b2ec332fed9c",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+        },
+        "id": "c5647f9e-b7f6-4078-b37e-d4d7a59239c8",
+        "name": "6.22 handoff_human",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          192,
+          -112
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowhandoff_humaninput_normalized\"\n  ]\n}];"
+        },
+        "id": "df0c83f4-edae-4754-b5d3-b3cb1f1c5e5b",
+        "name": "normalize_input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          416,
+          -112
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const alreadyInHandoff =\n  $json.context_packet?.state?.human_handoff === true ||\n  $json.handoff === true ||\n  $json.meta?.handoff?.human_handoff === true ||\n  $json.context_packet?.state?.last_bot_action === \"human_handoff_already_active\";\n\nconst lockMessage =\n  \"Tu reclamo ya esta derivado al equipo. Una persona lo revisara y te respondera por este mismo chat para ayudarte.\";\n\nconst defaultMessage =\n  $json.execution_context?.message ||\n  \"Te voy a derivar con una persona para ayudarte mejor.\";\n\nconst handoffLocked = alreadyInHandoff;\n\nreturn [{\n  ...$json,\n  handoff_locked: handoffLocked,\n  message_to_send: handoffLocked ? lockMessage : defaultMessage,\n  db_operations: handoffLocked\n    ? [\"messages\", \"lead_state\"]\n    : [\"handoff_cases\", \"messages\", \"lead_state\"],\n  handoff_case: handoffLocked\n    ? null\n    : {\n        lead_id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null,\n        reason: $json.execution_context?.handoff_reason || \"handoff requested\",\n        summary:\n          $json.execution_context?.handoff_summary ||\n          $json.context_packet?.conversation?.latest_user_message ||\n          \"Sin resumen\",\n        lead: { ...($json.context_packet?.lead || {}), id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null },\n        state: { ...($json.context_packet?.state || {}), lead_id: $json.execution_context?.lead_id || $json.lead_id || $json.context_packet?.lead?.id || $json.context_packet?.state?.lead_id || $json.context_packet?.event?.lead_id || null },\n        conversation: $json.context_packet?.conversation || {},\n        metadata: {\n          source_action: \"handoff_human\",\n          idempotency_key: $json.execution_context?.idempotency_key || null\n        }\n      },\n  state_update: {\n    ...($json.execution_context?.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    next_goal: handoffLocked ? \"wait_human_response\" : \"human_takeover\",\n    last_bot_action: \"handoff_human\",\n    missing_fields: []\n  }\n}];"
+        },
+        "id": "9de5777c-f253-41b5-9d08-ad33796f484a",
+        "name": "handoff_human",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          640,
+          -112
+        ]
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "2360b175-88ae-483d-8551-b2aa36c1c625",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/2360b175-88ae-483d-8551-b2aa36c1c625",
+            "cachedResultName": "8.0 human_handof"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{ $json.handoff_case.lead_id }}",
+              "reason": "={{$json.handoff_case.reason}}",
+              "summary": "={{$json.handoff_case.summary}}",
+              "lead": "={{ JSON.stringify($json.handoff_case.lead || {}) }}",
+              "state": "={{ JSON.stringify($json.handoff_case.state || {}) }}",
+              "conversation": "={{ JSON.stringify($json.handoff_case.conversation || {}) }}",
+              "metadata": "={{ JSON.stringify($json.handoff_case.metadata || {}) }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "reason",
+                "displayName": "reason",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "summary",
+                "displayName": "summary",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "lead",
+                "displayName": "lead",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "state",
+                "displayName": "state",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "conversation",
+                "displayName": "conversation",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "metadata",
+                "displayName": "metadata",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          960,
+          -128
+        ],
+        "id": "3c7f484e-0e26-4ed2-9b1a-12acac4e479c",
+        "name": "8.0 human_handof"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          1392,
+          -128
+        ],
+        "id": "f55e9682-6126-4d46-944f-5dbb5399c1e8",
+        "name": "merge_handoff_with_context"
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  lead_id: $json.lead_id || null,\n  reason: $json.reason || \"handoff_requested\",\n  summary: $json.summary || \"Sin resumen\",\n  lead: parseMaybeJson($json.lead, {}),\n  state: parseMaybeJson($json.state, {}),\n  conversation: parseMaybeJson($json.conversation, {}),\n  metadata: parseMaybeJson($json.metadata, {})\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1168,
+          -128
+        ],
+        "id": "27ec4ca9-c571-43dc-bd19-face8636feac",
+        "name": "normalize_handoff_input"
+      },
+      {
+        "parameters": {
+          "jsCode": "const handoffCaseId =\n  $json.handoff_case_id ||\n  $json.handoff?.handoff_case_id ||\n  null;\n\nconst assignedTo =\n  $json.assigned_to ||\n  $json.handoff?.assigned_to ||\n  null;\n\nconst assignedTeam =\n  $json.assigned_team ||\n  $json.handoff?.assigned_team ||\n  null;\n\nconst notificationSent =\n  $json.notification_sent === true ||\n  $json.handoff?.notification_sent === true;\n\nconst existingStateUpdate = $json.state_update || {};\nconst handoffLocked = $json.handoff_locked === true;\n\nreturn [\n  {\n    ...$json,\n\n    handoff: true,\n    handoff_case_id: handoffCaseId,\n    assigned_to: assignedTo,\n    assigned_team: assignedTeam,\n    notification_sent: notificationSent,\n\n    state_update: {\n      ...existingStateUpdate,\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: handoffLocked ? \"wait_human_response\" : \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    },\n\n    db_operations: handoffLocked\n      ? [...new Set([...( $json.db_operations || []), \"messages\", \"lead_state\"])]\n      : [...new Set([...( $json.db_operations || []), \"handoff_cases\", \"messages\", \"lead_state\"])],\n\n    notes: [\n      ...($json.notes || []),\n      ...(handoffLocked ? [\"handoff_lock_active\"] : [\"handoff_case_created\"]),\n      notificationSent\n        ? \"handoff_notification_sent\"\n        : \"handoff_notification_not_confirmed\"\n    ]\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1600,
+          -128
+        ],
+        "id": "e46816ac-3b2e-41d7-a146-95000589c584",
+        "name": "normalize_handoff_result"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "a11f4131-39b1-4176-87d4-0d4b19eb8dd6",
+                "leftValue": "={{ $json.handoff_locked === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          760,
+          -128
+        ],
+        "id": "8fecceee-12e8-4957-8649-08b1f9dbac5b",
+        "name": "IF handoff_locked"
+      }
+    ],
+    "connections": {
+      "normalize_input": {
+        "main": [
+          [
+            {
+              "node": "handoff_human",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "6.22 handoff_human": {
+        "main": [
+          [
+            {
+              "node": "normalize_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "8.0 human_handof": {
+        "main": [
+          [
+            {
+              "node": "normalize_handoff_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_handoff_with_context": {
+        "main": [
+          [
+            {
+              "node": "normalize_handoff_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_handoff_input": {
+        "main": [
+          [
+            {
+              "node": "merge_handoff_with_context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "handoff_human": {
+        "main": [
+          [
+            {
+              "node": "IF handoff_locked",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF handoff_locked": {
+        "main": [
+          [
+            {
+              "node": "normalize_handoff_result",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "8.0 human_handof",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "merge_handoff_with_context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-12T16:00:45.450Z",
+        "id": 1217,
+        "workflowId": "0520cc38-8cfa-4188-a91a-b2ec332fed9c",
+        "versionId": "ef8fd65d-dc80-42b7-8c29-e0b09627482e",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-12T16:00:45.360Z",
+        "id": 1216,
+        "workflowId": "0520cc38-8cfa-4188-a91a-b2ec332fed9c",
+        "versionId": "ef8fd65d-dc80-42b7-8c29-e0b09627482e",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

@@ -1,0 +1,2039 @@
+{
+  "updatedAt": "2026-05-28T18:50:19.028Z",
+  "createdAt": "2026-05-22T22:29:40.682Z",
+  "id": "9269385d-9ee4-4c85-9351-77f8e9aa872e",
+  "name": "7 followup_scheduler",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3ef75f5a-042a-47d6-a662-5e376072b693",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"allowed_start_hour\": 9,\n  \"allowed_end_hour\": 21,\n  \"recent_reply_minutes\": 180,\n  \"batch_size\": 20,\n  \"timezone\": \"America/Santiago\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "86e4accb-0524-4831-bc49-22b19e0461d6",
+      "name": "Set_Config"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  f.id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status,\n  f.created_at\nFROM followups f\nWHERE f.status = 'pending'\n  AND f.scheduled_for <= NOW()\nORDER BY f.scheduled_for ASC\nLIMIT 100;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a29f74fc-5bd6-469f-8df5-f9767e9f61dc",
+      "name": "DB_Get_Due_Followups",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e80066aa-f1e9-439d-8ec5-bff5427ac508",
+              "leftValue": "={{ $items().length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "ffd51ac9-da19-456e-ae92-5820410a2365",
+      "name": "IF_Has_Items"
+    },
+    {
+      "parameters": {
+        "batchSize": 20,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        832,
+        -80
+      ],
+      "id": "396929c2-005f-40c6-b3aa-c6db8334939e",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE followups\nSET\n  status = 'processing',\n  processing_started_at = NOW()\nWHERE id = '{{ $json.id }}'\n  AND status = 'pending'\nRETURNING\n  id AS followup_id,\n  lead_id,\n  scheduled_for,\n  status;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        32
+      ],
+      "id": "8675d2b8-1a9b-47c5-aaff-bccbac7e1d4f",
+      "name": "DB_Lock_Followup",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5990c29a-823a-4b1c-b86c-b22c94af1455",
+              "leftValue": "={{ !!$json.followup_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        32
+      ],
+      "id": "e23c3be4-f1e1-4f62-9050-7e23ed6a5ec0",
+      "name": "IF_Lock_Acquired"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  f.id AS followup_id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status AS followup_status,\n  f.created_at AS followup_created_at,\n  f.followup_type,\n  f.message_template_key,\n  COALESCE(f.metadata, '{}'::jsonb) AS metadata,\n\n  l.id AS lead_db_id,\n  l.phone,\n  l.name,\n  false AS opt_out,\n\n  ls.stage,\n  ls.intent_last,\n  ls.next_goal,\n  COALESCE(ls.human_handoff, false) AS human_handoff,\n  ls.updated_at AS state_updated_at,\n\n  a.id AS appointment_id,\n  a.event_id AS appointment_event_id,\n  a.status AS appointment_status,\n  a.start_at AS appointment_start_at,\n  a.end_at AS appointment_end_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'inbound'\n  ) AS last_inbound_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'outbound'\n  ) AS last_outbound_at,\n\n  (\n    SELECT m.content\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'outbound'\n    ORDER BY m.created_at DESC\n    LIMIT 1\n  ) AS last_outbound_text\n\nFROM followups f\n\nJOIN leads l\n  ON l.id = f.lead_id\n\nLEFT JOIN lead_state ls\n  ON ls.lead_id = f.lead_id\n\nLEFT JOIN LATERAL (\n  SELECT\n    ap.id,\n    ap.event_id,\n    ap.conversation_id,\n    ap.start_at,\n    ap.end_at,\n    ap.status\n  FROM appointments ap\n  WHERE ap.conversation_id = f.lead_id\n    AND ap.status IN ('confirmed', 'booked', 'completed')\n    AND (\n      ap.event_id = f.metadata->>'appointment_event_id'\n      OR f.metadata->>'appointment_event_id' IS NULL\n    )\n  ORDER BY ap.start_at ASC\n  LIMIT 1\n) a ON true\n\nWHERE f.id = '{{ $json.followup_id }}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1696,
+        -144
+      ],
+      "id": "56cb971d-62cf-43ec-a9a4-d234afea172f",
+      "name": "DB_Load_Lead_Context",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\n\nconst allowedStartHour = 9;\nconst allowedEndHour = 21;\nconst recentReplyMinutes = 180;\n\nconst now = new Date();\nconst scheduledFor = row.scheduled_for ? new Date(row.scheduled_for) : null;\nconst followupCreatedAt = row.followup_created_at\n  ? new Date(row.followup_created_at)\n  : row.created_at\n    ? new Date(row.created_at)\n    : null;\n\nconst lastInboundAt = row.last_inbound_at ? new Date(row.last_inbound_at) : null;\n\nconst currentHour = Number(\n  new Intl.DateTimeFormat('en-US', {\n    timeZone: 'America/Santiago',\n    hour: '2-digit',\n    hour12: false\n  }).format(now)\n);\n\nconst followupType = row.followup_type || 'generic_followup';\n\nlet shouldSend = true;\nlet skipReason = null;\nlet nextStatus = null;\n\nfunction cancel(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'cancelled';\n}\n\nfunction fail(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'failed';\n}\n\nfunction requeue(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'pending';\n}\n\n// 1. scheduled_for vlido\nif (!scheduledFor || isNaN(scheduledFor.getTime())) {\n  fail('missing_or_invalid_scheduled_for');\n}\n\n// 2. horario permitido\nif (shouldSend && (currentHour < allowedStartHour || currentHour >= allowedEndHour)) {\n  requeue('outside_allowed_hours');\n}\n\n// 3. opt-out\nif (shouldSend && row.opt_out === true) {\n  cancel('lead_opted_out');\n}\n\n// 4. handoff humano\nif (shouldSend && row.human_handoff === true) {\n  cancel('human_handoff_active');\n}\n\n// 5. reglas por tipo de follow-up\nif (shouldSend) {\n  const isQuoteFollowup = [\n    'quote_no_reply_24h',\n    'quote_no_reply_48h',\n    'interest_nudge_6h'\n  ].includes(followupType);\n\n  const isAppointmentReminder = [\n    'appointment_reminder_1d',\n    'appointment_reminder_1h'\n  ].includes(followupType);\n\n  const isPostServiceReview = [\n    'post_service_review_24h'\n  ].includes(followupType);\n\n  // Seguimiento comercial: no enviar si ya reserv o tiene cita\n  if (isQuoteFollowup) {\n    if (row.stage === 'booked') {\n      cancel('lead_already_booked');\n    } else if (row.appointment_id) {\n      cancel('appointment_exists');\n    } else if (\n      lastInboundAt &&\n      followupCreatedAt &&\n      lastInboundAt > followupCreatedAt\n    ) {\n      cancel('lead_replied_after_followup_created');\n    }\n  }\n\n  // Recordatorios de cita: requieren cita existente\n  if (shouldSend && isAppointmentReminder) {\n    if (!row.appointment_id) {\n      cancel('missing_appointment_for_reminder');\n    } else if (!['confirmed', 'booked'].includes(row.appointment_status)) {\n      cancel('appointment_not_active');\n    }\n  }\n\n  // Resea post-servicio: no enviar si est en problema/handoff\n  if (shouldSend && isPostServiceReview) {\n    if (row.stage === 'human_handoff') {\n      cancel('human_handoff_active');\n    }\n\n    // Si despus manejas status completed, puedes endurecer esta regla:\n    // if (row.appointment_status !== 'completed') cancel('appointment_not_completed');\n  }\n}\n\n// 6. respondi muy recientemente\n// Esto aplica para followups comerciales, no para recordatorios de cita\nif (\n  shouldSend &&\n  lastInboundAt &&\n  ['quote_no_reply_24h', 'quote_no_reply_48h', 'interest_nudge_6h', 'generic_followup'].includes(followupType)\n) {\n  const diffMinutes = (now - lastInboundAt) / 1000 / 60;\n\n  if (diffMinutes <= recentReplyMinutes) {\n    cancel('recent_inbound_reply');\n  }\n}\n\nreturn [{\n  json: {\n    ...row,\n    should_send: shouldSend,\n    skip_reason: skipReason,\n    next_status: nextStatus\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        144
+      ],
+      "id": "e10262a0-8a25-41f1-aa6e-dcafc223b103",
+      "name": "Code_Evaluate_Eligibility"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "91ab2767-4b1d-43cb-b6f5-27a1e5f6ceb4",
+              "leftValue": "={{ $json.should_send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1952,
+        96
+      ],
+      "id": "eaf78044-fda0-4ee0-8904-f5138809271c",
+      "name": "IF_Should_Send"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\n\nconst templates = {\n  quote_no_reply_24h:\n    'Hola, te escribo para ver si an te interesa el servicio que cotizamos. Si quieres, puedo ayudarte a revisar un horario disponible.',\n\n  quote_no_reply_48h:\n    'Hola, paso a cerrar el seguimiento de la cotizacin. Si todava te interesa, puedo ayudarte a agendar un horario.',\n\n  interest_nudge_6h:\n    'Hola, qued atento a tu mensaje anterior. Si quieres, te ayudo a avanzar con la reserva.',\n\n  appointment_reminder_1d:\n    'Hola, te recuerdo que tienes tu servicio agendado para maana. Si necesitas reprogramar, avsame por aqu.',\n\n  appointment_reminder_1h:\n    'Hola, te recuerdo que tu servicio es en aproximadamente 1 hora. Cualquier cosa, me avisas.',\n\n  post_service_review_24h:\n    'Hola, muchas gracias por confiar en nosotros. Si quedaste conforme con el servicio, nos podras dejar una resea? Nos ayuda mucho.',\n\n  generic_followup:\n    'Hola, te escribo para dar seguimiento a tu solicitud.'\n};\n\nconst followupType = row.followup_type || 'generic_followup';\n\nreturn [{\n  json: {\n    ...row,\n    outbound_message: templates[followupType] || templates.generic_followup,\n    channel: 'whatsapp',\n    message_type: 'followup',\n    source: 'followup_scheduler'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -128
+      ],
+      "id": "d4c87c76-bec3-4bc2-8e3e-3605a780d316",
+      "name": "Code_Build_Message"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+          "cachedResultName": "6.1 send_outbound_message"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "followup_id": "={{ $json.followup_id }}",
+            "phone": "={{ $json.phone }}",
+            "channel": "={{ $json.channel }}",
+            "message": "={{ $json.outbound_message }}",
+            "message_type": "={{ $json.message_type }}",
+            "source": "={{ $json.source }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "followup_id",
+              "displayName": "followup_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "message_type",
+              "displayName": "message_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        -128
+      ],
+      "id": "c461ff81-6c33-4f8c-ba49-b3db2d22f279",
+      "name": "send_outbound_message"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (\n  lead_id,\n  direction,\n  channel,\n  message_type,\n  content,\n  provider_message_id,\n  provider_status,\n  status,\n  created_at\n)\nVALUES (\n  '{{ $(\"IF_Send_Success\").first().json.lead_id }}',\n  'outbound',\n  'whatsapp',\n  '{{ $(\"IF_Send_Success\").first().json.message_type || \"followup\" }}',\n  '{{ (($(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\")).replace(/'/g, \"''\") }}',\n  '{{ $(\"IF_Send_Success\").first().json.provider_message_id || \"\" }}',\n  '{{ $(\"IF_Send_Success\").first().json.provider_status || \"\" }}',\n  'sent',\n  NOW()\n)\nRETURNING id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3520,
+        -176
+      ],
+      "id": "b756a98f-5db2-4082-b423-e1c61e10ad70",
+      "name": "DB_Insert_Message",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE followups\nSET\n  status = 'completed',\n  completed_at = NOW()\nWHERE id = '{{ $(\"IF_Send_Success\").first().json.followup_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3056,
+        -176
+      ],
+      "id": "5ce58937-6d8e-4511-a6ac-5856e9c88eaa",
+      "name": "DB_Update_Followup_Completed",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $json.lead_id || null }}',\n  '{{ $json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_skipped',\n    'followup_id', '{{ $json.followup_id || null }}',\n    'reason', '{{ $json.skip_reason || null }}',\n    'next_status', '{{ $json.next_status || null }}',\n    'source', 'followup_scheduler'\n  ),\n  NOW()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3536,
+        352
+      ],
+      "id": "ef55a2d6-056d-4c03-a553-392987901f83",
+      "name": "DB_Insert_Audit_Skipped",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE followups\nSET\n  status = 'pending',\n  scheduled_for = CASE\n    WHEN (NOW() AT TIME ZONE 'America/Santiago')::time < time '09:00'\n    THEN ((NOW() AT TIME ZONE 'America/Santiago')::date + time '09:00') AT TIME ZONE 'America/Santiago'\n    ELSE (((NOW() AT TIME ZONE 'America/Santiago')::date + 1) + time '09:00') AT TIME ZONE 'America/Santiago'\n  END,\n  skipped_reason = 'rescheduled_outside_allowed_hours'\nWHERE id = '{{ $json.followup_id }}'\n  AND '{{ $json.skip_reason }}' = 'outside_allowed_hours';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2848,
+        224
+      ],
+      "id": "380371ea-b8bf-47e9-860d-1de64619e750",
+      "name": "DB_Requeue_Outside_Hours",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE followups\nSET\n  status = '{{ $json.next_status || \"cancelled\" }}',\n  skipped_reason = '{{ $json.skip_reason }}',\n  cancelled_at = CASE\n    WHEN '{{ $json.next_status || \"cancelled\" }}' = 'cancelled' THEN NOW()\n    ELSE cancelled_at\n  END\nWHERE id = '{{ $json.followup_id }}'\n  AND '{{ $json.skip_reason }}' <> 'outside_allowed_hours';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2864,
+        400
+      ],
+      "id": "11067d05-9743-4829-8006-791c4b94bd32",
+      "name": "DB_Cancel_Followup",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b4122181-7a1d-4fb6-8aed-4329efb25b1f",
+              "leftValue": "={{ $json.success === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2528,
+        -128
+      ],
+      "id": "ac2c0a83-9e22-47e5-b6c4-a984b9ec07d1",
+      "name": "IF_Send_Success"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE followups\nSET\n  status = 'failed',\n  skipped_reason = 'send_outbound_message_failed',\n  failed_at = NOW()\nWHERE id = '{{ $json.followup_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2896,
+        48
+      ],
+      "id": "07d297a5-26e2-49f5-8c7f-1cc9fbfc5b50",
+      "name": "DB_Update_Followup_Failed",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $json.lead_id || null }}',\n  '{{ $json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_failed',\n    'followup_id', '{{ $json.followup_id || null }}',\n    'reason', 'send_outbound_message_failed'\n  ),\n  NOW()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3136,
+        48
+      ],
+      "id": "61c8e70a-ad5d-4465-b97c-afdff1663b8c",
+      "name": "DB_Insert_Audit_Failed",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet executed = 0;\nlet skipped = 0;\nlet errors = 0;\n\nfor (const item of items) {\n  const t = item.json.result_type;\n  if (t === 'executed') executed++;\n  else if (t === 'skipped') skipped++;\n  else if (t === 'error') errors++;\n}\n\nreturn [{\n  json: {\n    executed_followups: executed,\n    skipped,\n    errors\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -208
+      ],
+      "id": "e19bafa2-c48b-4829-832b-1c8e187d0237",
+      "name": "Code_Build_Output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6c5ed12d-e95a-4075-9812-6fbf9f60006e",
+              "leftValue": "={{ $json.skip_reason === 'outside_allowed_hours' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2384,
+        256
+      ],
+      "id": "1ffadc7e-11a3-41e3-8787-3970a82e98c3",
+      "name": "If (outside hours)"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    raw: $json,\n    followup_id: $json.followup_id,\n    id: $json.id,\n    lead_id: $json.lead_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -160
+      ],
+      "id": "908144bf-577d-4bb1-afbe-7e7379f0bf28",
+      "name": "Debug_Lock_Output"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $(\"IF_Send_Success\").first().json.lead_id || null }}',\n  '{{ $(\"IF_Send_Success\").first().json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_sent',\n    'followup_id', '{{ $(\"IF_Send_Success\").first().json.followup_id || null }}',\n    'message', '{{ (( $(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\" )).replace(/'/g, \"''\") }}',\n    'source', 'followup_scheduler'\n  ),\n  NOW()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3280,
+        -176
+      ],
+      "id": "25080ba7-7a73-4d16-9c1d-b34b9208f128",
+      "name": "DB_Insert_Audit_Sent",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n{\n  result_type: \"executed\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3888,
+        -128
+      ],
+      "id": "429ca7b1-23d8-4c83-ae3d-051937dfe77e",
+      "name": "Set_Result_Executed"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n{\n  result_type: \"error\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3328,
+        48
+      ],
+      "id": "df624556-64fe-4d76-b0c6-5d835df1c9fe",
+      "name": "Set_Result_Error"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n{\n  result_type: \"skipped\",\n  lead_id: $(\"IF_Should_Send\").first().json.lead_id,\n  followup_id: $(\"IF_Should_Send\").first().json.followup_id,\n  skip_reason: $(\"IF_Should_Send\").first().json.skip_reason\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3776,
+        352
+      ],
+      "id": "d534d037-8eee-4499-aa47-c95309695de3",
+      "name": "Set_Result_Skipped"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set_Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Config": {
+      "main": [
+        [
+          {
+            "node": "DB_Get_Due_Followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Get_Due_Followups": {
+      "main": [
+        [
+          {
+            "node": "IF_Has_Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Has_Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Code_Build_Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB_Lock_Followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Lock_Followup": {
+      "main": [
+        [
+          {
+            "node": "IF_Lock_Acquired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Lock_Acquired": {
+      "main": [
+        [
+          {
+            "node": "Debug_Lock_Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Load_Lead_Context": {
+      "main": [
+        [
+          {
+            "node": "Code_Evaluate_Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_Evaluate_Eligibility": {
+      "main": [
+        [
+          {
+            "node": "IF_Should_Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Should_Send": {
+      "main": [
+        [
+          {
+            "node": "Code_Build_Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If (outside hours)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_Build_Message": {
+      "main": [
+        [
+          {
+            "node": "send_outbound_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_outbound_message": {
+      "main": [
+        [
+          {
+            "node": "IF_Send_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Insert_Message": {
+      "main": [
+        [
+          {
+            "node": "Set_Result_Executed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Update_Followup_Completed": {
+      "main": [
+        [
+          {
+            "node": "DB_Insert_Audit_Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Requeue_Outside_Hours": {
+      "main": [
+        [
+          {
+            "node": "DB_Insert_Audit_Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Cancel_Followup": {
+      "main": [
+        [
+          {
+            "node": "DB_Insert_Audit_Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Send_Success": {
+      "main": [
+        [
+          {
+            "node": "DB_Update_Followup_Completed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB_Update_Followup_Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Update_Followup_Failed": {
+      "main": [
+        [
+          {
+            "node": "DB_Insert_Audit_Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Insert_Audit_Skipped": {
+      "main": [
+        [
+          {
+            "node": "Set_Result_Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Insert_Audit_Failed": {
+      "main": [
+        [
+          {
+            "node": "Set_Result_Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_Build_Output": {
+      "main": [
+        []
+      ]
+    },
+    "If (outside hours)": {
+      "main": [
+        [
+          {
+            "node": "DB_Requeue_Outside_Hours",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB_Cancel_Followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug_Lock_Output": {
+      "main": [
+        [
+          {
+            "node": "DB_Load_Lead_Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_Insert_Audit_Sent": {
+      "main": [
+        [
+          {
+            "node": "DB_Insert_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Result_Executed": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Result_Error": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Result_Skipped": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "a9cf2022-1196-4912-9bc7-7759ed43b780",
+  "activeVersionId": "a9cf2022-1196-4912-9bc7-7759ed43b780",
+  "versionCounter": 33,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "9269385d-9ee4-4c85-9351-77f8e9aa872e",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-28T18:50:19.031Z",
+    "createdAt": "2026-05-28T18:50:19.031Z",
+    "versionId": "a9cf2022-1196-4912-9bc7-7759ed43b780",
+    "workflowId": "9269385d-9ee4-4c85-9351-77f8e9aa872e",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ],
+        "id": "3ef75f5a-042a-47d6-a662-5e376072b693",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "mode": "raw",
+          "jsonOutput": "{\n  \"allowed_start_hour\": 9,\n  \"allowed_end_hour\": 21,\n  \"recent_reply_minutes\": 180,\n  \"batch_size\": 20,\n  \"timezone\": \"America/Santiago\"\n}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          208,
+          0
+        ],
+        "id": "86e4accb-0524-4831-bc49-22b19e0461d6",
+        "name": "Set_Config"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  f.id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status,\n  f.created_at\nFROM followups f\nWHERE f.status = 'pending'\n  AND f.scheduled_for <= NOW()\nORDER BY f.scheduled_for ASC\nLIMIT 100;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          416,
+          0
+        ],
+        "id": "a29f74fc-5bd6-469f-8df5-f9767e9f61dc",
+        "name": "DB_Get_Due_Followups",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "e80066aa-f1e9-439d-8ec5-bff5427ac508",
+                "leftValue": "={{ $items().length > 0 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          624,
+          0
+        ],
+        "id": "ffd51ac9-da19-456e-ae92-5820410a2365",
+        "name": "IF_Has_Items"
+      },
+      {
+        "parameters": {
+          "batchSize": 20,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          832,
+          -80
+        ],
+        "id": "396929c2-005f-40c6-b3aa-c6db8334939e",
+        "name": "Loop Over Items"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE followups\nSET\n  status = 'processing',\n  processing_started_at = NOW()\nWHERE id = '{{ $json.id }}'\n  AND status = 'pending'\nRETURNING\n  id AS followup_id,\n  lead_id,\n  scheduled_for,\n  status;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1040,
+          32
+        ],
+        "id": "8675d2b8-1a9b-47c5-aaff-bccbac7e1d4f",
+        "name": "DB_Lock_Followup",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "5990c29a-823a-4b1c-b86c-b22c94af1455",
+                "leftValue": "={{ !!$json.followup_id }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1248,
+          32
+        ],
+        "id": "e23c3be4-f1e1-4f62-9050-7e23ed6a5ec0",
+        "name": "IF_Lock_Acquired"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  f.id AS followup_id,\n  f.lead_id,\n  f.scheduled_for,\n  f.status AS followup_status,\n  f.created_at AS followup_created_at,\n  f.followup_type,\n  f.message_template_key,\n  COALESCE(f.metadata, '{}'::jsonb) AS metadata,\n\n  l.id AS lead_db_id,\n  l.phone,\n  l.name,\n  false AS opt_out,\n\n  ls.stage,\n  ls.intent_last,\n  ls.next_goal,\n  COALESCE(ls.human_handoff, false) AS human_handoff,\n  ls.updated_at AS state_updated_at,\n\n  a.id AS appointment_id,\n  a.event_id AS appointment_event_id,\n  a.status AS appointment_status,\n  a.start_at AS appointment_start_at,\n  a.end_at AS appointment_end_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'inbound'\n  ) AS last_inbound_at,\n\n  (\n    SELECT MAX(m.created_at)\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'outbound'\n  ) AS last_outbound_at,\n\n  (\n    SELECT m.content\n    FROM messages m\n    WHERE m.lead_id = f.lead_id\n      AND m.direction = 'outbound'\n    ORDER BY m.created_at DESC\n    LIMIT 1\n  ) AS last_outbound_text\n\nFROM followups f\n\nJOIN leads l\n  ON l.id = f.lead_id\n\nLEFT JOIN lead_state ls\n  ON ls.lead_id = f.lead_id\n\nLEFT JOIN LATERAL (\n  SELECT\n    ap.id,\n    ap.event_id,\n    ap.conversation_id,\n    ap.start_at,\n    ap.end_at,\n    ap.status\n  FROM appointments ap\n  WHERE ap.conversation_id = f.lead_id\n    AND ap.status IN ('confirmed', 'booked', 'completed')\n    AND (\n      ap.event_id = f.metadata->>'appointment_event_id'\n      OR f.metadata->>'appointment_event_id' IS NULL\n    )\n  ORDER BY ap.start_at ASC\n  LIMIT 1\n) a ON true\n\nWHERE f.id = '{{ $json.followup_id }}'\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1696,
+          -144
+        ],
+        "id": "56cb971d-62cf-43ec-a9a4-d234afea172f",
+        "name": "DB_Load_Lead_Context",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const row = $json;\n\nconst allowedStartHour = 9;\nconst allowedEndHour = 21;\nconst recentReplyMinutes = 180;\n\nconst now = new Date();\nconst scheduledFor = row.scheduled_for ? new Date(row.scheduled_for) : null;\nconst followupCreatedAt = row.followup_created_at\n  ? new Date(row.followup_created_at)\n  : row.created_at\n    ? new Date(row.created_at)\n    : null;\n\nconst lastInboundAt = row.last_inbound_at ? new Date(row.last_inbound_at) : null;\n\nconst currentHour = Number(\n  new Intl.DateTimeFormat('en-US', {\n    timeZone: 'America/Santiago',\n    hour: '2-digit',\n    hour12: false\n  }).format(now)\n);\n\nconst followupType = row.followup_type || 'generic_followup';\n\nlet shouldSend = true;\nlet skipReason = null;\nlet nextStatus = null;\n\nfunction cancel(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'cancelled';\n}\n\nfunction fail(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'failed';\n}\n\nfunction requeue(reason) {\n  shouldSend = false;\n  skipReason = reason;\n  nextStatus = 'pending';\n}\n\n// 1. scheduled_for vlido\nif (!scheduledFor || isNaN(scheduledFor.getTime())) {\n  fail('missing_or_invalid_scheduled_for');\n}\n\n// 2. horario permitido\nif (shouldSend && (currentHour < allowedStartHour || currentHour >= allowedEndHour)) {\n  requeue('outside_allowed_hours');\n}\n\n// 3. opt-out\nif (shouldSend && row.opt_out === true) {\n  cancel('lead_opted_out');\n}\n\n// 4. handoff humano\nif (shouldSend && row.human_handoff === true) {\n  cancel('human_handoff_active');\n}\n\n// 5. reglas por tipo de follow-up\nif (shouldSend) {\n  const isQuoteFollowup = [\n    'quote_no_reply_24h',\n    'quote_no_reply_48h',\n    'interest_nudge_6h'\n  ].includes(followupType);\n\n  const isAppointmentReminder = [\n    'appointment_reminder_1d',\n    'appointment_reminder_1h'\n  ].includes(followupType);\n\n  const isPostServiceReview = [\n    'post_service_review_24h'\n  ].includes(followupType);\n\n  // Seguimiento comercial: no enviar si ya reserv o tiene cita\n  if (isQuoteFollowup) {\n    if (row.stage === 'booked') {\n      cancel('lead_already_booked');\n    } else if (row.appointment_id) {\n      cancel('appointment_exists');\n    } else if (\n      lastInboundAt &&\n      followupCreatedAt &&\n      lastInboundAt > followupCreatedAt\n    ) {\n      cancel('lead_replied_after_followup_created');\n    }\n  }\n\n  // Recordatorios de cita: requieren cita existente\n  if (shouldSend && isAppointmentReminder) {\n    if (!row.appointment_id) {\n      cancel('missing_appointment_for_reminder');\n    } else if (!['confirmed', 'booked'].includes(row.appointment_status)) {\n      cancel('appointment_not_active');\n    }\n  }\n\n  // Resea post-servicio: no enviar si est en problema/handoff\n  if (shouldSend && isPostServiceReview) {\n    if (row.stage === 'human_handoff') {\n      cancel('human_handoff_active');\n    }\n\n    // Si despus manejas status completed, puedes endurecer esta regla:\n    // if (row.appointment_status !== 'completed') cancel('appointment_not_completed');\n  }\n}\n\n// 6. respondi muy recientemente\n// Esto aplica para followups comerciales, no para recordatorios de cita\nif (\n  shouldSend &&\n  lastInboundAt &&\n  ['quote_no_reply_24h', 'quote_no_reply_48h', 'interest_nudge_6h', 'generic_followup'].includes(followupType)\n) {\n  const diffMinutes = (now - lastInboundAt) / 1000 / 60;\n\n  if (diffMinutes <= recentReplyMinutes) {\n    cancel('recent_inbound_reply');\n  }\n}\n\nreturn [{\n  json: {\n    ...row,\n    should_send: shouldSend,\n    skip_reason: skipReason,\n    next_status: nextStatus\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1648,
+          144
+        ],
+        "id": "e10262a0-8a25-41f1-aa6e-dcafc223b103",
+        "name": "Code_Evaluate_Eligibility"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "91ab2767-4b1d-43cb-b6f5-27a1e5f6ceb4",
+                "leftValue": "={{ $json.should_send === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1952,
+          96
+        ],
+        "id": "eaf78044-fda0-4ee0-8904-f5138809271c",
+        "name": "IF_Should_Send"
+      },
+      {
+        "parameters": {
+          "jsCode": "const row = $json;\n\nconst templates = {\n  quote_no_reply_24h:\n    'Hola, te escribo para ver si an te interesa el servicio que cotizamos. Si quieres, puedo ayudarte a revisar un horario disponible.',\n\n  quote_no_reply_48h:\n    'Hola, paso a cerrar el seguimiento de la cotizacin. Si todava te interesa, puedo ayudarte a agendar un horario.',\n\n  interest_nudge_6h:\n    'Hola, qued atento a tu mensaje anterior. Si quieres, te ayudo a avanzar con la reserva.',\n\n  appointment_reminder_1d:\n    'Hola, te recuerdo que tienes tu servicio agendado para maana. Si necesitas reprogramar, avsame por aqu.',\n\n  appointment_reminder_1h:\n    'Hola, te recuerdo que tu servicio es en aproximadamente 1 hora. Cualquier cosa, me avisas.',\n\n  post_service_review_24h:\n    'Hola, muchas gracias por confiar en nosotros. Si quedaste conforme con el servicio, nos podras dejar una resea? Nos ayuda mucho.',\n\n  generic_followup:\n    'Hola, te escribo para dar seguimiento a tu solicitud.'\n};\n\nconst followupType = row.followup_type || 'generic_followup';\n\nreturn [{\n  json: {\n    ...row,\n    outbound_message: templates[followupType] || templates.generic_followup,\n    channel: 'whatsapp',\n    message_type: 'followup',\n    source: 'followup_scheduler'\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2112,
+          -128
+        ],
+        "id": "d4c87c76-bec3-4bc2-8e3e-3605a780d316",
+        "name": "Code_Build_Message"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+            "cachedResultName": "6.1 send_outbound_message"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{ $json.lead_id }}",
+              "followup_id": "={{ $json.followup_id }}",
+              "phone": "={{ $json.phone }}",
+              "channel": "={{ $json.channel }}",
+              "message": "={{ $json.outbound_message }}",
+              "message_type": "={{ $json.message_type }}",
+              "source": "={{ $json.source }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "followup_id",
+                "displayName": "followup_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "phone",
+                "displayName": "phone",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "channel",
+                "displayName": "channel",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "message",
+                "displayName": "message",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "message_type",
+                "displayName": "message_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "source",
+                "displayName": "source",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          2320,
+          -128
+        ],
+        "id": "c461ff81-6c33-4f8c-ba49-b3db2d22f279",
+        "name": "send_outbound_message"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO messages (\n  lead_id,\n  direction,\n  channel,\n  message_type,\n  content,\n  provider_message_id,\n  provider_status,\n  status,\n  created_at\n)\nVALUES (\n  '{{ $(\"IF_Send_Success\").first().json.lead_id }}',\n  'outbound',\n  'whatsapp',\n  '{{ $(\"IF_Send_Success\").first().json.message_type || \"followup\" }}',\n  '{{ (($(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\")).replace(/'/g, \"''\") }}',\n  '{{ $(\"IF_Send_Success\").first().json.provider_message_id || \"\" }}',\n  '{{ $(\"IF_Send_Success\").first().json.provider_status || \"\" }}',\n  'sent',\n  NOW()\n)\nRETURNING id;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3520,
+          -176
+        ],
+        "id": "b756a98f-5db2-4082-b423-e1c61e10ad70",
+        "name": "DB_Insert_Message",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE followups\nSET\n  status = 'completed',\n  completed_at = NOW()\nWHERE id = '{{ $(\"IF_Send_Success\").first().json.followup_id }}';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3056,
+          -176
+        ],
+        "id": "5ce58937-6d8e-4511-a6ac-5856e9c88eaa",
+        "name": "DB_Update_Followup_Completed",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $json.lead_id || null }}',\n  '{{ $json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_skipped',\n    'followup_id', '{{ $json.followup_id || null }}',\n    'reason', '{{ $json.skip_reason || null }}',\n    'next_status', '{{ $json.next_status || null }}',\n    'source', 'followup_scheduler'\n  ),\n  NOW()\n);",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3536,
+          352
+        ],
+        "id": "ef55a2d6-056d-4c03-a553-392987901f83",
+        "name": "DB_Insert_Audit_Skipped",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE followups\nSET\n  status = 'pending',\n  scheduled_for = CASE\n    WHEN (NOW() AT TIME ZONE 'America/Santiago')::time < time '09:00'\n    THEN ((NOW() AT TIME ZONE 'America/Santiago')::date + time '09:00') AT TIME ZONE 'America/Santiago'\n    ELSE (((NOW() AT TIME ZONE 'America/Santiago')::date + 1) + time '09:00') AT TIME ZONE 'America/Santiago'\n  END,\n  skipped_reason = 'rescheduled_outside_allowed_hours'\nWHERE id = '{{ $json.followup_id }}'\n  AND '{{ $json.skip_reason }}' = 'outside_allowed_hours';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2848,
+          224
+        ],
+        "id": "380371ea-b8bf-47e9-860d-1de64619e750",
+        "name": "DB_Requeue_Outside_Hours",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE followups\nSET\n  status = '{{ $json.next_status || \"cancelled\" }}',\n  skipped_reason = '{{ $json.skip_reason }}',\n  cancelled_at = CASE\n    WHEN '{{ $json.next_status || \"cancelled\" }}' = 'cancelled' THEN NOW()\n    ELSE cancelled_at\n  END\nWHERE id = '{{ $json.followup_id }}'\n  AND '{{ $json.skip_reason }}' <> 'outside_allowed_hours';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2864,
+          400
+        ],
+        "id": "11067d05-9743-4829-8006-791c4b94bd32",
+        "name": "DB_Cancel_Followup",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "b4122181-7a1d-4fb6-8aed-4329efb25b1f",
+                "leftValue": "={{ $json.success === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2528,
+          -128
+        ],
+        "id": "ac2c0a83-9e22-47e5-b6c4-a984b9ec07d1",
+        "name": "IF_Send_Success"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE followups\nSET\n  status = 'failed',\n  skipped_reason = 'send_outbound_message_failed',\n  failed_at = NOW()\nWHERE id = '{{ $json.followup_id }}';",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2896,
+          48
+        ],
+        "id": "07d297a5-26e2-49f5-8c7f-1cc9fbfc5b50",
+        "name": "DB_Update_Followup_Failed",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $json.lead_id || null }}',\n  '{{ $json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_failed',\n    'followup_id', '{{ $json.followup_id || null }}',\n    'reason', 'send_outbound_message_failed'\n  ),\n  NOW()\n);",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3136,
+          48
+        ],
+        "id": "61c8e70a-ad5d-4465-b97c-afdff1663b8c",
+        "name": "DB_Insert_Audit_Failed",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\n\nlet executed = 0;\nlet skipped = 0;\nlet errors = 0;\n\nfor (const item of items) {\n  const t = item.json.result_type;\n  if (t === 'executed') executed++;\n  else if (t === 'skipped') skipped++;\n  else if (t === 'error') errors++;\n}\n\nreturn [{\n  json: {\n    executed_followups: executed,\n    skipped,\n    errors\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1072,
+          -208
+        ],
+        "id": "e19bafa2-c48b-4829-832b-1c8e187d0237",
+        "name": "Code_Build_Output"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "6c5ed12d-e95a-4075-9812-6fbf9f60006e",
+                "leftValue": "={{ $json.skip_reason === 'outside_allowed_hours' }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2384,
+          256
+        ],
+        "id": "1ffadc7e-11a3-41e3-8787-3970a82e98c3",
+        "name": "If (outside hours)"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{\n  json: {\n    raw: $json,\n    followup_id: $json.followup_id,\n    id: $json.id,\n    lead_id: $json.lead_id\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1472,
+          -160
+        ],
+        "id": "908144bf-577d-4bb1-afbe-7e7379f0bf28",
+        "name": "Debug_Lock_Output"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  meta,\n  created_at\n)\nVALUES (\n  'followup_scheduler',\n  '{{ $(\"IF_Send_Success\").first().json.lead_id || null }}',\n  '{{ $(\"IF_Send_Success\").first().json.channel || null }}',\n  jsonb_build_object(\n    'type', 'followup_sent',\n    'followup_id', '{{ $(\"IF_Send_Success\").first().json.followup_id || null }}',\n    'message', '{{ (( $(\"IF_Send_Success\").first().json.outbound_message || $(\"IF_Send_Success\").first().json.message || \"\" )).replace(/'/g, \"''\") }}',\n    'source', 'followup_scheduler'\n  ),\n  NOW()\n);",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3280,
+          -176
+        ],
+        "id": "25080ba7-7a73-4d16-9c1d-b34b9208f128",
+        "name": "DB_Insert_Audit_Sent",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "raw",
+          "jsonOutput": "={{\n{\n  result_type: \"executed\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          3888,
+          -128
+        ],
+        "id": "429ca7b1-23d8-4c83-ae3d-051937dfe77e",
+        "name": "Set_Result_Executed"
+      },
+      {
+        "parameters": {
+          "mode": "raw",
+          "jsonOutput": "={{\n{\n  result_type: \"error\",\n  lead_id: $(\"IF_Send_Success\").first().json.lead_id,\n  followup_id: $(\"IF_Send_Success\").first().json.followup_id\n}\n}}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          3328,
+          48
+        ],
+        "id": "df624556-64fe-4d76-b0c6-5d835df1c9fe",
+        "name": "Set_Result_Error"
+      },
+      {
+        "parameters": {
+          "mode": "raw",
+          "jsonOutput": "={{\n{\n  result_type: \"skipped\",\n  lead_id: $(\"IF_Should_Send\").first().json.lead_id,\n  followup_id: $(\"IF_Should_Send\").first().json.followup_id,\n  skip_reason: $(\"IF_Should_Send\").first().json.skip_reason\n}\n}}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          3776,
+          352
+        ],
+        "id": "d534d037-8eee-4499-aa47-c95309695de3",
+        "name": "Set_Result_Skipped"
+      }
+    ],
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Set_Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set_Config": {
+        "main": [
+          [
+            {
+              "node": "DB_Get_Due_Followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Get_Due_Followups": {
+        "main": [
+          [
+            {
+              "node": "IF_Has_Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF_Has_Items": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Over Items": {
+        "main": [
+          [
+            {
+              "node": "Code_Build_Output",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "DB_Lock_Followup",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Lock_Followup": {
+        "main": [
+          [
+            {
+              "node": "IF_Lock_Acquired",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF_Lock_Acquired": {
+        "main": [
+          [
+            {
+              "node": "Debug_Lock_Output",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Load_Lead_Context": {
+        "main": [
+          [
+            {
+              "node": "Code_Evaluate_Eligibility",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code_Evaluate_Eligibility": {
+        "main": [
+          [
+            {
+              "node": "IF_Should_Send",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF_Should_Send": {
+        "main": [
+          [
+            {
+              "node": "Code_Build_Message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "If (outside hours)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code_Build_Message": {
+        "main": [
+          [
+            {
+              "node": "send_outbound_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "send_outbound_message": {
+        "main": [
+          [
+            {
+              "node": "IF_Send_Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Insert_Message": {
+        "main": [
+          [
+            {
+              "node": "Set_Result_Executed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Update_Followup_Completed": {
+        "main": [
+          [
+            {
+              "node": "DB_Insert_Audit_Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Requeue_Outside_Hours": {
+        "main": [
+          [
+            {
+              "node": "DB_Insert_Audit_Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Cancel_Followup": {
+        "main": [
+          [
+            {
+              "node": "DB_Insert_Audit_Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF_Send_Success": {
+        "main": [
+          [
+            {
+              "node": "DB_Update_Followup_Completed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "DB_Update_Followup_Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Update_Followup_Failed": {
+        "main": [
+          [
+            {
+              "node": "DB_Insert_Audit_Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Insert_Audit_Skipped": {
+        "main": [
+          [
+            {
+              "node": "Set_Result_Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Insert_Audit_Failed": {
+        "main": [
+          [
+            {
+              "node": "Set_Result_Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code_Build_Output": {
+        "main": [
+          []
+        ]
+      },
+      "If (outside hours)": {
+        "main": [
+          [
+            {
+              "node": "DB_Requeue_Outside_Hours",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "DB_Cancel_Followup",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Debug_Lock_Output": {
+        "main": [
+          [
+            {
+              "node": "DB_Load_Lead_Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_Insert_Audit_Sent": {
+        "main": [
+          [
+            {
+              "node": "DB_Insert_Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set_Result_Executed": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set_Result_Error": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set_Result_Skipped": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-28T18:50:19.155Z",
+        "id": 975,
+        "workflowId": "9269385d-9ee4-4c85-9351-77f8e9aa872e",
+        "versionId": "a9cf2022-1196-4912-9bc7-7759ed43b780",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:50:19.110Z",
+        "id": 974,
+        "workflowId": "9269385d-9ee4-4c85-9351-77f8e9aa872e",
+        "versionId": "a9cf2022-1196-4912-9bc7-7759ed43b780",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}
