@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-14T13:14:34.316Z",
+  "updatedAt": "2026-07-31T18:34:15.939Z",
   "createdAt": "2026-05-22T22:29:40.697Z",
   "id": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
   "name": "6.4 list_available_slots",
@@ -10,7 +10,7 @@
     {
       "parameters": {
         "inputSource": "jsonExample",
-        "jsonExample": "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"agent_id\": \"uuid-del-agente\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\"  \n}"
+        "jsonExample": "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"agent_id\": \"uuid-del-agente\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\",\n  \"staff_id\": \"\",\n  \"schedule\": \"[]\"\n}"
       },
       "id": "c055762a-8fe7-4141-a639-df2372f30060",
       "typeVersion": 1.1,
@@ -160,7 +160,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];\n"
+        "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -258,6 +258,42 @@
       "name": "split_oauth_busy_events",
       "id": "n64-split-busy",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT schedule FROM public.agent_staff WHERE id = $2::uuid AND is_active = true LIMIT 1) AS staff_schedule,\n  (SELECT config->'schedule' FROM public.agent_business_config WHERE agent_id = $1::uuid AND is_active = true LIMIT 1) AS agent_schedule;",
+        "options": {
+          "queryReplacement": "={{ [$json.agent_id || null, $json.staff_id || null] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        480
+      ],
+      "id": "n64-db-resolve-schedule",
+      "name": "DB_resolve_agent_schedule",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $(\"normalize_availability_input\").first().json;\nconst row = $json || {};\n\nconst staffSchedule = Array.isArray(row.staff_schedule) ? row.staff_schedule : [];\nconst agentSchedule = Array.isArray(row.agent_schedule) ? row.agent_schedule : [];\n\nconst resolvedSchedule =\n  Array.isArray(original.schedule) && original.schedule.length > 0\n    ? original.schedule\n    : (staffSchedule.length > 0 ? staffSchedule : agentSchedule);\n\nreturn [{\n  json: {\n    ...original,\n    schedule: resolvedSchedule\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        610,
+        480
+      ],
+      "id": "n64-merge-resolved-schedule",
+      "name": "merge_resolved_schedule"
     }
   ],
   "connections": {
@@ -276,7 +312,7 @@
       "main": [
         [
           {
-            "node": "generate_candidate_slots",
+            "node": "DB_resolve_agent_schedule",
             "type": "main",
             "index": 0
           }
@@ -388,6 +424,28 @@
           }
         ]
       ]
+    },
+    "DB_resolve_agent_schedule": {
+      "main": [
+        [
+          {
+            "node": "merge_resolved_schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_resolved_schedule": {
+      "main": [
+        [
+          {
+            "node": "generate_candidate_slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -398,9 +456,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "2638ddd4-a255-4201-b57a-b507f485a02c",
-  "activeVersionId": "2638ddd4-a255-4201-b57a-b507f485a02c",
-  "versionCounter": 72,
+  "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
+  "activeVersionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
+  "versionCounter": 86,
   "triggerCount": 0,
   "shared": [
     {
@@ -423,15 +481,15 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-14T13:14:34.335Z",
-    "createdAt": "2026-07-14T13:14:34.335Z",
-    "versionId": "2638ddd4-a255-4201-b57a-b507f485a02c",
+    "updatedAt": "2026-07-31T18:34:15.942Z",
+    "createdAt": "2026-07-31T18:34:15.942Z",
+    "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
     "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
     "nodes": [
       {
         "parameters": {
           "inputSource": "jsonExample",
-          "jsonExample": "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"agent_id\": \"uuid-del-agente\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\"  \n}"
+          "jsonExample": "{\n  \"lead_id\": \"uuid-del-lead\",\n  \"agent_id\": \"uuid-del-agente\",\n  \"calendar_id\": \"primary\",\n  \"duration_minutes\": \"120\",\n  \"days_ahead\": \"7\",\n  \"max_slots\": \"3\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"availability_window\": \"X\",\n  \"availability_label\": \"X\",\n  \"start_offset_days\": \"X\",\n  \"staff_id\": \"\",\n  \"schedule\": \"[]\"\n}"
         },
         "id": "c055762a-8fe7-4141-a639-df2372f30060",
         "typeVersion": 1.1,
@@ -581,7 +639,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];\n"
+          "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -679,6 +737,42 @@
         "name": "split_oauth_busy_events",
         "id": "n64-split-busy",
         "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  (SELECT schedule FROM public.agent_staff WHERE id = $2::uuid AND is_active = true LIMIT 1) AS staff_schedule,\n  (SELECT config->'schedule' FROM public.agent_business_config WHERE agent_id = $1::uuid AND is_active = true LIMIT 1) AS agent_schedule;",
+          "options": {
+            "queryReplacement": "={{ [$json.agent_id || null, $json.staff_id || null] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          560,
+          480
+        ],
+        "id": "n64-db-resolve-schedule",
+        "name": "DB_resolve_agent_schedule",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const original = $(\"normalize_availability_input\").first().json;\nconst row = $json || {};\n\nconst staffSchedule = Array.isArray(row.staff_schedule) ? row.staff_schedule : [];\nconst agentSchedule = Array.isArray(row.agent_schedule) ? row.agent_schedule : [];\n\nconst resolvedSchedule =\n  Array.isArray(original.schedule) && original.schedule.length > 0\n    ? original.schedule\n    : (staffSchedule.length > 0 ? staffSchedule : agentSchedule);\n\nreturn [{\n  json: {\n    ...original,\n    schedule: resolvedSchedule\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          610,
+          480
+        ],
+        "id": "n64-merge-resolved-schedule",
+        "name": "merge_resolved_schedule"
       }
     ],
     "connections": {
@@ -697,7 +791,7 @@
         "main": [
           [
             {
-              "node": "generate_candidate_slots",
+              "node": "DB_resolve_agent_schedule",
               "type": "main",
               "index": 0
             }
@@ -809,6 +903,28 @@
             }
           ]
         ]
+      },
+      "DB_resolve_agent_schedule": {
+        "main": [
+          [
+            {
+              "node": "merge_resolved_schedule",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_resolved_schedule": {
+        "main": [
+          [
+            {
+              "node": "generate_candidate_slots",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -817,18 +933,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-14T13:14:34.663Z",
-        "id": 2010,
+        "createdAt": "2026-07-31T18:34:16.104Z",
+        "id": 2263,
         "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
-        "versionId": "2638ddd4-a255-4201-b57a-b507f485a02c",
+        "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-07-14T13:14:34.561Z",
-        "id": 2009,
+        "createdAt": "2026-07-31T18:34:16.040Z",
+        "id": 2262,
         "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
-        "versionId": "2638ddd4-a255-4201-b57a-b507f485a02c",
+        "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

@@ -87,13 +87,14 @@ function loadRulesEvaluationFn() {
   return { fn, workflowPath };
 }
 
-function evaluate(fn, { text, lead_state = {}, memory = {}, lead = {}, agent_business_config = {} }) {
+function evaluate(fn, { text, lead_state = {}, memory = {}, lead = {}, agent_business_config = {}, agent_staff = [] }) {
   const result = fn({
     event: { text, channel: 'whatsapp' },
     lead,
     lead_state,
     memory,
     agent_business_config,
+    agent_staff,
   });
   return result[0].json.rule_result;
 }
@@ -551,6 +552,111 @@ const scenarios = [
       return null;
     },
   },
+
+  // ---- Seleccion de personal / multi-recurso (2026-07-31) ----
+  // El mecanismo completo ya existia pero nunca se habia activado en ningun
+  // agente, asi que estos caminos jamas se ejercitaron con trafico real. Al
+  // probarlos aparecio un bug: el match exigia que el cliente escribiera el
+  // nombre COMPLETO tal cual sale en el menu ("Camila (Junior)"), asi que la
+  // respuesta natural ("Camila") no se reconocia y el bot volvia a preguntar
+  // en loop. Estos escenarios fijan el comportamiento corregido.
+  ...(() => {
+    const STAFF = [
+      { id: 'staff-camila', name: 'Camila (Junior)', calendar_id: 'camila@salon.cl', is_active: true, display_order: 1, services: [] },
+      { id: 'staff-valentina', name: 'Valentina (Senior)', calendar_id: 'valentina@salon.cl', is_active: true, display_order: 2, services: [] },
+    ];
+    const salonConfig = (staff_selection_mode) => ({
+      config: {
+        staff_selection_mode,
+        pricing_policy: { requires_service_vehicle_district: false },
+        coverage: { districts: ['Local'] },
+        service_location: { mode: 'at_business_location' },
+        services: [{ key: 'corte', name: 'Corte', aliases: ['corte'] }],
+      },
+    });
+    const READY = {
+      service_interest: 'corte', vehicle_type: 'Junior', district: 'Local',
+      payment_preference: 'efectivo', address_confirmed: true,
+    };
+    const PENDING = { ...READY, intent_last: 'staff_selection_pending' };
+
+    const picks = (text, expectedName, staff = STAFF) => ({
+      name: `Staff selection — "${text}" selecciona a ${expectedName}`,
+      input: { text, lead_state: PENDING, agent_business_config: salonConfig('ask_customer'), agent_staff: staff },
+      check(r) {
+        if (r.action !== 'offer_available_slots') return `expected action=offer_available_slots, got ${r.action} (rule=${r.rule_name})`;
+        const got = r.state_update?.staff_name;
+        if (got !== expectedName) return `expected staff_name="${expectedName}", got "${got}"`;
+        return null;
+      },
+    });
+    const reasks = (text, why, staff = STAFF) => ({
+      name: `Staff selection — ${why}`,
+      input: { text, lead_state: PENDING, agent_business_config: salonConfig('ask_customer'), agent_staff: staff },
+      check(r) {
+        if (r.action !== 'answer_question') return `expected action=answer_question (volver a preguntar), got ${r.action}`;
+        if (r.state_update?.intent_last !== 'staff_selection_pending') return `expected intent_last to stay staff_selection_pending, got ${r.state_update?.intent_last}`;
+        return null;
+      },
+    });
+
+    const DUP = [
+      { id: 'a', name: 'Camila Rojas', calendar_id: 'a@x.cl', is_active: true, display_order: 1, services: [] },
+      { id: 'b', name: 'Camila Soto', calendar_id: 'b@x.cl', is_active: true, display_order: 2, services: [] },
+    ];
+
+    return [
+      // El bug principal: responder solo el nombre de pila.
+      picks('Camila', 'Camila (Junior)'),
+      picks('con Valentina porfa', 'Valentina (Senior)'),
+      // Lo que ya funcionaba antes del fix, no debe romperse.
+      picks('2', 'Valentina (Senior)'),
+      picks('Camila (Junior)', 'Camila (Junior)'),
+      // "cualquiera" delega la eleccion en vez de loopear preguntando.
+      {
+        name: 'Staff selection — "cualquiera" delega la eleccion en vez de volver a preguntar',
+        input: { text: 'cualquiera', lead_state: PENDING, agent_business_config: salonConfig('ask_customer'), agent_staff: STAFF },
+        check(r) {
+          if (r.action !== 'offer_available_slots') return `expected action=offer_available_slots (auto-asignar), got ${r.action} (rule=${r.rule_name})`;
+          if (!r.state_update?.staff_id) return 'expected a staff_id to be auto-assigned';
+          return null;
+        },
+      },
+      // Sigue rechazando lo genuinamente no reconocible.
+      reasks('Rodrigo', 'un nombre que no esta en la lista vuelve a preguntar'),
+      // Ambiguedad: no adivinar entre dos personas del mismo nombre.
+      reasks('Camila', 'dos personas llamadas Camila -> no adivina, vuelve a preguntar', DUP),
+      picks('Camila Soto', 'Camila Soto', DUP),
+      // No regresion de los dos modos y del caso sin staff (detailing).
+      {
+        name: 'Staff selection — con >1 staff y mode=ask_customer se pregunta antes de ofrecer horarios',
+        input: { text: 'que horarios tienen?', lead_state: READY, agent_business_config: salonConfig('ask_customer'), agent_staff: STAFF },
+        check(r) {
+          if (r.action !== 'answer_question') return `expected action=answer_question (preguntar por persona), got ${r.action}`;
+          if (!r.message || !r.message.includes('Con quien prefieres agendar?')) return `expected the staff options message, got: "${r.message}"`;
+          return null;
+        },
+      },
+      {
+        name: 'Staff selection non-regression — mode=auto asigna sin preguntar',
+        input: { text: 'que horarios tienen?', lead_state: READY, agent_business_config: salonConfig('auto'), agent_staff: STAFF },
+        check(r) {
+          if (r.action !== 'offer_available_slots') return `expected action=offer_available_slots, got ${r.action}`;
+          if (!r.state_update?.staff_id) return 'expected a staff_id to be auto-assigned in auto mode';
+          return null;
+        },
+      },
+      {
+        name: 'Staff selection non-regression — sin filas de agent_staff (detailing) el flujo queda intacto',
+        input: { text: 'que horarios tienen?', lead_state: READY, agent_business_config: salonConfig('auto'), agent_staff: [] },
+        check(r) {
+          if (r.action !== 'offer_available_slots') return `expected action=offer_available_slots, got ${r.action}`;
+          if (r.state_update?.staff_id) return `expected NO staff_id when the business has no staff rows, got ${r.state_update.staff_id}`;
+          return null;
+        },
+      },
+    ];
+  })(),
 ];
 
 function main() {

@@ -302,6 +302,28 @@ pedido:
 Si solo hay **una** persona elegible (o ninguna, porque no se configuro
 `agent_staff`), nunca se pregunta nada — se asigna directo, igual que hoy.
 
+Cuando el modo es `ask_customer`, el cliente puede responder de cualquiera de estas
+formas (verificado con escenarios fijos en
+`scripts/rules_engine_regression_harness.js`, seccion "Staff selection"):
+- el numero de la opcion: `"1"`, `"2"`
+- el nombre de pila solo: `"Camila"` (aunque en el menu figure como "Camila (Junior)")
+- el nombre dentro de una frase: `"con Valentina porfa"`
+- delegando la eleccion: `"cualquiera"`, `"da lo mismo"`, `"el que sea"` — en ese caso
+  se asigna automaticamente, igual que en modo `auto`
+
+Si dos personas activas comparten nombre de pila (ej. dos "Camila"), el bot **no
+adivina**: vuelve a preguntar hasta que la respuesta identifique a una sola persona.
+Conviene que los `name` sean distinguibles entre si.
+
+> **Importante — calendario por persona.** `agent_staff.calendar_id` es obligatorio a
+> nivel de tabla pero acepta string vacio. Si se deja vacio, la disponibilidad y la
+> reserva usan el calendario del agente (comportamiento de calendario compartido: el
+> bot igual pregunta y registra **quien** atiende en `appointments.staff_id`, y evita
+> sobre-agendar a la misma persona, pero todos los eventos caen en un mismo Google
+> Calendar). Para que cada persona tenga su propio calendario hay que poner aqui su
+> `calendar_id` real de Google, y ese calendario debe ser accesible por la misma
+> cuenta/conexion OAuth del agente — no hay credenciales de Google por persona.
+
 ## 4) Precios (`pricing_versions` + tablas hijas)
 
 ```sql

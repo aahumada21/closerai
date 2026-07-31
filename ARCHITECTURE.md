@@ -57,7 +57,7 @@ flowchart TD
 | **Canales de entrada** | 🟡 parcial | WhatsApp y Webchat activos y normalizados con el mismo contrato. Instagram: código completo pero **desactivado** en n8n (`active:false`) — no recibe tráfico real hoy. Formularios: no existe. |
 | **Base de datos como fuente de verdad** | ✅ implementado | 34 tablas reales, esquema maduro (multi-tenant, leads, cotizaciones, precios versionados, citas, pagos, auditoría). Ver §4 para huecos puntuales. |
 | **Máquina de estados comercial** | 🟡 parcial, no formalizada | El estado se persiste (`lead_state.stage`) y se usa de verdad (6,252 leads reales), pero es `text` libre sin CHECK/enum, y el vocabulario real (14 valores) no coincide con la visión objetivo (11 valores) — ver §4. |
-| **Rules engine (determinístico)** | ✅ implementado, y **mejorado hoy mismo** | Antes de esta sesión existían dos motores clonados (detailing/salón) mantenidos en paralelo manualmente. Hoy quedó consolidado en un solo motor config-driven; salón migrado y verificado a paridad; clon viejo archivado. Reglas de pago sí existen (`ruleAskPaymentPreference`, `payment_mode`). Reglas de multi-recurso/staff **existen como código pero están muertas** (nunca se invocan) — ver §4. |
+| **Rules engine (determinístico)** | ✅ implementado, y **mejorado hoy mismo** | Antes de esta sesión existían dos motores clonados (detailing/salón) mantenidos en paralelo manualmente. Hoy quedó consolidado en un solo motor config-driven; salón migrado y verificado a paridad; clon viejo archivado. Reglas de pago sí existen (`ruleAskPaymentPreference`, `payment_mode`). Reglas de multi-recurso/staff sí se invocan (el diagnóstico inicial de "código muerto" era incorrecto); se corrigieron 2 bugs reales el 2026-07-31 y quedaron pineadas en el harness, pero siguen inactivas por configuración — ver la nota de corrección en §3. |
 | **LLM Decision Layer** | ✅ implementado, con garantía técnica real | Contrato de salida forzado por JSON Schema (`response_format` con `enum` dinámico de `allowed_actions`, `strict:true`) vía OpenAI Structured Outputs — no es solo una instrucción de prompt. Doble validación posterior en código (schema + reglas de negocio) antes de ejecutar. El LLM **no tiene ningún campo de precio** en su schema de salida — estructuralmente no puede inventar precio. |
 | **Action Executor** | ✅ implementado | 21 acciones activas con whitelist global + contextual, y guardrails de código que sobrescriben al LLM en casos críticos (queja, urgencia, handoff activo). Un camino (`7 followup_scheduler`) llama directo a `6.1` sin pasar por esta validación — no es una IA generando contenido ahí hoy, pero es un precedente a vigilar. |
 | **Sistema de pagos (Flow.cl)** | ✅ implementado | Cotizar → preferencia de pago → link (prepago) o postpago → confirmación por webhook → holds expirados liberados por cron → reconciliación por cron. Multi-tenant (credenciales por organización). No está expuesto como "acciones" nombradas del catálogo objetivo (`send_payment_link`, etc.) sino como lógica interna de `confirm_booking`. |
@@ -104,8 +104,44 @@ flowchart TD
 | `confirm_payment` | 🟡 — existe como webhook externo de Flow.cl (`6.27`), no como acción disparada por decisión |
 | `request_deposit` | 🟡 — cubierta parcialmente por `ask_payment_preference` (`6.25`) |
 | `payment_reminder` | 🟡 — existe dentro del cron `6.29`, no como acción propia |
-| `assign_resource` | ❌ **código muerto** — `ruleStaffSelectionReplyProvided` existe completa pero nunca se invoca |
-| `reassign_resource` | ❌ no existe, ni como código muerto |
+| `assign_resource` | ✅ **corregido 2026-07-31** — no era código muerto: `ruleStaffSelectionReplyProvided` sí está en el array activo de reglas y sí se invoca. Ver la nota de corrección abajo. |
+| `reassign_resource` | ❌ no existe (cambiar de persona en una reserva ya creada requiere cancelar y reagendar) |
+
+> **Corrección de esta auditoría (2026-07-31).** La afirmación original de que el
+> multi-recurso era "código muerto que nunca se invoca" **era incorrecta** — se
+> verificó ejecutando el motor real. La cadena completa existe y funciona:
+> `2 lead_loader` carga `agent_staff` → el motor pregunta "¿con quién prefieres
+> agendar?" cuando hay >1 persona elegible y `staff_selection_mode = "ask_customer"`
+> → `ruleStaffSelectionReplyProvided` procesa la respuesta y asigna
+> `staff_id`/`staff_name`/`calendar_id` → `6.4 list_available_slots` filtra las citas
+> de la DB por `staff_id` para no sobre-agendar a la misma persona.
+>
+> Lo que sí era cierto es que **nunca se había activado en ningún agente**
+> (ningún `agent_business_config` tiene `staff_selection_mode = "ask_customer"`;
+> el único agente con >1 fila en `agent_staff` está en modo `auto`), así que estos
+> caminos jamás vieron tráfico real. Al ejercitarlos aparecieron dos defectos
+> reales, ambos corregidos y desplegados el 2026-07-31:
+> 1. El reconocimiento de la respuesta exigía el nombre **completo** tal cual sale
+>    en el menú ("Camila (Junior)"); responder `"Camila"` —lo natural— no se
+>    reconocía y el bot volvía a preguntar en loop. Ahora acepta nombre parcial,
+>    nombre dentro de una frase, y `"cualquiera"`/`"da lo mismo"` (delega la
+>    elección). Si dos personas comparten nombre, no adivina: vuelve a preguntar.
+> 2. En la ruta OAuth de `6.2`/`6.3`/`6.4`, el calendario del agente pisaba
+>    silenciosamente el `calendar_id` de la persona elegida, así que la
+>    disponibilidad y la reserva iban al calendario compartido en vez del de esa
+>    persona (la ruta no-OAuth sí lo respetaba: las dos rutas discrepaban). Ahora
+>    el calendario de la persona tiene prioridad cuando existe.
+>
+> El código muerto real, ya eliminado, era la función `findStaffInReply`: estaba
+> definida pero nunca se llamaba porque su lógica estaba duplicada e inlineada
+> dentro de la regla. Quedó una sola implementación, usada por la regla.
+>
+> Estado actual: **la feature funciona y está pineada con 11 escenarios** en
+> `scripts/rules_engine_regression_harness.js`, pero sigue **inactiva por
+> configuración** — activarla es poner `staff_selection_mode = "ask_customer"` y
+> cargar filas en `agent_staff` (ver `docs/PER_NUMBER_CONFIG_GUIDE_2026-06-20.md`
+> §3.5). Con `agent_staff.calendar_id` vacío el negocio opera con calendario
+> compartido: el bot igual pregunta y registra quién atiende.
 
 ### Acciones activas no contempladas en el catálogo objetivo (hallazgo adicional)
 
@@ -152,7 +188,7 @@ Esto es lo más importante de confirmar y **se cumple realmente, no solo de pala
 ## 7. Gaps críticos priorizados
 
 1. **Formalizar la máquina de estados** (bloqueante para todo lo demás de esta lista). Sin un enum/CHECK real y un mapeo explícito y documentado de los 14 stages reales (incluyendo dónde vive `payment_pending` de facto y si se introduce `lost` como estado terminal real), cualquier trabajo nuevo sobre "estados" seguirá construyendo sobre arena.
-2. **Multi-recurso/multi-profesional real**: hay una regla completa ya escrita (`ruleStaffSelectionReplyProvided`) que nunca se conecta. Es probablemente el gap de menor esfuerzo/mayor impacto de toda la lista — conectar código que ya existe, no escribir desde cero.
+2. ~~**Multi-recurso/multi-profesional real**~~ — **resuelto 2026-07-31**. El diagnóstico original ("código que nunca se conecta") era incorrecto: sí estaba conectado, solo que nunca activado por configuración. Al ejercitarlo aparecieron 2 bugs reales, ya corregidos y desplegados, y el comportamiento quedó pineado con 11 escenarios en el harness. Ver la nota de corrección en §3. Lo único pendiente aquí es **decidir en qué agente activarlo** (`staff_selection_mode = "ask_customer"`), que es una decisión de negocio, no de ingeniería. `reassign_resource` (cambiar de persona sin cancelar) sigue sin existir.
 3. **Ampliar el catálogo de acciones de venta** (`quote_explanation`, `upsell_service`, `competitor_comparison`, `answer_price_objection`/`answer_delay_objection` como acciones distintas en vez de una genérica) — esto es lo que separa "agendador" de "vendedor digital", y hoy es la brecha más grande respecto a la visión de producto.
 4. **Cerrar o resolver deliberadamente los cabos sueltos de infraestructura encontrados en esta auditoría** (no bloqueantes pero acumulan riesgo silencioso): `8.1 reactivate_bot_after_handoff` huérfano, el camino roto de `whatsapp_webhook_meta` apuntando a un workflow inexistente, la duplicación de credenciales de Google Calendar y Flow.cl en dos lugares cada una, y el `followup_type` sin plantilla (`post_quote_postponed_24h`) que cae silenciosamente a un mensaje genérico.
 5. **Escalar el sistema de QA de decenas a cientos/miles** requiere resolver primero el bug de corte del runner nativo (`9.1`/`9.1.1`) o formalizar los scripts PowerShell paralelos como el camino oficial, y decidir si se justifica un juez independiente (modelo/proveedor distinto al de producción) para los criterios subjetivos.

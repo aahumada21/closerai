@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-05T15:43:16.785Z",
+  "updatedAt": "2026-07-31T18:34:14.627Z",
   "createdAt": "2026-05-22T22:29:40.685Z",
   "id": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
   "name": "6.2 check_calendar_slot",
@@ -70,7 +70,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const slotContext = $items(\"build_slot_range\", 0, 0)[0].json;\nconst calendarItems = $input.all();\n\n// Filtramos solo items que realmente sean eventos\nconst realEvents = calendarItems.filter(item => {\n  const j = item.json || {};\n  if (!j.id) return false;\n\n  // Ignore orphan QA artifacts left in Google Calendar. DB appointments remain the source\n  // of truth for QA bookings, so stale Google-only \"Cliente QA\" events must not block slots.\n  const summary = String(j.summary || \"\").trim().toLowerCase();\n  if (summary.includes(\"cliente qa\")) return false;\n\n  return true;\n});\n\nconst hasEvents = realEvents.length > 0;\n\nreturn [{\n  booking_date: slotContext.booking_date,\n  booking_time: slotContext.booking_time,\n  slot_id: slotContext.slot_id || null,\n  calendar_id: slotContext.calendar_id || \"primary\",\n  duration_minutes: slotContext.duration_minutes || 120,\n  slot_start_at: slotContext.slot_start_at,\n  slot_end_at: slotContext.slot_end_at,\n  slot_available: !hasEvents,\n  conflicting_events_count: realEvents.length,\n  conflicting_events: realEvents.map(item => ({\n    id: item.json.id || null,\n    summary: item.json.summary || null,\n    start: item.json.start || null,\n    end: item.json.end || null\n  }))\n}];"
+        "jsCode": "const slotContext = $items(\"build_slot_range\", 0, 0)[0].json;\nconst calendarItems = $input.all();\n\n// Filtramos solo items que realmente sean eventos\nconst realEvents = calendarItems.filter(item => {\n  const j = item.json || {};\n  if (!j.id) return false;\n\n  // Ignore orphan QA artifacts left in Google Calendar. DB appointments remain the source\n  // of truth for QA bookings, so stale Google-only \"Cliente QA\" events must not block slots.\n  const summary = String(j.summary || \"\").trim().toLowerCase();\n  if (summary.includes(\"cliente qa\")) return false;\n\n  return true;\n});\n\n// Ademas del calendario de Google, chequear contra las citas ya guardadas en\n// nuestra propia base (appointments) -- antes este nodo solo miraba Google\n// Calendar, asi que una cita real ya reservada (con su duracion completa) no\n// bloqueaba un horario especifico que el cliente pidiera directamente si el\n// calendario de Google no estaba sincronizado.\nlet dbBusyEvents = [];\ntry {\n  const dbRow = ($items(\"DB_Check_Busy_Appointments\", 0, 0)[0] || {}).json || {};\n  const rawBusy = Array.isArray(dbRow.busy_events) ? dbRow.busy_events : [];\n  const slotStartMs = new Date(slotContext.slot_start_at).getTime();\n  const slotEndMs = new Date(slotContext.slot_end_at).getTime();\n  dbBusyEvents = rawBusy.filter((event) => {\n    const eventStart = new Date(event.start_at).getTime();\n    const eventEnd = new Date(event.end_at).getTime();\n    if (!Number.isFinite(eventStart) || !Number.isFinite(eventEnd)) return false;\n    return slotStartMs < eventEnd && slotEndMs > eventStart;\n  });\n} catch {\n  dbBusyEvents = [];\n}\n\nconst hasEvents = realEvents.length > 0 || dbBusyEvents.length > 0;\n\nreturn [{\n  booking_date: slotContext.booking_date,\n  booking_time: slotContext.booking_time,\n  slot_id: slotContext.slot_id || null,\n  calendar_id: slotContext.calendar_id || \"primary\",\n  duration_minutes: slotContext.duration_minutes || 120,\n  slot_start_at: slotContext.slot_start_at,\n  slot_end_at: slotContext.slot_end_at,\n  slot_available: !hasEvents,\n  conflicting_events_count: realEvents.length + dbBusyEvents.length,\n  conflicting_events: [\n    ...realEvents.map(item => ({\n      id: item.json.id || null,\n      summary: item.json.summary || null,\n      start: item.json.start || null,\n      end: item.json.end || null\n    })),\n    ...dbBusyEvents.map(event => ({\n      id: event.event_id || null,\n      summary: 'appointments_db',\n      start: event.start_at || null,\n      end: event.end_at || null\n    }))\n  ]\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -113,7 +113,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const original = $(\"build_slot_range\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];\n"
+        "jsCode": "const original = $(\"build_slot_range\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -211,6 +211,27 @@
       "name": "split_oauth_events",
       "id": "n62-split-events",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COALESCE(\n    jsonb_agg(\n      jsonb_build_object('event_id', event_id, 'start_at', start_at, 'end_at', end_at, 'status', status)\n    ),\n    '[]'::jsonb\n  ) AS busy_events\nFROM public.appointments\nWHERE status IN ('confirmed', 'pending')\n  AND start_at < '{{ $json.slot_end_at }}'::timestamptz\n  AND end_at > '{{ $json.slot_start_at }}'::timestamptz;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        280,
+        500
+      ],
+      "id": "n62-db-check-busy",
+      "name": "DB_Check_Busy_Appointments",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
     }
   ],
   "connections": {
@@ -229,7 +250,7 @@
       "main": [
         [
           {
-            "node": "resolve_calendar_auth",
+            "node": "DB_Check_Busy_Appointments",
             "type": "main",
             "index": 0
           }
@@ -308,6 +329,17 @@
           }
         ]
       ]
+    },
+    "DB_Check_Busy_Appointments": {
+      "main": [
+        [
+          {
+            "node": "resolve_calendar_auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -318,9 +350,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "a38e5c59-c099-4a13-8dad-ba63a37d5c13",
-  "activeVersionId": "a38e5c59-c099-4a13-8dad-ba63a37d5c13",
-  "versionCounter": 52,
+  "versionId": "11f5c83f-b376-4a83-abfc-9273129c3368",
+  "activeVersionId": "11f5c83f-b376-4a83-abfc-9273129c3368",
+  "versionCounter": 66,
   "triggerCount": 0,
   "shared": [
     {
@@ -343,9 +375,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-05T15:43:16.788Z",
-    "createdAt": "2026-07-05T15:43:16.788Z",
-    "versionId": "a38e5c59-c099-4a13-8dad-ba63a37d5c13",
+    "updatedAt": "2026-07-31T18:34:14.631Z",
+    "createdAt": "2026-07-31T18:34:14.631Z",
+    "versionId": "11f5c83f-b376-4a83-abfc-9273129c3368",
     "workflowId": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
     "nodes": [
       {
@@ -411,7 +443,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const slotContext = $items(\"build_slot_range\", 0, 0)[0].json;\nconst calendarItems = $input.all();\n\n// Filtramos solo items que realmente sean eventos\nconst realEvents = calendarItems.filter(item => {\n  const j = item.json || {};\n  if (!j.id) return false;\n\n  // Ignore orphan QA artifacts left in Google Calendar. DB appointments remain the source\n  // of truth for QA bookings, so stale Google-only \"Cliente QA\" events must not block slots.\n  const summary = String(j.summary || \"\").trim().toLowerCase();\n  if (summary.includes(\"cliente qa\")) return false;\n\n  return true;\n});\n\nconst hasEvents = realEvents.length > 0;\n\nreturn [{\n  booking_date: slotContext.booking_date,\n  booking_time: slotContext.booking_time,\n  slot_id: slotContext.slot_id || null,\n  calendar_id: slotContext.calendar_id || \"primary\",\n  duration_minutes: slotContext.duration_minutes || 120,\n  slot_start_at: slotContext.slot_start_at,\n  slot_end_at: slotContext.slot_end_at,\n  slot_available: !hasEvents,\n  conflicting_events_count: realEvents.length,\n  conflicting_events: realEvents.map(item => ({\n    id: item.json.id || null,\n    summary: item.json.summary || null,\n    start: item.json.start || null,\n    end: item.json.end || null\n  }))\n}];"
+          "jsCode": "const slotContext = $items(\"build_slot_range\", 0, 0)[0].json;\nconst calendarItems = $input.all();\n\n// Filtramos solo items que realmente sean eventos\nconst realEvents = calendarItems.filter(item => {\n  const j = item.json || {};\n  if (!j.id) return false;\n\n  // Ignore orphan QA artifacts left in Google Calendar. DB appointments remain the source\n  // of truth for QA bookings, so stale Google-only \"Cliente QA\" events must not block slots.\n  const summary = String(j.summary || \"\").trim().toLowerCase();\n  if (summary.includes(\"cliente qa\")) return false;\n\n  return true;\n});\n\n// Ademas del calendario de Google, chequear contra las citas ya guardadas en\n// nuestra propia base (appointments) -- antes este nodo solo miraba Google\n// Calendar, asi que una cita real ya reservada (con su duracion completa) no\n// bloqueaba un horario especifico que el cliente pidiera directamente si el\n// calendario de Google no estaba sincronizado.\nlet dbBusyEvents = [];\ntry {\n  const dbRow = ($items(\"DB_Check_Busy_Appointments\", 0, 0)[0] || {}).json || {};\n  const rawBusy = Array.isArray(dbRow.busy_events) ? dbRow.busy_events : [];\n  const slotStartMs = new Date(slotContext.slot_start_at).getTime();\n  const slotEndMs = new Date(slotContext.slot_end_at).getTime();\n  dbBusyEvents = rawBusy.filter((event) => {\n    const eventStart = new Date(event.start_at).getTime();\n    const eventEnd = new Date(event.end_at).getTime();\n    if (!Number.isFinite(eventStart) || !Number.isFinite(eventEnd)) return false;\n    return slotStartMs < eventEnd && slotEndMs > eventStart;\n  });\n} catch {\n  dbBusyEvents = [];\n}\n\nconst hasEvents = realEvents.length > 0 || dbBusyEvents.length > 0;\n\nreturn [{\n  booking_date: slotContext.booking_date,\n  booking_time: slotContext.booking_time,\n  slot_id: slotContext.slot_id || null,\n  calendar_id: slotContext.calendar_id || \"primary\",\n  duration_minutes: slotContext.duration_minutes || 120,\n  slot_start_at: slotContext.slot_start_at,\n  slot_end_at: slotContext.slot_end_at,\n  slot_available: !hasEvents,\n  conflicting_events_count: realEvents.length + dbBusyEvents.length,\n  conflicting_events: [\n    ...realEvents.map(item => ({\n      id: item.json.id || null,\n      summary: item.json.summary || null,\n      start: item.json.start || null,\n      end: item.json.end || null\n    })),\n    ...dbBusyEvents.map(event => ({\n      id: event.event_id || null,\n      summary: 'appointments_db',\n      start: event.start_at || null,\n      end: event.end_at || null\n    }))\n  ]\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -454,7 +486,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const original = $(\"build_slot_range\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];\n"
+          "jsCode": "const original = $(\"build_slot_range\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -552,6 +584,27 @@
         "name": "split_oauth_events",
         "id": "n62-split-events",
         "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  COALESCE(\n    jsonb_agg(\n      jsonb_build_object('event_id', event_id, 'start_at', start_at, 'end_at', end_at, 'status', status)\n    ),\n    '[]'::jsonb\n  ) AS busy_events\nFROM public.appointments\nWHERE status IN ('confirmed', 'pending')\n  AND start_at < '{{ $json.slot_end_at }}'::timestamptz\n  AND end_at > '{{ $json.slot_start_at }}'::timestamptz;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          280,
+          500
+        ],
+        "id": "n62-db-check-busy",
+        "name": "DB_Check_Busy_Appointments",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
       }
     ],
     "connections": {
@@ -570,7 +623,7 @@
         "main": [
           [
             {
-              "node": "resolve_calendar_auth",
+              "node": "DB_Check_Busy_Appointments",
               "type": "main",
               "index": 0
             }
@@ -649,6 +702,17 @@
             }
           ]
         ]
+      },
+      "DB_Check_Busy_Appointments": {
+        "main": [
+          [
+            {
+              "node": "resolve_calendar_auth",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -657,18 +721,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-05T15:43:17.067Z",
-        "id": 1751,
+        "createdAt": "2026-07-31T18:34:14.885Z",
+        "id": 2259,
         "workflowId": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
-        "versionId": "a38e5c59-c099-4a13-8dad-ba63a37d5c13",
+        "versionId": "11f5c83f-b376-4a83-abfc-9273129c3368",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-07-05T15:43:16.948Z",
-        "id": 1750,
+        "createdAt": "2026-07-31T18:34:14.812Z",
+        "id": 2258,
         "workflowId": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
-        "versionId": "a38e5c59-c099-4a13-8dad-ba63a37d5c13",
+        "versionId": "11f5c83f-b376-4a83-abfc-9273129c3368",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }
