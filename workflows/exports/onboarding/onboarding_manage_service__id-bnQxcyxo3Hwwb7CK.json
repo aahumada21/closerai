@@ -1,0 +1,422 @@
+{
+  "name": "onboarding_manage_service",
+  "nodes": [
+    {
+      "id": "ms-webhook",
+      "name": "WEBHOOK manage_service_post",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "onboarding-manage-service",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "webhookId": "9dd2d0e0-cd8c-458b-8562-f4cbbc0e71c7"
+    },
+    {
+      "id": "ms-validate",
+      "name": "validate_and_build_service_request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();\n  }\n  return \"\";\n}\n\nconst expectedToken = $env.ONBOARDING_API_TOKEN;\nconst providedToken = header(\"x-onboarding-token\");\n\nconst userId = firstValue(body.user_id, body.userId);\nconst organizationId = firstValue(body.organization_id, body.organizationId);\nconst agentId = firstValue(body.agent_id, body.agentId);\nconst action = firstValue(body.action).toLowerCase();\n\nconst serviceInput = body.service && typeof body.service === \"object\" ? body.service : {};\nconst serviceKey = firstValue(serviceInput.key);\nconst serviceName = firstValue(serviceInput.name);\nconst serviceDescription = firstValue(serviceInput.description);\nconst serviceAliases = Array.isArray(serviceInput.aliases)\n  ? serviceInput.aliases.map((a) => String(a).trim()).filter(Boolean)\n  : [];\nconst durationMinutesRaw = serviceInput.duration_minutes;\nconst durationMinutes = Number.isFinite(Number(durationMinutesRaw)) ? Number(durationMinutesRaw) : null;\n\n// \"prices\" es una lista de { <dimension_classification_key>: valor, base_price }.\n// El nombre real de la columna en DB es \"vehicle_type\" por razones historicas (ver\n// docs de la consolidacion del rules_engine: es el eje de clasificacion secundario\n// generico -- tipo de vehiculo para detailing, categoria de estilista para salon,\n// etc.) -- se acepta el body como \"vehicle_type\" o \"classification_value\" para no\n// forzar al panel a conocer ese detalle interno.\nconst pricesInput = Array.isArray(body.prices) ? body.prices : [];\nconst prices = pricesInput\n  .map((p) => ({\n    vehicle_type: firstValue(p.vehicle_type, p.classification_value, p.value),\n    base_price: Number(p.base_price),\n  }))\n  .filter((p) => p.vehicle_type && Number.isFinite(p.base_price));\n\nlet error = null;\nif (!expectedToken) error = \"missing_onboarding_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_onboarding_token\";\nelse if (!userId) error = \"missing_user_id\";\nelse if (!organizationId) error = \"missing_organization_id\";\nelse if (!agentId) error = \"missing_agent_id\";\nelse if (![\"add\", \"remove\"].includes(action)) error = \"invalid_action\";\nelse if (!serviceKey) error = \"missing_service_key\";\nelse if (action === \"add\" && !serviceName) error = \"missing_service_name\";\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    user_id: userId || null,\n    organization_id: organizationId || null,\n    agent_id: agentId || null,\n    action: action || null,\n    service: {\n      key: serviceKey || null,\n      name: serviceName || null,\n      description: serviceDescription || \"\",\n      aliases: serviceAliases,\n      duration_minutes: durationMinutes,\n    },\n    prices,\n  }\n}];"
+      }
+    },
+    {
+      "id": "ms-if-valid",
+      "name": "IF valid_request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-manageservice-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ms-validation-error",
+      "name": "build_validation_error_response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        150
+      ],
+      "parameters": {
+        "jsCode": "const input = $json || {};\nreturn [{ json: { ok: false, error: input.error || \"invalid_request\" } }];\n"
+      }
+    },
+    {
+      "id": "ms-get-state",
+      "name": "DB_get_current_state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        660,
+        -150
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH membership AS (\n  SELECT EXISTS (\n    SELECT 1 FROM organization_members\n    WHERE user_id = '{{ $json.user_id }}'::uuid\n      AND organization_id = '{{ $json.organization_id }}'::uuid\n  ) AS is_member\n),\nagent_check AS (\n  SELECT EXISTS (\n    SELECT 1 FROM agents\n    WHERE id = '{{ $json.agent_id }}'::uuid\n      AND organization_id = '{{ $json.organization_id }}'::uuid\n  ) AS agent_belongs\n),\nfound AS (\n  SELECT\n    abc.version AS current_version,\n    abc.config AS current_config,\n    (SELECT id FROM public.pricing_versions WHERE agent_id = abc.agent_id AND is_active = true LIMIT 1) AS active_pricing_version_id\n  FROM public.agent_business_config abc\n  WHERE abc.agent_id = '{{ $json.agent_id }}'::uuid\n    AND abc.is_active = true\n  LIMIT 1\n)\nSELECT\n  (SELECT is_member FROM membership) AS is_member,\n  (SELECT agent_belongs FROM agent_check) AS agent_belongs,\n  (SELECT current_version FROM found) IS NOT NULL AS config_found,\n  COALESCE((SELECT current_version FROM found), 0) AS current_version,\n  COALESCE((SELECT current_config FROM found), '{}'::jsonb) AS current_config,\n  (SELECT active_pricing_version_id FROM found) AS active_pricing_version_id;",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "id": "ms-compute",
+      "name": "compute_new_config_and_prices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -150
+      ],
+      "parameters": {
+        "jsCode": "const upstream = $(\"validate_and_build_service_request\").first().json;\nconst dbResult = $json || {};\n\nfunction toBool(v) {\n  return v === true || v === \"t\" || v === \"true\";\n}\n\nconst isMember = toBool(dbResult.is_member);\nconst agentBelongs = toBool(dbResult.agent_belongs);\nconst configFound = toBool(dbResult.config_found);\n\nlet status = \"ok\";\nif (!isMember) status = \"forbidden\";\nelse if (!agentBelongs) status = \"agent_not_found\";\nelse if (!configFound) status = \"config_not_found\";\n\nif (status !== \"ok\") {\n  return [{ json: { ...upstream, status } }];\n}\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\nfunction sqlNumber(value) {\n  const n = Number(value);\n  return Number.isFinite(n) ? String(n) : \"NULL\";\n}\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'::uuid\" : \"NULL::uuid\";\n}\n\nconst currentConfig = dbResult.current_config && typeof dbResult.current_config === \"object\" ? dbResult.current_config : {};\nconst currentVersion = Number(dbResult.current_version) || 0;\nconst activePricingVersionId = dbResult.active_pricing_version_id || null;\n\nconst currentServices = Array.isArray(currentConfig.services) ? currentConfig.services : [];\nconst service = upstream.service;\nconst action = upstream.action;\nconst prices = upstream.prices || [];\n\nconst serviceAlreadyExisted = currentServices.some((s) => s && s.key === service.key);\n\nlet newServices;\nif (action === \"add\") {\n  // upsert por key: si ya existia, se reemplaza (permite editar nombre/aliases/\n  // descripcion sin necesitar una accion \"edit\" aparte); si no, se agrega.\n  const cleanService = {\n    key: service.key,\n    name: service.name,\n    aliases: service.aliases,\n    description: service.description || \"\",\n    duration_minutes: service.duration_minutes,\n  };\n  newServices = currentServices.filter((s) => !s || s.key !== service.key);\n  newServices.push(cleanService);\n} else {\n  // remove: se quita del array. El historial no se pierde porque\n  // agent_business_config es versionado (la fila vieja queda con is_active=false,\n  // nunca se borra) -- no hace falta un flag de soft-delete dentro del JSON.\n  newServices = currentServices.filter((s) => !s || s.key !== service.key);\n}\n\nconst newConfig = { ...currentConfig, services: newServices };\n\nlet priceSql = null;\nlet pricesAction = \"none\";\nif (action === \"add\" && activePricingVersionId && prices.length > 0) {\n  pricesAction = \"insert\";\n  const values = prices\n    .map((p) => `(${sqlUuidOrNull(activePricingVersionId)}, ${sqlText(service.key)}, ${sqlText(p.vehicle_type)}, ${sqlNumber(p.base_price)}, true)`)\n    .join(\",\\n    \");\n  priceSql = `INSERT INTO public.service_vehicle_prices (pricing_version_id, service_code, vehicle_type, base_price, is_active)\\nVALUES\\n    ${values}\\nRETURNING id;`;\n} else if (action === \"remove\" && activePricingVersionId) {\n  pricesAction = \"deactivate\";\n  priceSql = `UPDATE public.service_vehicle_prices\\nSET is_active = false\\nWHERE pricing_version_id = ${sqlUuidOrNull(activePricingVersionId)}\\n  AND service_code = ${sqlText(service.key)}\\n  AND is_active = true\\nRETURNING id;`;\n}\n\nreturn [{\n  json: {\n    ...upstream,\n    status,\n    service_already_existed: serviceAlreadyExisted,\n    new_config: newConfig,\n    new_version: currentVersion + 1,\n    active_pricing_version_id: activePricingVersionId,\n    price_sql: priceSql,\n    prices_action: pricesAction,\n    prices_requested_count: prices.length,\n  }\n}];"
+      }
+    },
+    {
+      "id": "ms-if-status-ok",
+      "name": "IF status_ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-manageservice-status-ok",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ms-write-config",
+      "name": "DB_write_new_config_version",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1320,
+        -300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH deactivate_old AS (\n  UPDATE public.agent_business_config\n  SET is_active = false\n  WHERE agent_id = '{{ $json.agent_id }}'::uuid AND is_active = true\n  RETURNING id\n),\ninsert_new AS (\n  INSERT INTO public.agent_business_config (organization_id, agent_id, version, is_active, config)\n  VALUES (\n    '{{ $json.organization_id }}'::uuid,\n    '{{ $json.agent_id }}'::uuid,\n    {{ $json.new_version }},\n    true,\n    '{{ JSON.stringify($json.new_config).replace(/'/g, \"\\'\\'\") }}'::jsonb\n  )\n  RETURNING id, version\n)\nSELECT\n  (SELECT id FROM insert_new) AS new_config_id,\n  (SELECT version FROM insert_new) AS new_version_written,\n  (SELECT count(*) FROM deactivate_old) AS deactivated_count;",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "id": "ms-merge-config-write",
+      "name": "merge_after_config_write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -300
+      ],
+      "parameters": {
+        "jsCode": "const prior = $(\"compute_new_config_and_prices\").first().json;\nconst dbResult = $json || {};\n\nreturn [{\n  json: {\n    ...prior,\n    new_config_id: dbResult.new_config_id || null,\n    new_version_written: dbResult.new_version_written || null,\n    deactivated_count: dbResult.deactivated_count || 0,\n  }\n}];"
+      }
+    },
+    {
+      "id": "ms-if-has-price-sql",
+      "name": "IF has_price_sql",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-manageservice-has-price-sql",
+              "leftValue": "={{ $json.price_sql }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ms-write-prices",
+      "name": "DB_write_prices",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        -400
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.price_sql }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "id": "ms-merge-prices",
+      "name": "merge_after_prices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -400
+      ],
+      "parameters": {
+        "jsCode": "const prior = $(\"merge_after_config_write\").first().json;\nconst dbResult = $json || {};\n\nreturn [{\n  json: {\n    ...prior,\n    prices_written_count: Array.isArray($input.all()) ? $input.all().length : 0,\n  }\n}];"
+      }
+    },
+    {
+      "id": "ms-build-response",
+      "name": "build_response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -150
+      ],
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nif (input.status === \"forbidden\") {\n  return [{ json: { ok: false, error: \"forbidden\", message: \"El usuario no pertenece a esa organizacion.\" } }];\n}\nif (input.status === \"agent_not_found\") {\n  return [{ json: { ok: false, error: \"agent_not_found\", message: \"El agente no existe o no pertenece a esa organizacion.\" } }];\n}\nif (input.status === \"config_not_found\") {\n  return [{ json: { ok: false, error: \"config_not_found\", message: \"El agente no tiene una configuracion de negocio activa (agent_business_config). No se puede agregar/quitar un servicio hasta que exista una.\" } }];\n}\n\nconst action = input.action;\nconst service = input.service || {};\n\nlet message;\nif (action === \"add\") {\n  message = input.service_already_existed\n    ? `Servicio \"${service.key}\" actualizado.`\n    : `Servicio \"${service.key}\" agregado.`;\n  if (input.prices_requested_count > 0 && (input.prices_written_count || 0) === 0 && input.prices_action !== \"none\") {\n    message += \" Aviso: se esperaban precios pero no se pudieron insertar (revisar pricing_version activa del agente).\";\n  } else if (input.prices_requested_count === 0) {\n    message += \" Sin precios asociados todavia -- el servicio no se podra cotizar hasta que se agreguen.\";\n  }\n} else {\n  message = input.service_already_existed\n    ? `Servicio \"${service.key}\" eliminado del catalogo (precios desactivados, historial preservado).`\n    : `El servicio \"${service.key}\" no estaba en el catalogo -- nada que quitar (precios existentes, si los habia, quedaron desactivados igual).`;\n}\n\nreturn [{\n  json: {\n    ok: true,\n    action,\n    service_key: service.key,\n    service_already_existed: input.service_already_existed,\n    new_config_version: input.new_version_written || input.new_version,\n    prices_action: input.prices_action,\n    prices_written_count: input.prices_written_count || 0,\n    message,\n  }\n}];"
+      }
+    }
+  ],
+  "connections": {
+    "WEBHOOK manage_service_post": {
+      "main": [
+        [
+          {
+            "node": "validate_and_build_service_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_and_build_service_request": {
+      "main": [
+        [
+          {
+            "node": "IF valid_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF valid_request": {
+      "main": [
+        [
+          {
+            "node": "DB_get_current_state",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_validation_error_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_get_current_state": {
+      "main": [
+        [
+          {
+            "node": "compute_new_config_and_prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "compute_new_config_and_prices": {
+      "main": [
+        [
+          {
+            "node": "IF status_ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF status_ok": {
+      "main": [
+        [
+          {
+            "node": "DB_write_new_config_version",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_write_new_config_version": {
+      "main": [
+        [
+          {
+            "node": "merge_after_config_write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_after_config_write": {
+      "main": [
+        [
+          {
+            "node": "IF has_price_sql",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF has_price_sql": {
+      "main": [
+        [
+          {
+            "node": "DB_write_prices",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_write_prices": {
+      "main": [
+        [
+          {
+            "node": "merge_after_prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_after_prices": {
+      "main": [
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "id": "bnQxcyxo3Hwwb7CK"
+}
