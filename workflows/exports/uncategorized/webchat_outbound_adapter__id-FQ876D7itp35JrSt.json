@@ -1,0 +1,401 @@
+{
+  "updatedAt": "2026-06-20T19:02:26.041Z",
+  "createdAt": "2026-06-20T18:52:41.9Z",
+  "id": "FQ876D7itp35JrSt",
+  "name": "webchat_outbound_adapter",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "webchat-outbound",
+        "httpMethod": "GET",
+        "responseMode": "lastNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        120
+      ],
+      "id": "webchat-webhook-get",
+      "name": "WEBHOOK webchat_get",
+      "webhookId": "c7a6f8e0-1d2b-4a3c-9e8f-0a1b2c3d4e5f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst headers = input.headers || {};\nconst query = input.query || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || '') : '';\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();\n  }\n  return '';\n}\n\nconst expectedToken = firstValue($env.WEBCHAT_WIDGET_TOKEN, $env.WEBCHAT_SHARED_SECRET);\nconst authHeader = header('authorization');\nconst bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';\nconst providedToken = firstValue(header('x-webchat-token'), bearerToken, query.token);\n\nconst widgetId = firstValue(query.widget_id, query.widgetId);\nconst sessionId = firstValue(query.session_id, query.sessionId);\nconst visitorId = firstValue(query.visitor_id, query.visitorId);\nconst leadKey = visitorId || sessionId;\n\n// Buscar por cualquier identificador disponible: si el frontend mando\n// visitor_id en el inbound pero solo session_id al hacer polling (o\n// viceversa), igual debe encontrar el lead correcto.\nconst leadKeyCandidates = [...new Set([visitorId, sessionId].filter(Boolean))];\n\nconst rawSince = firstValue(query.since);\nconst sinceDate = rawSince && !Number.isNaN(Date.parse(rawSince)) ? new Date(rawSince) : new Date(0);\n\nlet error = null;\nif (!expectedToken) error = 'missing_webchat_token_config';\nelse if (!providedToken || providedToken !== expectedToken) error = 'invalid_webchat_token';\nelse if (!widgetId) error = 'missing_widget_id';\nelse if (!leadKey) error = 'missing_visitor_or_session_id';\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    widget_id: widgetId || null,\n    session_id: sessionId || null,\n    visitor_id: visitorId || null,\n    lead_external_ids: leadKeyCandidates.map((key) => 'web_' + key),\n    since: sinceDate.toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        120
+      ],
+      "id": "webchat-code-validate-outbound",
+      "name": "CODE validate_and_normalize_outbound_request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-request",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -340,
+        120
+      ],
+      "id": "webchat-if-valid-outbound-request",
+      "name": "IF valid_request"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = 'webchat'\n    AND external_id = ANY(ARRAY[{{ ($json.lead_external_ids || []).map(id => \"'\" + String(id).replace(/'/g, \"''\") + \"'\").join(',') }}]::text[])\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT m.id, m.content, m.created_at\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE m.direction = 'outbound'\n  AND m.channel = 'webchat'\n  AND m.created_at > '{{ $json.since }}'::timestamptz\nORDER BY m.created_at ASC\nLIMIT 50;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -60,
+        20
+      ],
+      "id": "webchat-db-poll-outbound-messages",
+      "name": "DB poll_outbound_messages",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('CODE validate_and_normalize_outbound_request').first().json;\nconst rows = $input.all().map((item) => item.json);\n\nconst messages = rows\n  .filter((row) => row && row.id)\n  .map((row) => ({\n    id: row.id,\n    text: row.content || '',\n    created_at: row.created_at,\n    from: 'bot'\n  }));\n\nreturn [{\n  json: {\n    messages,\n    since: input.since,\n    polled_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        20
+      ],
+      "id": "webchat-build-outbound-response",
+      "name": "build_outbound_response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    messages: [],\n    error: input.error || 'invalid_request'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        220
+      ],
+      "id": "webchat-build-outbound-error-response",
+      "name": "build_outbound_error_response"
+    }
+  ],
+  "connections": {
+    "WEBHOOK webchat_get": {
+      "main": [
+        [
+          {
+            "node": "CODE validate_and_normalize_outbound_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE validate_and_normalize_outbound_request": {
+      "main": [
+        [
+          {
+            "node": "IF valid_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF valid_request": {
+      "main": [
+        [
+          {
+            "node": "DB poll_outbound_messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_outbound_error_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB poll_outbound_messages": {
+      "main": [
+        [
+          {
+            "node": "build_outbound_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "b2fbdd67-00ee-41f4-99f2-2724298daaa8",
+  "activeVersionId": "b2fbdd67-00ee-41f4-99f2-2724298daaa8",
+  "versionCounter": 17,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-20T18:52:41.921Z",
+      "createdAt": "2026-06-20T18:52:41.921Z",
+      "role": "workflow:owner",
+      "workflowId": "FQ876D7itp35JrSt",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-20T19:02:26.052Z",
+    "createdAt": "2026-06-20T19:02:26.052Z",
+    "versionId": "b2fbdd67-00ee-41f4-99f2-2724298daaa8",
+    "workflowId": "FQ876D7itp35JrSt",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "webchat-outbound",
+          "httpMethod": "GET",
+          "responseMode": "lastNode",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -900,
+          120
+        ],
+        "id": "webchat-webhook-get",
+        "name": "WEBHOOK webchat_get",
+        "webhookId": "c7a6f8e0-1d2b-4a3c-9e8f-0a1b2c3d4e5f"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nconst headers = input.headers || {};\nconst query = input.query || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || '') : '';\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();\n  }\n  return '';\n}\n\nconst expectedToken = firstValue($env.WEBCHAT_WIDGET_TOKEN, $env.WEBCHAT_SHARED_SECRET);\nconst authHeader = header('authorization');\nconst bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';\nconst providedToken = firstValue(header('x-webchat-token'), bearerToken, query.token);\n\nconst widgetId = firstValue(query.widget_id, query.widgetId);\nconst sessionId = firstValue(query.session_id, query.sessionId);\nconst visitorId = firstValue(query.visitor_id, query.visitorId);\nconst leadKey = visitorId || sessionId;\n\n// Buscar por cualquier identificador disponible: si el frontend mando\n// visitor_id en el inbound pero solo session_id al hacer polling (o\n// viceversa), igual debe encontrar el lead correcto.\nconst leadKeyCandidates = [...new Set([visitorId, sessionId].filter(Boolean))];\n\nconst rawSince = firstValue(query.since);\nconst sinceDate = rawSince && !Number.isNaN(Date.parse(rawSince)) ? new Date(rawSince) : new Date(0);\n\nlet error = null;\nif (!expectedToken) error = 'missing_webchat_token_config';\nelse if (!providedToken || providedToken !== expectedToken) error = 'invalid_webchat_token';\nelse if (!widgetId) error = 'missing_widget_id';\nelse if (!leadKey) error = 'missing_visitor_or_session_id';\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    widget_id: widgetId || null,\n    session_id: sessionId || null,\n    visitor_id: visitorId || null,\n    lead_external_ids: leadKeyCandidates.map((key) => 'web_' + key),\n    since: sinceDate.toISOString()\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -620,
+          120
+        ],
+        "id": "webchat-code-validate-outbound",
+        "name": "CODE validate_and_normalize_outbound_request"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "valid-request",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -340,
+          120
+        ],
+        "id": "webchat-if-valid-outbound-request",
+        "name": "IF valid_request"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = 'webchat'\n    AND external_id = ANY(ARRAY[{{ ($json.lead_external_ids || []).map(id => \"'\" + String(id).replace(/'/g, \"''\") + \"'\").join(',') }}]::text[])\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT m.id, m.content, m.created_at\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE m.direction = 'outbound'\n  AND m.channel = 'webchat'\n  AND m.created_at > '{{ $json.since }}'::timestamptz\nORDER BY m.created_at ASC\nLIMIT 50;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -60,
+          20
+        ],
+        "id": "webchat-db-poll-outbound-messages",
+        "name": "DB poll_outbound_messages",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $('CODE validate_and_normalize_outbound_request').first().json;\nconst rows = $input.all().map((item) => item.json);\n\nconst messages = rows\n  .filter((row) => row && row.id)\n  .map((row) => ({\n    id: row.id,\n    text: row.content || '',\n    created_at: row.created_at,\n    from: 'bot'\n  }));\n\nreturn [{\n  json: {\n    messages,\n    since: input.since,\n    polled_at: new Date().toISOString()\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          20
+        ],
+        "id": "webchat-build-outbound-response",
+        "name": "build_outbound_response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    messages: [],\n    error: input.error || 'invalid_request'\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -60,
+          220
+        ],
+        "id": "webchat-build-outbound-error-response",
+        "name": "build_outbound_error_response"
+      }
+    ],
+    "connections": {
+      "WEBHOOK webchat_get": {
+        "main": [
+          [
+            {
+              "node": "CODE validate_and_normalize_outbound_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CODE validate_and_normalize_outbound_request": {
+        "main": [
+          [
+            {
+              "node": "IF valid_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF valid_request": {
+        "main": [
+          [
+            {
+              "node": "DB poll_outbound_messages",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_outbound_error_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB poll_outbound_messages": {
+        "main": [
+          [
+            {
+              "node": "build_outbound_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-20T19:02:26.369Z",
+        "id": 1392,
+        "workflowId": "FQ876D7itp35JrSt",
+        "versionId": "b2fbdd67-00ee-41f4-99f2-2724298daaa8",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-20T19:02:26.286Z",
+        "id": 1391,
+        "workflowId": "FQ876D7itp35JrSt",
+        "versionId": "b2fbdd67-00ee-41f4-99f2-2724298daaa8",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

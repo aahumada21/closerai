@@ -1,0 +1,2006 @@
+{
+  "updatedAt": "2026-07-13T22:43:41.766Z",
+  "createdAt": "2026-05-22T22:29:40.761Z",
+  "id": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+  "name": "9.1.1 qa_run_single_conversation",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "9.1.1 qa_run_single_conversation",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -1648,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const scenario = $json;\nconst triggerData = (() => { try { return $(\"9.1.1 qa_run_single_conversation\").first().json; } catch { return {}; } })();\nconst scenarioDefaults = scenario.defaults || scenario.qa_defaults || {};\n\nreturn scenario.steps.map((step, index) => ({\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.id,\n    scenario_name: scenario.name,\n    phone: step.phone || scenario.phone,\n    step_index: index + 1,\n    total_steps: scenario.steps.length,\n    text: step.text,\n    message_id: step.message_id || scenarioDefaults.message_id || null,\n    message_type: step.message_type || scenarioDefaults.message_type || \"text\",\n    attachments: step.attachments || scenarioDefaults.attachments || [],\n    lead: step.lead || scenarioDefaults.lead || null,\n    expect: step.expect || {},\n    source_metadata: {\n      ...(scenarioDefaults.source_metadata || {}),\n      ...(step.source_metadata || {})\n    },\n    routing: step.routing || scenarioDefaults.routing || null,\n    organization: step.organization || scenarioDefaults.organization || null,\n    agent: step.agent || scenarioDefaults.agent || null,\n    channel_config: step.channel_config || scenarioDefaults.channel_config || null,\n    whatsapp_number: step.whatsapp_number || scenarioDefaults.whatsapp_number || null,\n    wait_ms: step.wait_ms || scenarioDefaults.wait_ms || 3500,\n    expected_outcome: scenario.expected_outcome || triggerData.expected_outcome || null\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        240
+      ],
+      "id": "b3ec8336-c072-4006-8c9a-64588bbff1a4",
+      "name": "expand_steps"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1040,
+        240
+      ],
+      "id": "206c108a-65a8-4841-9cab-210627c00d97",
+      "name": "loop_steps"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        240
+      ],
+      "id": "d91abac3-fc7b-412b-a6d2-8e898cde1d20",
+      "name": "build_inbound_payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_QA_INGRESS_WEBHOOK_URL || \"https://n8n.aahumada.com/webhook/qa-whatsapp-normalized\" }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $(\"build_inbound_payload\").item.json.inbound_payload }}",
+        "options": {
+          "fullResponse": true,
+          "neverError": true,
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -16,
+        -48
+      ],
+      "id": "950ad6d5-688d-4a4d-af98-6efa07d2e6ed",
+      "name": "send_to_bot_webhook",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, phone, external_id, organization_id, agent_id\nFROM public.leads\nWHERE phone = '{{ $(\"build_inbound_payload\").item.json.phone }}'\n   OR external_id = '{{ $(\"build_inbound_payload\").item.json.phone }}'\nORDER BY created_at DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        960,
+        -32
+      ],
+      "id": "195df7f2-7b8c-4c99-aac6-9b02d08055eb",
+      "name": "get_lead",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched_audit AS (\n  SELECT\n    a.outbound_message_id::text AS outbound_message_id,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank,\n    a.created_at\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n),\nmatched_message AS (\n  SELECT\n    m.id::text AS id,\n    m.content::text AS content,\n    m.status::text AS status,\n    m.provider_status::text AS provider_status,\n    m.created_at AS created_at\n  FROM public.messages m\n  WHERE m.id::text = (SELECT outbound_message_id FROM matched_audit)\n    AND m.direction = 'outbound'\n    AND COALESCE(TRIM(m.content), '') <> ''\n    AND LOWER(COALESCE(m.content, '')) NOT IN ('workflow was started', 'workflow started')\n  ORDER BY m.created_at DESC\n  LIMIT 1\n)\nSELECT id, content, status, provider_status, created_at\nFROM matched_message\nUNION ALL\nSELECT\n  NULL::text AS id,\n  NULL::text AS content,\n  NULL::text AS status,\n  NULL::text AS provider_status,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched_message)\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1680,
+        -32
+      ],
+      "id": "8f4f5109-54b9-4fe4-af46-09f64c522121",
+      "name": "get_last_outbound_message",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1856,
+        -32
+      ],
+      "id": "eac2653d-49a9-4b0d-ae00-87265bd366e3",
+      "name": "get_last_audit",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function nodeJson(name) {\n  try {\n    return $(name).item.json || {};\n  } catch (error) {\n    return {};\n  }\n}\n\nfunction firstObject(...objects) {\n  return objects.find((value) => value && Object.keys(value).length > 0) || {};\n}\n\nconst input = nodeJson(\"build_inbound_payload\");\nconst lead = firstObject(nodeJson(\"get_lead\"), nodeJson(\"get_lead_before\"));\nconst previousState = nodeJson(\"get_state_before\");\nconst currentState = nodeJson(\"get_state_after\");\nconst lastMessage = nodeJson(\"get_last_outbound_message\");\nconst immediateAudit = nodeJson(\"get_last_audit\");\nconst webhookResp = nodeJson(\"send_to_bot_webhook\");\nconst webhookStatus = webhookResp.statusCode || null;\nconst webhookBody = webhookResp.body || webhookResp;\n\nconst expect = input.expect || {};\nconst errors = [];\n\nfunction normalize(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction includesAll(text, values = []) {\n  const normalizedText = normalize(text);\n  return values.every((value) => normalizedText.includes(normalize(value)));\n}\n\nfunction includesAny(text, values = []) {\n  const normalizedText = normalize(text);\n  return values.some((value) => normalizedText.includes(normalize(value)));\n}\n\nfunction notIncludesAny(text, values = []) {\n  const raw = String(text || \"\");\n  return values.every((value) => !raw.includes(String(value || \"\")));\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return value;\n  }\n  return null;\n}\n\nconst expectedQaMessageId = String(input.qa_message_id || \"\");\n\nfunction auditMatchesStep(audit) {\n  if (!audit || Object.keys(audit).length === 0 || !expectedQaMessageId) return false;\n  const auditIdempotencyKey = String(audit.idempotency_key || \"\");\n  const auditInboundMessageId = String(audit.inbound_message_id || \"\");\n  const auditLatestUserMessage = String(audit.latest_user_message || \"\");\n  return (\n    auditIdempotencyKey.includes(expectedQaMessageId) ||\n    auditInboundMessageId === expectedQaMessageId ||\n    normalize(auditLatestUserMessage) === normalize(input.text)\n  );\n}\n\nconst auditCandidates = [\n  nodeJson(\"get_outbound_attempt_3\"),\n  nodeJson(\"get_outbound_attempt_2\"),\n  nodeJson(\"get_outbound_attempt_1\"),\n  immediateAudit\n].filter((audit) => audit && Object.keys(audit).length > 0);\n\nconst lastAudit = auditCandidates.find(auditMatchesStep) || immediateAudit || {};\n\nconst responseText =\n  lastAudit.meta?.bot ||\n  lastAudit.meta?.message ||\n  lastMessage.content ||\n  \"\";\nconst hasBotResponse = String(responseText || \"\").trim() !== \"\";\n\nconst lastBotAction = currentState.last_bot_action || null;\nconst stage = currentState.stage || null;\nconst nextGoal = currentState.next_goal || null;\nconst hasAction = lastBotAction !== null && String(lastBotAction).trim() !== \"\";\n\nconst stateChanged =\n  String(previousState.stage || \"\") !== String(currentState.stage || \"\") ||\n  String(previousState.next_goal || \"\") !== String(currentState.next_goal || \"\") ||\n  String(previousState.service_interest || \"\") !== String(currentState.service_interest || \"\") ||\n  String(previousState.vehicle_type || \"\") !== String(currentState.vehicle_type || \"\") ||\n  String(previousState.district || \"\") !== String(currentState.district || \"\");\n\nconst idempotencyKey = String(lastAudit.idempotency_key || \"\");\nconst inboundMessageId = String(lastAudit.inbound_message_id || \"\");\nconst latestUserMessage = String(lastAudit.latest_user_message || \"\");\nconst auditMatchesCurrentStep =\n  !!expectedQaMessageId &&\n  (\n    idempotencyKey.includes(expectedQaMessageId) ||\n    inboundMessageId === expectedQaMessageId ||\n    normalize(latestUserMessage) === normalize(input.text)\n  );\n\nconst hasRealAudit =\n  !!lastAudit.flow_name &&\n  !!lastAudit.decision &&\n  !!lastAudit.idempotency_key &&\n  auditMatchesCurrentStep;\n\nconst resolvedFlowName = hasRealAudit ? lastAudit.flow_name : null;\nconst resolvedDecision = hasRealAudit ? lastAudit.decision : null;\nconst resolvedIdempotencyKey = hasRealAudit ? lastAudit.idempotency_key : null;\nconst hasAudit = hasRealAudit;\nconst decisionAction = resolvedDecision?.action || null;\n\nconst auditMeta = hasRealAudit && lastAudit.meta ? lastAudit.meta : {};\nconst auditToolRegistry = auditMeta.tool_registry || auditMeta.execution_result?.tool_registry || {};\nconst organizationId = firstValue(\n  currentState.organization_id,\n  lead.organization_id,\n  auditMeta.organization_id,\n  auditToolRegistry.organization_id,\n  input.routing?.organization_id\n);\nconst agentId = firstValue(\n  currentState.agent_id,\n  lead.agent_id,\n  auditMeta.agent_id,\n  auditToolRegistry.agent_id,\n  input.routing?.agent_id\n);\nconst toolName = firstValue(\n  auditMeta.tool_name,\n  auditToolRegistry.tool_name,\n  auditMeta.execution_result?.audit?.tool_name,\n  Array.isArray(auditToolRegistry.mapped_tool_names) ? auditToolRegistry.mapped_tool_names[0] : null\n);\n\nconst isStubResponse =\n  normalize(responseText) === normalize(\"Workflow was started\") ||\n  normalize(responseText) === normalize(\"workflow started\");\n\nconst expectedNoProcess = expect.should_process === false;\nconst auditCreatedAtMs = Date.parse(lastAudit.created_at || \"\");\nconst inputSentAtMs = Date.parse(input.sent_at || \"\");\nconst isPreviousAuditReplay =\n  expectedNoProcess &&\n  hasAudit &&\n  Number.isFinite(auditCreatedAtMs) &&\n  Number.isFinite(inputSentAtMs) &&\n  auditCreatedAtMs < inputSentAtMs;\nconst isDiscardAudit =\n  hasAudit &&\n  (\n    isPreviousAuditReplay ||\n    (\n      resolvedFlowName === \"qa_whatsapp_normalized_router\" &&\n      (\n        decisionAction === \"not_processed\" ||\n        auditMeta.event_type === \"discarded_inbound_event\" ||\n        auditMeta.should_process === false\n      )\n    )\n  );\n\nif (!expectedNoProcess) {\n  if ((webhookBody.code && Number(webhookBody.code) !== 200) || String(webhookBody.message || \"\").toLowerCase().includes(\"error\")) {\n    errors.push(`webhook_error: status=${webhookStatus || \"n/a\"} message=${webhookBody.message || \"unknown\"}`);\n  }\n  if (!hasBotResponse) errors.push(\"bot is null or empty\");\n  if (isStubResponse) errors.push(\"invalid_stub_response: workflow ack is not a bot response\");\n  if (!hasAudit) errors.push(\"empty audit: missing flow_name, decision, idempotency_key or current-step correlation\");\n  if (!hasBotResponse && !hasAction && !stateChanged) errors.push(\"no response, no action, no state change\");\n} else if ((hasBotResponse && !isPreviousAuditReplay) || stateChanged || (hasAudit && !isDiscardAudit)) {\n  errors.push(\"expected no processing, but bot/action/state or non-discard audit was found\");\n}\n\nif (Array.isArray(expect.last_bot_action_any) && expect.last_bot_action_any.length > 0) {\n  if (!expect.last_bot_action_any.includes(lastBotAction)) {\n    errors.push(`expected last_bot_action: ${expect.last_bot_action_any.join(\", \")} | received: ${lastBotAction}`);\n  }\n}\n\nif (Array.isArray(expect.decision_action_any) && expect.decision_action_any.length > 0) {\n  if (!expect.decision_action_any.includes(decisionAction)) {\n    errors.push(`expected decision_action: ${expect.decision_action_any.join(\", \")} | received: ${decisionAction}`);\n  }\n}\n\nif (Array.isArray(expect.stage_any) && expect.stage_any.length > 0 && !expect.stage_any.includes(stage)) {\n  errors.push(`expected stage: ${expect.stage_any.join(\", \")} | received: ${stage}`);\n}\n\nif (Array.isArray(expect.next_goal_any) && expect.next_goal_any.length > 0 && !expect.next_goal_any.includes(nextGoal)) {\n  errors.push(`expected next_goal: ${expect.next_goal_any.join(\", \")} | received: ${nextGoal}`);\n}\n\nif (Array.isArray(expect.tool_name_any) && expect.tool_name_any.length > 0 && !expect.tool_name_any.includes(toolName)) {\n  errors.push(`expected tool_name: ${expect.tool_name_any.join(\", \")} | received: ${toolName}`);\n}\n\nif (expect.must_have_agent === true && !agentId) errors.push(\"agent_id missing\");\nif (expect.must_have_organization === true && !organizationId) errors.push(\"organization_id missing\");\nif (expect.expected_agent_id && String(agentId) !== String(expect.expected_agent_id)) {\n  errors.push(`expected agent_id: ${expect.expected_agent_id} | received: ${agentId}`);\n}\nif (expect.expected_organization_id && String(organizationId) !== String(expect.expected_organization_id)) {\n  errors.push(`expected organization_id: ${expect.expected_organization_id} | received: ${organizationId}`);\n}\n\nif (Array.isArray(expect.response_includes) && expect.response_includes.length > 0 && !includesAll(responseText, expect.response_includes)) {\n  errors.push(`response missing required text: ${expect.response_includes.join(\", \")}`);\n}\n\nif (Array.isArray(expect.response_includes_any) && expect.response_includes_any.length > 0 && !includesAny(responseText, expect.response_includes_any)) {\n  errors.push(`response missing any-of text: ${expect.response_includes_any.join(\", \")}`);\n}\n\nif (Array.isArray(expect.response_not_includes) && expect.response_not_includes.length > 0 && !notIncludesAny(responseText, expect.response_not_includes)) {\n  errors.push(`response contains forbidden text: ${expect.response_not_includes.join(\", \")}`);\n}\n\nconst passed = errors.length === 0;\n\nreturn [\n  {\n    json: {\n      run_id: input.run_id,\n      scenario_id: input.scenario_id,\n      scenario_name: input.scenario_name,\n      step_index: input.step_index,\n      text_sent: input.text,\n      passed,\n      errors,\n      lead_id: lead.id || null,\n      bot_response: responseText,\n      agent_id: agentId,\n      organization_id: organizationId,\n      decision_action: decisionAction,\n      tool_name: toolName,\n      audit_ok: hasAudit,\n      state_snapshot: {\n        previous: {\n          stage: previousState.stage || null,\n          next_goal: previousState.next_goal || null,\n          last_bot_action: previousState.last_bot_action || null,\n          service_interest: previousState.service_interest || null,\n          vehicle_type: previousState.vehicle_type || null,\n          district: previousState.district || null,\n          organization_id: previousState.organization_id || null,\n          agent_id: previousState.agent_id || null\n        },\n        current: {\n          stage,\n          next_goal: nextGoal,\n          last_bot_action: lastBotAction,\n          service_interest: currentState.service_interest || null,\n          vehicle_type: currentState.vehicle_type || null,\n          district: currentState.district || null,\n          organization_id: currentState.organization_id || null,\n          agent_id: currentState.agent_id || null\n        },\n        changed: stateChanged\n      },\n      audit_snapshot: {\n        flow_name: resolvedFlowName,\n        decision: resolvedDecision,\n        idempotency_key: resolvedIdempotencyKey,\n        inbound_message_id: hasRealAudit ? inboundMessageId : null,\n        outbound_message_id: hasRealAudit ? (lastAudit.outbound_message_id || null) : null,\n        latest_user_message: hasRealAudit ? latestUserMessage : null,\n        matched_current_step: auditMatchesCurrentStep,\n        organization_id: organizationId,\n        agent_id: agentId,\n        tool_name: toolName,\n        audit_ok: hasAudit,\n        is_discard_audit: isDiscardAudit,\n        is_discard_audit: isDiscardAudit,\n        meta: lastAudit.meta || null,\n        created_at: lastAudit.created_at || null\n      },\n      qa_checks: {\n        has_bot_response: hasBotResponse,\n        has_action: hasAction,\n        state_changed: stateChanged,\n        has_audit: hasAudit,\n        expected_no_process: expectedNoProcess,\n        agent_id: agentId,\n        organization_id: organizationId,\n        decision_action: decisionAction,\n        tool_name: toolName,\n        audit_ok: hasAudit,\n        is_discard_audit: isDiscardAudit\n      },\n      created_at: new Date().toISOString()\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        128
+      ],
+      "id": "baeddb92-2bc9-4cfe-a615-3a50ac2ceb19",
+      "name": "validate_step_result"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.qa_test_results (\n  run_id,\n  scenario_id,\n  scenario_name,\n  step_index,\n  text_sent,\n  passed,\n  errors,\n  lead_id,\n  state_snapshot,\n  bot_response,\n  audit_snapshot,\n  created_at\n)\nVALUES (\n  NULLIF('{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}', ''),\n\n  NULLIF('{{ ($json.scenario_id || \"\").replace(/'/g, \"''\") }}', ''),\n\n  NULLIF('{{ ($json.scenario_name || \"\").replace(/'/g, \"''\") }}', ''),\n\n  {{ Number($json.step_index || 0) }},\n\n  NULLIF('{{ ($json.text_sent || \"\").replace(/'/g, \"''\") }}', ''),\n\n  {{ $json.passed === true ? 'true' : 'false' }},\n\n  '{{ JSON.stringify($json.errors || []).replace(/'/g, \"''\") }}'::jsonb,\n\n  NULLIF('{{ ($json.lead_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n\n  '{{ JSON.stringify($json.state_snapshot || {}).replace(/'/g, \"''\") }}'::jsonb,\n\n  NULLIF('{{ ($json.bot_response || \"\").replace(/'/g, \"''\") }}', ''),\n\n  '{{ JSON.stringify($json.audit_snapshot || {}).replace(/'/g, \"''\") }}'::jsonb,\n\n  NOW()\n)\nRETURNING\n  id,\n  run_id,\n  scenario_id,\n  step_index,\n  passed,\n  created_at;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2320,
+        176
+      ],
+      "id": "8aec1aae-b738-470a-bd71-32b26672dff9",
+      "name": "insert_qa_result",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upsert_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  VALUES (\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  )\n  ON CONFLICT (channel, external_id)\n  DO UPDATE SET\n    phone = EXCLUDED.phone,\n    name = EXCLUDED.name,\n    updated_at = NOW()\n  RETURNING id\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1408,
+        80
+      ],
+      "id": "c4d567a2-84ab-4f94-8d7f-0516ffa9b5d2",
+      "name": "prepare_qa_lead",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = '{{ $(\"build_inbound_payload\").item.json.phone }}'\n   OR external_id = '{{ $(\"build_inbound_payload\").item.json.phone }}'\nORDER BY created_at DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -608,
+        112
+      ],
+      "id": "f3a7206a-07d2-4383-ad8d-5507a63999f6",
+      "name": "get_lead_before",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -400,
+        112
+      ],
+      "id": "daed721f-106a-458e-8abb-1b282aef0e63",
+      "name": "get_state_before",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        128,
+        240
+      ],
+      "id": "a52a5e4e-d7f4-4078-9cb0-a1071c486963",
+      "name": "get_outbound_attempt_1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "619eb2fd-e0f5-48a0-ab4a-e47b43f53cf5",
+              "leftValue": "={{ !!$(\"build_inbound_payload\").item.json.qa_message_id && (String($json.idempotency_key || \"\").includes($(\"build_inbound_payload\").item.json.qa_message_id) || String($json.inbound_message_id || \"\") === $(\"build_inbound_payload\").item.json.qa_message_id) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        240
+      ],
+      "id": "9875618d-1afa-456d-9d08-f75fe22c7394",
+      "name": "If outbound_found_1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1136,
+        -32
+      ],
+      "id": "03f5da3b-a801-47f6-a460-74fce8ee3363",
+      "name": "get_state_after",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 120
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        256
+      ],
+      "id": "d469cd7c-8d9b-44ac-b697-000086640cac",
+      "name": "Wait 2",
+      "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ae09886c-95ae-4c47-aabd-a17742b7da08",
+              "leftValue": "={{ !!$(\"build_inbound_payload\").item.json.qa_message_id && (String($json.idempotency_key || \"\").includes($(\"build_inbound_payload\").item.json.qa_message_id) || String($json.inbound_message_id || \"\") === $(\"build_inbound_payload\").item.json.qa_message_id) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        256
+      ],
+      "id": "6643ee06-08fb-4e40-be41-ce6fc8f3e1d4",
+      "name": "IF outbound_found_2"
+    },
+    {
+      "parameters": {
+        "amount": 150
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        352
+      ],
+      "id": "d7ea3431-f3e4-4665-9107-cfef1eeb2946",
+      "name": "Wait 3",
+      "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2128,
+        352
+      ],
+      "id": "0fdd9ef9-e9c1-4da5-80a0-058626110d22",
+      "name": "get_outbound_attempt_3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 120
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -48
+      ],
+      "id": "9fbf37c4-fb2c-4ed5-88fa-a9b4033bcb26",
+      "name": "Wait 1",
+      "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1104,
+        256
+      ],
+      "id": "96f72fd2-ac1a-49aa-a69c-6d0391a5ff18",
+      "name": "get_outbound_attempt_2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const scenario = $(\"expand_steps\").first().json;\n\nreturn [{\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.scenario_id,\n    scenario_name: scenario.scenario_name,\n    expected_outcome: scenario.expected_outcome || null,\n    has_expected_outcome: !!scenario.expected_outcome\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        600
+      ],
+      "name": "collect_scenario_info",
+      "id": "qa-collect-scenario-info"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "qa-cond-has-expected",
+              "leftValue": "={{ $json.has_expected_outcome }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        620,
+        600
+      ],
+      "name": "IF has_expected_outcome",
+      "id": "qa-if-has-expected"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nconst query = `\nSELECT COALESCE(json_agg(t ORDER BY t.step_index), '[]'::json) AS transcript\nFROM (\n  SELECT step_index, text_sent, bot_response, passed, errors\n  FROM public.qa_test_results\n  WHERE run_id = ${sqlText(ctx.run_id)}\n    AND scenario_id = ${sqlText(ctx.scenario_id)}\n) t;\n`;\n\nreturn [{ json: { ...ctx, transcript_query: query } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        520
+      ],
+      "name": "build_transcript_query",
+      "id": "qa-build-transcript-query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.transcript_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1060,
+        520
+      ],
+      "name": "DB get_transcript",
+      "id": "qa-db-get-transcript",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"collect_scenario_info\").first().json;\nconst dbResult = $json || {};\n\nconst transcript = Array.isArray(dbResult.transcript) ? dbResult.transcript : [];\n\nconst transcriptText = transcript\n  .map((step) => {\n    const lines = [\n      \"Paso \" + step.step_index + \":\",\n      \"Usuario: \" + (step.text_sent || \"(sin texto)\"),\n      \"Bot: \" + (step.bot_response || \"(sin respuesta)\")\n    ];\n    if (Array.isArray(step.errors) && step.errors.length > 0) {\n      lines.push(\"Errores tecnicos detectados por las validaciones automaticas: \" + step.errors.join(\" | \"));\n    }\n    return lines.join(\"\\n\");\n  })\n  .join(\"\\n\\n\");\n\nconst developerPrompt = `Eres un evaluador de calidad (QA) para un bot de ventas conversacional (WhatsApp/webchat) de un negocio de detailing y lavado de autos en Chile.\n\nTe voy a dar:\n1. El objetivo esperado de la conversacion (lo que deberia lograr el bot).\n2. La transcripcion completa de la conversacion de prueba (cada paso: lo que escribio el usuario y lo que respondio el bot).\n\nTu trabajo es evaluar si la conversacion en su conjunto cumplio el objetivo esperado, sin inventar problemas que no se vean en la transcripcion. Se especifico citando el paso exacto (ej. \"en el paso 3...\") cuando reportes un problema o inconsistencia.\n\nResponde siempre en espanol, en el formato JSON estructurado que se te pide.`;\n\nconst userPrompt = `Objetivo esperado de esta conversacion de prueba:\n${ctx.expected_outcome}\n\nNombre del escenario: ${ctx.scenario_name || \"(sin nombre)\"}\n\nTranscripcion completa:\n${transcriptText || \"(no se registraron pasos)\"}\n\nEvalua si la conversacion cumplio el objetivo esperado. Reporta:\n- passed: true si el bot logro el objetivo esperado de forma razonable, sin errores graves ni respuestas inconsistentes con el contexto previo. false si no lo logro, si se repitio sin avanzar, si dio informacion incorrecta o inconsistente, o si hubo errores tecnicos visibles.\n- inconsistencies: lista de momentos donde el bot se contradijo, perdio el contexto de la conversacion, o respondio algo que no calza con lo que el usuario pidio.\n- problems: lista de errores tecnicos o fallas evidentes (mensajes vacios, loops, texto corrupto, etc).\n- notes: un resumen breve (2-3 frases) de como te parecio la conversacion en general.`;\n\nreturn [{\n  json: {\n    ...ctx,\n    developer_prompt: developerPrompt,\n    user_prompt: userPrompt\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        520
+      ],
+      "name": "build_llm_judge_prompt",
+      "id": "qa-build-judge-prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  model: \"gpt-5.4-mini\",\n  messages: [\n    { role: \"developer\", content: $json.developer_prompt },\n    { role: \"user\", content: $json.user_prompt }\n  ],\n  temperature: 0.1,\n  response_format: {\n    type: \"json_schema\",\n    json_schema: {\n      name: \"qa_conversation_judgement\",\n      strict: true,\n      schema: {\n        type: \"object\",\n        properties: {\n          passed: { type: \"boolean\" },\n          inconsistencies: { type: \"array\", items: { type: \"string\" } },\n          problems: { type: \"array\", items: { type: \"string\" } },\n          notes: { type: \"string\" }\n        },\n        required: [\"passed\", \"inconsistencies\", \"problems\", \"notes\"],\n        additionalProperties: false\n      }\n    }\n  }\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1500,
+        520
+      ],
+      "name": "call_openai_judge",
+      "id": "qa-call-openai-judge",
+      "credentials": {
+        "openAiApi": {
+          "id": "SmQPupAVe2an24Gv",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $(\"build_llm_judge_prompt\").first().json;\nconst response = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null) return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlJsonbArray(value) {\n  const arr = Array.isArray(value) ? value : [];\n  return \"'\" + JSON.stringify(arr).replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nlet verdict = null;\ntry {\n  const rawContent = response.choices?.[0]?.message?.content;\n  verdict = JSON.parse(rawContent);\n} catch (e) {\n  verdict = null;\n}\n\nconst llmPassed = verdict && typeof verdict.passed === \"boolean\" ? verdict.passed : false;\nconst inconsistencies = verdict && Array.isArray(verdict.inconsistencies) ? verdict.inconsistencies : [];\nconst problems = verdict && Array.isArray(verdict.problems) ? verdict.problems : [];\nconst notes = verdict && typeof verdict.notes === \"string\"\n  ? verdict.notes\n  : \"No se pudo interpretar la respuesta del evaluador OpenAI.\";\n\nconst query = `\nUPDATE public.qa_test_results\nSET\n  passed = ${llmPassed ? \"true\" : \"false\"},\n  llm_passed = ${llmPassed ? \"true\" : \"false\"},\n  llm_inconsistencies = ${sqlJsonbArray(inconsistencies)},\n  llm_problems = ${sqlJsonbArray(problems)},\n  llm_notes = ${sqlText(notes)},\n  llm_raw_response = ${sqlText(JSON.stringify(response))}::jsonb\nWHERE run_id = ${sqlText(ctx.run_id)}\n  AND scenario_id = ${sqlText(ctx.scenario_id)}\nRETURNING id, run_id, scenario_id, passed, llm_passed;\n`;\n\nreturn [{\n  json: {\n    run_id: ctx.run_id,\n    scenario_id: ctx.scenario_id,\n    update_query: query,\n    llm_passed: llmPassed,\n    inconsistencies,\n    problems,\n    notes\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        520
+      ],
+      "name": "parse_llm_verdict",
+      "id": "qa-parse-verdict"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.update_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1940,
+        520
+      ],
+      "name": "DB apply_llm_verdict",
+      "id": "qa-db-apply-verdict",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2180,
+        600
+      ],
+      "name": "finalize_scenario_result",
+      "id": "qa-finalize-scenario-result"
+    }
+  ],
+  "connections": {
+    "9.1.1 qa_run_single_conversation": {
+      "main": [
+        [
+          {
+            "node": "prepare_qa_lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "expand_steps": {
+      "main": [
+        [
+          {
+            "node": "loop_steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop_steps": {
+      "main": [
+        [
+          {
+            "node": "collect_scenario_info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_inbound_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_inbound_payload": {
+      "main": [
+        [
+          {
+            "node": "get_lead_before",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_to_bot_webhook": {
+      "main": [
+        [
+          {
+            "node": "Wait 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_lead": {
+      "main": [
+        [
+          {
+            "node": "get_state_after",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_last_outbound_message": {
+      "main": [
+        [
+          {
+            "node": "get_last_audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_last_audit": {
+      "main": [
+        [
+          {
+            "node": "validate_step_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_step_result": {
+      "main": [
+        [
+          {
+            "node": "insert_qa_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert_qa_result": {
+      "main": [
+        [
+          {
+            "node": "loop_steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare_qa_lead": {
+      "main": [
+        [
+          {
+            "node": "expand_steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_lead_before": {
+      "main": [
+        [
+          {
+            "node": "get_state_before",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_state_before": {
+      "main": [
+        [
+          {
+            "node": "send_to_bot_webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_outbound_attempt_1": {
+      "main": [
+        [
+          {
+            "node": "If outbound_found_1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If outbound_found_1": {
+      "main": [
+        [
+          {
+            "node": "get_lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_state_after": {
+      "main": [
+        [
+          {
+            "node": "get_last_outbound_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2": {
+      "main": [
+        [
+          {
+            "node": "get_outbound_attempt_2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF outbound_found_2": {
+      "main": [
+        [
+          {
+            "node": "get_lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3": {
+      "main": [
+        [
+          {
+            "node": "get_outbound_attempt_3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_outbound_attempt_3": {
+      "main": [
+        [
+          {
+            "node": "get_lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1": {
+      "main": [
+        [
+          {
+            "node": "get_outbound_attempt_1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_outbound_attempt_2": {
+      "main": [
+        [
+          {
+            "node": "IF outbound_found_2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "collect_scenario_info": {
+      "main": [
+        [
+          {
+            "node": "IF has_expected_outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF has_expected_outcome": {
+      "main": [
+        [
+          {
+            "node": "build_transcript_query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "finalize_scenario_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_transcript_query": {
+      "main": [
+        [
+          {
+            "node": "DB get_transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB get_transcript": {
+      "main": [
+        [
+          {
+            "node": "build_llm_judge_prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_llm_judge_prompt": {
+      "main": [
+        [
+          {
+            "node": "call_openai_judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "call_openai_judge": {
+      "main": [
+        [
+          {
+            "node": "parse_llm_verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_llm_verdict": {
+      "main": [
+        [
+          {
+            "node": "DB apply_llm_verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB apply_llm_verdict": {
+      "main": [
+        [
+          {
+            "node": "finalize_scenario_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "c6a43789-2712-4c51-b0a6-7bdf2c094b46",
+  "activeVersionId": "c6a43789-2712-4c51-b0a6-7bdf2c094b46",
+  "versionCounter": 154,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-13T22:43:41.772Z",
+    "createdAt": "2026-07-13T22:43:41.772Z",
+    "versionId": "c6a43789-2712-4c51-b0a6-7bdf2c094b46",
+    "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "c055762a-8fe7-4141-a639-df2372f30060",
+        "typeVersion": 1.1,
+        "name": "9.1.1 qa_run_single_conversation",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "position": [
+          -1648,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const scenario = $json;\nconst triggerData = (() => { try { return $(\"9.1.1 qa_run_single_conversation\").first().json; } catch { return {}; } })();\nconst scenarioDefaults = scenario.defaults || scenario.qa_defaults || {};\n\nreturn scenario.steps.map((step, index) => ({\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.id,\n    scenario_name: scenario.name,\n    phone: step.phone || scenario.phone,\n    step_index: index + 1,\n    total_steps: scenario.steps.length,\n    text: step.text,\n    message_id: step.message_id || scenarioDefaults.message_id || null,\n    message_type: step.message_type || scenarioDefaults.message_type || \"text\",\n    attachments: step.attachments || scenarioDefaults.attachments || [],\n    lead: step.lead || scenarioDefaults.lead || null,\n    expect: step.expect || {},\n    source_metadata: {\n      ...(scenarioDefaults.source_metadata || {}),\n      ...(step.source_metadata || {})\n    },\n    routing: step.routing || scenarioDefaults.routing || null,\n    organization: step.organization || scenarioDefaults.organization || null,\n    agent: step.agent || scenarioDefaults.agent || null,\n    channel_config: step.channel_config || scenarioDefaults.channel_config || null,\n    whatsapp_number: step.whatsapp_number || scenarioDefaults.whatsapp_number || null,\n    wait_ms: step.wait_ms || scenarioDefaults.wait_ms || 3500,\n    expected_outcome: scenario.expected_outcome || triggerData.expected_outcome || null\n  }\n}));\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1248,
+          240
+        ],
+        "id": "b3ec8336-c072-4006-8c9a-64588bbff1a4",
+        "name": "expand_steps"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -1040,
+          240
+        ],
+        "id": "206c108a-65a8-4841-9cab-210627c00d97",
+        "name": "loop_steps"
+      },
+      {
+        "parameters": {
+          "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -848,
+          240
+        ],
+        "id": "d91abac3-fc7b-412b-a6d2-8e898cde1d20",
+        "name": "build_inbound_payload"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.N8N_QA_INGRESS_WEBHOOK_URL || \"https://n8n.aahumada.com/webhook/qa-whatsapp-normalized\" }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $(\"build_inbound_payload\").item.json.inbound_payload }}",
+          "options": {
+            "fullResponse": true,
+            "neverError": true,
+            "timeout": 120000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -16,
+          -48
+        ],
+        "id": "950ad6d5-688d-4a4d-af98-6efa07d2e6ed",
+        "name": "send_to_bot_webhook",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT id, phone, external_id, organization_id, agent_id\nFROM public.leads\nWHERE phone = '{{ $(\"build_inbound_payload\").item.json.phone }}'\n   OR external_id = '{{ $(\"build_inbound_payload\").item.json.phone }}'\nORDER BY created_at DESC\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          960,
+          -32
+        ],
+        "id": "195df7f2-7b8c-4c99-aac6-9b02d08055eb",
+        "name": "get_lead",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched_audit AS (\n  SELECT\n    a.outbound_message_id::text AS outbound_message_id,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank,\n    a.created_at\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n),\nmatched_message AS (\n  SELECT\n    m.id::text AS id,\n    m.content::text AS content,\n    m.status::text AS status,\n    m.provider_status::text AS provider_status,\n    m.created_at AS created_at\n  FROM public.messages m\n  WHERE m.id::text = (SELECT outbound_message_id FROM matched_audit)\n    AND m.direction = 'outbound'\n    AND COALESCE(TRIM(m.content), '') <> ''\n    AND LOWER(COALESCE(m.content, '')) NOT IN ('workflow was started', 'workflow started')\n  ORDER BY m.created_at DESC\n  LIMIT 1\n)\nSELECT id, content, status, provider_status, created_at\nFROM matched_message\nUNION ALL\nSELECT\n  NULL::text AS id,\n  NULL::text AS content,\n  NULL::text AS status,\n  NULL::text AS provider_status,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched_message)\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1680,
+          -32
+        ],
+        "id": "8f4f5109-54b9-4fe4-af46-09f64c522121",
+        "name": "get_last_outbound_message",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1856,
+          -32
+        ],
+        "id": "eac2653d-49a9-4b0d-ae00-87265bd366e3",
+        "name": "get_last_audit",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "function nodeJson(name) {\n  try {\n    return $(name).item.json || {};\n  } catch (error) {\n    return {};\n  }\n}\n\nfunction firstObject(...objects) {\n  return objects.find((value) => value && Object.keys(value).length > 0) || {};\n}\n\nconst input = nodeJson(\"build_inbound_payload\");\nconst lead = firstObject(nodeJson(\"get_lead\"), nodeJson(\"get_lead_before\"));\nconst previousState = nodeJson(\"get_state_before\");\nconst currentState = nodeJson(\"get_state_after\");\nconst lastMessage = nodeJson(\"get_last_outbound_message\");\nconst immediateAudit = nodeJson(\"get_last_audit\");\nconst webhookResp = nodeJson(\"send_to_bot_webhook\");\nconst webhookStatus = webhookResp.statusCode || null;\nconst webhookBody = webhookResp.body || webhookResp;\n\nconst expect = input.expect || {};\nconst errors = [];\n\nfunction normalize(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction includesAll(text, values = []) {\n  const normalizedText = normalize(text);\n  return values.every((value) => normalizedText.includes(normalize(value)));\n}\n\nfunction includesAny(text, values = []) {\n  const normalizedText = normalize(text);\n  return values.some((value) => normalizedText.includes(normalize(value)));\n}\n\nfunction notIncludesAny(text, values = []) {\n  const raw = String(text || \"\");\n  return values.every((value) => !raw.includes(String(value || \"\")));\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return value;\n  }\n  return null;\n}\n\nconst expectedQaMessageId = String(input.qa_message_id || \"\");\n\nfunction auditMatchesStep(audit) {\n  if (!audit || Object.keys(audit).length === 0 || !expectedQaMessageId) return false;\n  const auditIdempotencyKey = String(audit.idempotency_key || \"\");\n  const auditInboundMessageId = String(audit.inbound_message_id || \"\");\n  const auditLatestUserMessage = String(audit.latest_user_message || \"\");\n  return (\n    auditIdempotencyKey.includes(expectedQaMessageId) ||\n    auditInboundMessageId === expectedQaMessageId ||\n    normalize(auditLatestUserMessage) === normalize(input.text)\n  );\n}\n\nconst auditCandidates = [\n  nodeJson(\"get_outbound_attempt_3\"),\n  nodeJson(\"get_outbound_attempt_2\"),\n  nodeJson(\"get_outbound_attempt_1\"),\n  immediateAudit\n].filter((audit) => audit && Object.keys(audit).length > 0);\n\nconst lastAudit = auditCandidates.find(auditMatchesStep) || immediateAudit || {};\n\nconst responseText =\n  lastAudit.meta?.bot ||\n  lastAudit.meta?.message ||\n  lastMessage.content ||\n  \"\";\nconst hasBotResponse = String(responseText || \"\").trim() !== \"\";\n\nconst lastBotAction = currentState.last_bot_action || null;\nconst stage = currentState.stage || null;\nconst nextGoal = currentState.next_goal || null;\nconst hasAction = lastBotAction !== null && String(lastBotAction).trim() !== \"\";\n\nconst stateChanged =\n  String(previousState.stage || \"\") !== String(currentState.stage || \"\") ||\n  String(previousState.next_goal || \"\") !== String(currentState.next_goal || \"\") ||\n  String(previousState.service_interest || \"\") !== String(currentState.service_interest || \"\") ||\n  String(previousState.vehicle_type || \"\") !== String(currentState.vehicle_type || \"\") ||\n  String(previousState.district || \"\") !== String(currentState.district || \"\");\n\nconst idempotencyKey = String(lastAudit.idempotency_key || \"\");\nconst inboundMessageId = String(lastAudit.inbound_message_id || \"\");\nconst latestUserMessage = String(lastAudit.latest_user_message || \"\");\nconst auditMatchesCurrentStep =\n  !!expectedQaMessageId &&\n  (\n    idempotencyKey.includes(expectedQaMessageId) ||\n    inboundMessageId === expectedQaMessageId ||\n    normalize(latestUserMessage) === normalize(input.text)\n  );\n\nconst hasRealAudit =\n  !!lastAudit.flow_name &&\n  !!lastAudit.decision &&\n  !!lastAudit.idempotency_key &&\n  auditMatchesCurrentStep;\n\nconst resolvedFlowName = hasRealAudit ? lastAudit.flow_name : null;\nconst resolvedDecision = hasRealAudit ? lastAudit.decision : null;\nconst resolvedIdempotencyKey = hasRealAudit ? lastAudit.idempotency_key : null;\nconst hasAudit = hasRealAudit;\nconst decisionAction = resolvedDecision?.action || null;\n\nconst auditMeta = hasRealAudit && lastAudit.meta ? lastAudit.meta : {};\nconst auditToolRegistry = auditMeta.tool_registry || auditMeta.execution_result?.tool_registry || {};\nconst organizationId = firstValue(\n  currentState.organization_id,\n  lead.organization_id,\n  auditMeta.organization_id,\n  auditToolRegistry.organization_id,\n  input.routing?.organization_id\n);\nconst agentId = firstValue(\n  currentState.agent_id,\n  lead.agent_id,\n  auditMeta.agent_id,\n  auditToolRegistry.agent_id,\n  input.routing?.agent_id\n);\nconst toolName = firstValue(\n  auditMeta.tool_name,\n  auditToolRegistry.tool_name,\n  auditMeta.execution_result?.audit?.tool_name,\n  Array.isArray(auditToolRegistry.mapped_tool_names) ? auditToolRegistry.mapped_tool_names[0] : null\n);\n\nconst isStubResponse =\n  normalize(responseText) === normalize(\"Workflow was started\") ||\n  normalize(responseText) === normalize(\"workflow started\");\n\nconst expectedNoProcess = expect.should_process === false;\nconst auditCreatedAtMs = Date.parse(lastAudit.created_at || \"\");\nconst inputSentAtMs = Date.parse(input.sent_at || \"\");\nconst isPreviousAuditReplay =\n  expectedNoProcess &&\n  hasAudit &&\n  Number.isFinite(auditCreatedAtMs) &&\n  Number.isFinite(inputSentAtMs) &&\n  auditCreatedAtMs < inputSentAtMs;\nconst isDiscardAudit =\n  hasAudit &&\n  (\n    isPreviousAuditReplay ||\n    (\n      resolvedFlowName === \"qa_whatsapp_normalized_router\" &&\n      (\n        decisionAction === \"not_processed\" ||\n        auditMeta.event_type === \"discarded_inbound_event\" ||\n        auditMeta.should_process === false\n      )\n    )\n  );\n\nif (!expectedNoProcess) {\n  if ((webhookBody.code && Number(webhookBody.code) !== 200) || String(webhookBody.message || \"\").toLowerCase().includes(\"error\")) {\n    errors.push(`webhook_error: status=${webhookStatus || \"n/a\"} message=${webhookBody.message || \"unknown\"}`);\n  }\n  if (!hasBotResponse) errors.push(\"bot is null or empty\");\n  if (isStubResponse) errors.push(\"invalid_stub_response: workflow ack is not a bot response\");\n  if (!hasAudit) errors.push(\"empty audit: missing flow_name, decision, idempotency_key or current-step correlation\");\n  if (!hasBotResponse && !hasAction && !stateChanged) errors.push(\"no response, no action, no state change\");\n} else if ((hasBotResponse && !isPreviousAuditReplay) || stateChanged || (hasAudit && !isDiscardAudit)) {\n  errors.push(\"expected no processing, but bot/action/state or non-discard audit was found\");\n}\n\nif (Array.isArray(expect.last_bot_action_any) && expect.last_bot_action_any.length > 0) {\n  if (!expect.last_bot_action_any.includes(lastBotAction)) {\n    errors.push(`expected last_bot_action: ${expect.last_bot_action_any.join(\", \")} | received: ${lastBotAction}`);\n  }\n}\n\nif (Array.isArray(expect.decision_action_any) && expect.decision_action_any.length > 0) {\n  if (!expect.decision_action_any.includes(decisionAction)) {\n    errors.push(`expected decision_action: ${expect.decision_action_any.join(\", \")} | received: ${decisionAction}`);\n  }\n}\n\nif (Array.isArray(expect.stage_any) && expect.stage_any.length > 0 && !expect.stage_any.includes(stage)) {\n  errors.push(`expected stage: ${expect.stage_any.join(\", \")} | received: ${stage}`);\n}\n\nif (Array.isArray(expect.next_goal_any) && expect.next_goal_any.length > 0 && !expect.next_goal_any.includes(nextGoal)) {\n  errors.push(`expected next_goal: ${expect.next_goal_any.join(\", \")} | received: ${nextGoal}`);\n}\n\nif (Array.isArray(expect.tool_name_any) && expect.tool_name_any.length > 0 && !expect.tool_name_any.includes(toolName)) {\n  errors.push(`expected tool_name: ${expect.tool_name_any.join(\", \")} | received: ${toolName}`);\n}\n\nif (expect.must_have_agent === true && !agentId) errors.push(\"agent_id missing\");\nif (expect.must_have_organization === true && !organizationId) errors.push(\"organization_id missing\");\nif (expect.expected_agent_id && String(agentId) !== String(expect.expected_agent_id)) {\n  errors.push(`expected agent_id: ${expect.expected_agent_id} | received: ${agentId}`);\n}\nif (expect.expected_organization_id && String(organizationId) !== String(expect.expected_organization_id)) {\n  errors.push(`expected organization_id: ${expect.expected_organization_id} | received: ${organizationId}`);\n}\n\nif (Array.isArray(expect.response_includes) && expect.response_includes.length > 0 && !includesAll(responseText, expect.response_includes)) {\n  errors.push(`response missing required text: ${expect.response_includes.join(\", \")}`);\n}\n\nif (Array.isArray(expect.response_includes_any) && expect.response_includes_any.length > 0 && !includesAny(responseText, expect.response_includes_any)) {\n  errors.push(`response missing any-of text: ${expect.response_includes_any.join(\", \")}`);\n}\n\nif (Array.isArray(expect.response_not_includes) && expect.response_not_includes.length > 0 && !notIncludesAny(responseText, expect.response_not_includes)) {\n  errors.push(`response contains forbidden text: ${expect.response_not_includes.join(\", \")}`);\n}\n\nconst passed = errors.length === 0;\n\nreturn [\n  {\n    json: {\n      run_id: input.run_id,\n      scenario_id: input.scenario_id,\n      scenario_name: input.scenario_name,\n      step_index: input.step_index,\n      text_sent: input.text,\n      passed,\n      errors,\n      lead_id: lead.id || null,\n      bot_response: responseText,\n      agent_id: agentId,\n      organization_id: organizationId,\n      decision_action: decisionAction,\n      tool_name: toolName,\n      audit_ok: hasAudit,\n      state_snapshot: {\n        previous: {\n          stage: previousState.stage || null,\n          next_goal: previousState.next_goal || null,\n          last_bot_action: previousState.last_bot_action || null,\n          service_interest: previousState.service_interest || null,\n          vehicle_type: previousState.vehicle_type || null,\n          district: previousState.district || null,\n          organization_id: previousState.organization_id || null,\n          agent_id: previousState.agent_id || null\n        },\n        current: {\n          stage,\n          next_goal: nextGoal,\n          last_bot_action: lastBotAction,\n          service_interest: currentState.service_interest || null,\n          vehicle_type: currentState.vehicle_type || null,\n          district: currentState.district || null,\n          organization_id: currentState.organization_id || null,\n          agent_id: currentState.agent_id || null\n        },\n        changed: stateChanged\n      },\n      audit_snapshot: {\n        flow_name: resolvedFlowName,\n        decision: resolvedDecision,\n        idempotency_key: resolvedIdempotencyKey,\n        inbound_message_id: hasRealAudit ? inboundMessageId : null,\n        outbound_message_id: hasRealAudit ? (lastAudit.outbound_message_id || null) : null,\n        latest_user_message: hasRealAudit ? latestUserMessage : null,\n        matched_current_step: auditMatchesCurrentStep,\n        organization_id: organizationId,\n        agent_id: agentId,\n        tool_name: toolName,\n        audit_ok: hasAudit,\n        is_discard_audit: isDiscardAudit,\n        is_discard_audit: isDiscardAudit,\n        meta: lastAudit.meta || null,\n        created_at: lastAudit.created_at || null\n      },\n      qa_checks: {\n        has_bot_response: hasBotResponse,\n        has_action: hasAction,\n        state_changed: stateChanged,\n        has_audit: hasAudit,\n        expected_no_process: expectedNoProcess,\n        agent_id: agentId,\n        organization_id: organizationId,\n        decision_action: decisionAction,\n        tool_name: toolName,\n        audit_ok: hasAudit,\n        is_discard_audit: isDiscardAudit\n      },\n      created_at: new Date().toISOString()\n    }\n  }\n];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2064,
+          128
+        ],
+        "id": "baeddb92-2bc9-4cfe-a615-3a50ac2ceb19",
+        "name": "validate_step_result"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.qa_test_results (\n  run_id,\n  scenario_id,\n  scenario_name,\n  step_index,\n  text_sent,\n  passed,\n  errors,\n  lead_id,\n  state_snapshot,\n  bot_response,\n  audit_snapshot,\n  created_at\n)\nVALUES (\n  NULLIF('{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}', ''),\n\n  NULLIF('{{ ($json.scenario_id || \"\").replace(/'/g, \"''\") }}', ''),\n\n  NULLIF('{{ ($json.scenario_name || \"\").replace(/'/g, \"''\") }}', ''),\n\n  {{ Number($json.step_index || 0) }},\n\n  NULLIF('{{ ($json.text_sent || \"\").replace(/'/g, \"''\") }}', ''),\n\n  {{ $json.passed === true ? 'true' : 'false' }},\n\n  '{{ JSON.stringify($json.errors || []).replace(/'/g, \"''\") }}'::jsonb,\n\n  NULLIF('{{ ($json.lead_id || \"\").replace(/'/g, \"''\") }}', '')::uuid,\n\n  '{{ JSON.stringify($json.state_snapshot || {}).replace(/'/g, \"''\") }}'::jsonb,\n\n  NULLIF('{{ ($json.bot_response || \"\").replace(/'/g, \"''\") }}', ''),\n\n  '{{ JSON.stringify($json.audit_snapshot || {}).replace(/'/g, \"''\") }}'::jsonb,\n\n  NOW()\n)\nRETURNING\n  id,\n  run_id,\n  scenario_id,\n  step_index,\n  passed,\n  created_at;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2320,
+          176
+        ],
+        "id": "8aec1aae-b738-470a-bd71-32b26672dff9",
+        "name": "insert_qa_result",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH upsert_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  VALUES (\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  )\n  ON CONFLICT (channel, external_id)\n  DO UPDATE SET\n    phone = EXCLUDED.phone,\n    name = EXCLUDED.name,\n    updated_at = NOW()\n  RETURNING id\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -1408,
+          80
+        ],
+        "id": "c4d567a2-84ab-4f94-8d7f-0516ffa9b5d2",
+        "name": "prepare_qa_lead",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT id, phone, external_id\nFROM public.leads\nWHERE phone = '{{ $(\"build_inbound_payload\").item.json.phone }}'\n   OR external_id = '{{ $(\"build_inbound_payload\").item.json.phone }}'\nORDER BY created_at DESC\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -608,
+          112
+        ],
+        "id": "f3a7206a-07d2-4383-ad8d-5507a63999f6",
+        "name": "get_lead_before",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -400,
+          112
+        ],
+        "id": "daed721f-106a-458e-8abb-1b282aef0e63",
+        "name": "get_state_before",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          128,
+          240
+        ],
+        "id": "a52a5e4e-d7f4-4078-9cb0-a1071c486963",
+        "name": "get_outbound_attempt_1",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "619eb2fd-e0f5-48a0-ab4a-e47b43f53cf5",
+                "leftValue": "={{ !!$(\"build_inbound_payload\").item.json.qa_message_id && (String($json.idempotency_key || \"\").includes($(\"build_inbound_payload\").item.json.qa_message_id) || String($json.inbound_message_id || \"\") === $(\"build_inbound_payload\").item.json.qa_message_id) }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          672,
+          240
+        ],
+        "id": "9875618d-1afa-456d-9d08-f75fe22c7394",
+        "name": "If outbound_found_1"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT *\nFROM public.lead_state\nWHERE lead_id::text = '{{ $(\"get_lead\").item.json.id }}'\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1136,
+          -32
+        ],
+        "id": "03f5da3b-a801-47f6-a460-74fce8ee3363",
+        "name": "get_state_after",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "amount": 120
+        },
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          896,
+          256
+        ],
+        "id": "d469cd7c-8d9b-44ac-b697-000086640cac",
+        "name": "Wait 2",
+        "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "ae09886c-95ae-4c47-aabd-a17742b7da08",
+                "leftValue": "={{ !!$(\"build_inbound_payload\").item.json.qa_message_id && (String($json.idempotency_key || \"\").includes($(\"build_inbound_payload\").item.json.qa_message_id) || String($json.inbound_message_id || \"\") === $(\"build_inbound_payload\").item.json.qa_message_id) }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1680,
+          256
+        ],
+        "id": "6643ee06-08fb-4e40-be41-ce6fc8f3e1d4",
+        "name": "IF outbound_found_2"
+      },
+      {
+        "parameters": {
+          "amount": 150
+        },
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1920,
+          352
+        ],
+        "id": "d7ea3431-f3e4-4665-9107-cfef1eeb2946",
+        "name": "Wait 3",
+        "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2128,
+          352
+        ],
+        "id": "0fdd9ef9-e9c1-4da5-80a0-058626110d22",
+        "name": "get_outbound_attempt_3",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "amount": 120
+        },
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          176,
+          -48
+        ],
+        "id": "9fbf37c4-fb2c-4ed5-88fa-a9b4033bcb26",
+        "name": "Wait 1",
+        "webhookId": "c944feeb-9650-402b-9db0-68fe451043e3"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expected AS (\n  SELECT\n    '{{ $(\"build_inbound_payload\").item.json.qa_message_id }}'::text AS qa_message_id,\n    '{{ ($(\"build_inbound_payload\").item.json.text || \"\").replace(/'/g, \"''\") }}'::text AS step_text,\n    '{{ $(\"build_inbound_payload\").item.json.sent_at }}'::timestamptz AS sent_at\n),\nmatched AS (\n  SELECT\n    a.flow_name::text AS flow_name,\n    a.decision AS decision,\n    a.meta AS meta,\n    a.idempotency_key::text AS idempotency_key,\n    a.inbound_message_id::text AS inbound_message_id,\n    a.outbound_message_id::text AS outbound_message_id,\n    a.latest_user_message::text AS latest_user_message,\n    a.created_at AS created_at,\n    CASE\n      WHEN COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%' THEN 0\n      WHEN COALESCE(a.inbound_message_id::text, '') = e.qa_message_id THEN 1\n      ELSE 2\n    END AS match_rank\n  FROM public.audit_logs a\n  CROSS JOIN expected e\n  WHERE a.lead_id::text = '{{ $(\"get_lead_before\").item.json.id }}'\n    AND a.created_at >= (e.sent_at - interval '5 seconds')\n    AND a.created_at <= (e.sent_at + interval '300 seconds')\n    AND (\n      COALESCE(a.idempotency_key::text, '') ILIKE '%' || e.qa_message_id || '%'\n      OR COALESCE(a.inbound_message_id::text, '') = e.qa_message_id\n      OR trim(lower(COALESCE(a.latest_user_message::text, ''))) = trim(lower(e.step_text))\n    )\n  ORDER BY match_rank ASC, a.created_at DESC\n  LIMIT 1\n)\nSELECT\n  flow_name,\n  decision,\n  COALESCE(meta, '{}'::jsonb) AS meta,\n  idempotency_key,\n  inbound_message_id,\n  outbound_message_id,\n  latest_user_message,\n  created_at\nFROM matched\nUNION ALL\nSELECT\n  NULL::text AS flow_name,\n  NULL::jsonb AS decision,\n  '{}'::jsonb AS meta,\n  NULL::text AS idempotency_key,\n  NULL::text AS inbound_message_id,\n  NULL::text AS outbound_message_id,\n  NULL::text AS latest_user_message,\n  NULL::timestamptz AS created_at\nWHERE NOT EXISTS (SELECT 1 FROM matched)\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1104,
+          256
+        ],
+        "id": "96f72fd2-ac1a-49aa-a69c-6d0391a5ff18",
+        "name": "get_outbound_attempt_2",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const scenario = $(\"expand_steps\").first().json;\n\nreturn [{\n  json: {\n    run_id: scenario.run_id,\n    scenario_id: scenario.scenario_id,\n    scenario_name: scenario.scenario_name,\n    expected_outcome: scenario.expected_outcome || null,\n    has_expected_outcome: !!scenario.expected_outcome\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          600
+        ],
+        "name": "collect_scenario_info",
+        "id": "qa-collect-scenario-info"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "qa-cond-has-expected",
+                "leftValue": "={{ $json.has_expected_outcome }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          620,
+          600
+        ],
+        "name": "IF has_expected_outcome",
+        "id": "qa-if-has-expected"
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nconst query = `\nSELECT COALESCE(json_agg(t ORDER BY t.step_index), '[]'::json) AS transcript\nFROM (\n  SELECT step_index, text_sent, bot_response, passed, errors\n  FROM public.qa_test_results\n  WHERE run_id = ${sqlText(ctx.run_id)}\n    AND scenario_id = ${sqlText(ctx.scenario_id)}\n) t;\n`;\n\nreturn [{ json: { ...ctx, transcript_query: query } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          840,
+          520
+        ],
+        "name": "build_transcript_query",
+        "id": "qa-build-transcript-query"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.transcript_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1060,
+          520
+        ],
+        "name": "DB get_transcript",
+        "id": "qa-db-get-transcript",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $(\"collect_scenario_info\").first().json;\nconst dbResult = $json || {};\n\nconst transcript = Array.isArray(dbResult.transcript) ? dbResult.transcript : [];\n\nconst transcriptText = transcript\n  .map((step) => {\n    const lines = [\n      \"Paso \" + step.step_index + \":\",\n      \"Usuario: \" + (step.text_sent || \"(sin texto)\"),\n      \"Bot: \" + (step.bot_response || \"(sin respuesta)\")\n    ];\n    if (Array.isArray(step.errors) && step.errors.length > 0) {\n      lines.push(\"Errores tecnicos detectados por las validaciones automaticas: \" + step.errors.join(\" | \"));\n    }\n    return lines.join(\"\\n\");\n  })\n  .join(\"\\n\\n\");\n\nconst developerPrompt = `Eres un evaluador de calidad (QA) para un bot de ventas conversacional (WhatsApp/webchat) de un negocio de detailing y lavado de autos en Chile.\n\nTe voy a dar:\n1. El objetivo esperado de la conversacion (lo que deberia lograr el bot).\n2. La transcripcion completa de la conversacion de prueba (cada paso: lo que escribio el usuario y lo que respondio el bot).\n\nTu trabajo es evaluar si la conversacion en su conjunto cumplio el objetivo esperado, sin inventar problemas que no se vean en la transcripcion. Se especifico citando el paso exacto (ej. \"en el paso 3...\") cuando reportes un problema o inconsistencia.\n\nResponde siempre en espanol, en el formato JSON estructurado que se te pide.`;\n\nconst userPrompt = `Objetivo esperado de esta conversacion de prueba:\n${ctx.expected_outcome}\n\nNombre del escenario: ${ctx.scenario_name || \"(sin nombre)\"}\n\nTranscripcion completa:\n${transcriptText || \"(no se registraron pasos)\"}\n\nEvalua si la conversacion cumplio el objetivo esperado. Reporta:\n- passed: true si el bot logro el objetivo esperado de forma razonable, sin errores graves ni respuestas inconsistentes con el contexto previo. false si no lo logro, si se repitio sin avanzar, si dio informacion incorrecta o inconsistente, o si hubo errores tecnicos visibles.\n- inconsistencies: lista de momentos donde el bot se contradijo, perdio el contexto de la conversacion, o respondio algo que no calza con lo que el usuario pidio.\n- problems: lista de errores tecnicos o fallas evidentes (mensajes vacios, loops, texto corrupto, etc).\n- notes: un resumen breve (2-3 frases) de como te parecio la conversacion en general.`;\n\nreturn [{\n  json: {\n    ...ctx,\n    developer_prompt: developerPrompt,\n    user_prompt: userPrompt\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1280,
+          520
+        ],
+        "name": "build_llm_judge_prompt",
+        "id": "qa-build-judge-prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/chat/completions",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "specifyHeaders": "json",
+          "jsonHeaders": "={\n  \"Content-Type\": \"application/json\"\n}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{\n{\n  model: \"gpt-5.4-mini\",\n  messages: [\n    { role: \"developer\", content: $json.developer_prompt },\n    { role: \"user\", content: $json.user_prompt }\n  ],\n  temperature: 0.1,\n  response_format: {\n    type: \"json_schema\",\n    json_schema: {\n      name: \"qa_conversation_judgement\",\n      strict: true,\n      schema: {\n        type: \"object\",\n        properties: {\n          passed: { type: \"boolean\" },\n          inconsistencies: { type: \"array\", items: { type: \"string\" } },\n          problems: { type: \"array\", items: { type: \"string\" } },\n          notes: { type: \"string\" }\n        },\n        required: [\"passed\", \"inconsistencies\", \"problems\", \"notes\"],\n        additionalProperties: false\n      }\n    }\n  }\n}\n}}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1500,
+          520
+        ],
+        "name": "call_openai_judge",
+        "id": "qa-call-openai-judge",
+        "credentials": {
+          "openAiApi": {
+            "id": "SmQPupAVe2an24Gv",
+            "name": "OpenAI account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $(\"build_llm_judge_prompt\").first().json;\nconst response = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null) return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlJsonbArray(value) {\n  const arr = Array.isArray(value) ? value : [];\n  return \"'\" + JSON.stringify(arr).replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nlet verdict = null;\ntry {\n  const rawContent = response.choices?.[0]?.message?.content;\n  verdict = JSON.parse(rawContent);\n} catch (e) {\n  verdict = null;\n}\n\nconst llmPassed = verdict && typeof verdict.passed === \"boolean\" ? verdict.passed : false;\nconst inconsistencies = verdict && Array.isArray(verdict.inconsistencies) ? verdict.inconsistencies : [];\nconst problems = verdict && Array.isArray(verdict.problems) ? verdict.problems : [];\nconst notes = verdict && typeof verdict.notes === \"string\"\n  ? verdict.notes\n  : \"No se pudo interpretar la respuesta del evaluador OpenAI.\";\n\nconst query = `\nUPDATE public.qa_test_results\nSET\n  passed = ${llmPassed ? \"true\" : \"false\"},\n  llm_passed = ${llmPassed ? \"true\" : \"false\"},\n  llm_inconsistencies = ${sqlJsonbArray(inconsistencies)},\n  llm_problems = ${sqlJsonbArray(problems)},\n  llm_notes = ${sqlText(notes)},\n  llm_raw_response = ${sqlText(JSON.stringify(response))}::jsonb\nWHERE run_id = ${sqlText(ctx.run_id)}\n  AND scenario_id = ${sqlText(ctx.scenario_id)}\nRETURNING id, run_id, scenario_id, passed, llm_passed;\n`;\n\nreturn [{\n  json: {\n    run_id: ctx.run_id,\n    scenario_id: ctx.scenario_id,\n    update_query: query,\n    llm_passed: llmPassed,\n    inconsistencies,\n    problems,\n    notes\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1720,
+          520
+        ],
+        "name": "parse_llm_verdict",
+        "id": "qa-parse-verdict"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.update_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1940,
+          520
+        ],
+        "name": "DB apply_llm_verdict",
+        "id": "qa-db-apply-verdict",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "9.1.1 qa_run_single_conversation": {
+        "main": [
+          [
+            {
+              "node": "prepare_qa_lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "expand_steps": {
+        "main": [
+          [
+            {
+              "node": "loop_steps",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "loop_steps": {
+        "main": [
+          [
+            {
+              "node": "collect_scenario_info",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_inbound_payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_inbound_payload": {
+        "main": [
+          [
+            {
+              "node": "get_lead_before",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "send_to_bot_webhook": {
+        "main": [
+          [
+            {
+              "node": "Wait 1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_lead": {
+        "main": [
+          [
+            {
+              "node": "get_state_after",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_last_outbound_message": {
+        "main": [
+          [
+            {
+              "node": "get_last_audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_last_audit": {
+        "main": [
+          [
+            {
+              "node": "validate_step_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_step_result": {
+        "main": [
+          [
+            {
+              "node": "insert_qa_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "insert_qa_result": {
+        "main": [
+          [
+            {
+              "node": "loop_steps",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "prepare_qa_lead": {
+        "main": [
+          [
+            {
+              "node": "expand_steps",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_lead_before": {
+        "main": [
+          [
+            {
+              "node": "get_state_before",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_state_before": {
+        "main": [
+          [
+            {
+              "node": "send_to_bot_webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_outbound_attempt_1": {
+        "main": [
+          [
+            {
+              "node": "If outbound_found_1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If outbound_found_1": {
+        "main": [
+          [
+            {
+              "node": "get_lead",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Wait 2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_state_after": {
+        "main": [
+          [
+            {
+              "node": "get_last_outbound_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 2": {
+        "main": [
+          [
+            {
+              "node": "get_outbound_attempt_2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF outbound_found_2": {
+        "main": [
+          [
+            {
+              "node": "get_lead",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Wait 3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 3": {
+        "main": [
+          [
+            {
+              "node": "get_outbound_attempt_3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_outbound_attempt_3": {
+        "main": [
+          [
+            {
+              "node": "get_lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 1": {
+        "main": [
+          [
+            {
+              "node": "get_outbound_attempt_1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get_outbound_attempt_2": {
+        "main": [
+          [
+            {
+              "node": "IF outbound_found_2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "collect_scenario_info": {
+        "main": [
+          [
+            {
+              "node": "IF has_expected_outcome",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has_expected_outcome": {
+        "main": [
+          [
+            {
+              "node": "build_transcript_query",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "build_transcript_query": {
+        "main": [
+          [
+            {
+              "node": "DB get_transcript",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB get_transcript": {
+        "main": [
+          [
+            {
+              "node": "build_llm_judge_prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_llm_judge_prompt": {
+        "main": [
+          [
+            {
+              "node": "call_openai_judge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "call_openai_judge": {
+        "main": [
+          [
+            {
+              "node": "parse_llm_verdict",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "parse_llm_verdict": {
+        "main": [
+          [
+            {
+              "node": "DB apply_llm_verdict",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-13T22:43:42.079Z",
+        "id": 2008,
+        "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+        "versionId": "c6a43789-2712-4c51-b0a6-7bdf2c094b46",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-13T22:43:41.949Z",
+        "id": 2007,
+        "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
+        "versionId": "c6a43789-2712-4c51-b0a6-7bdf2c094b46",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

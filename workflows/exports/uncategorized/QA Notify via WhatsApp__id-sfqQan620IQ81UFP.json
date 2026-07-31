@@ -1,0 +1,282 @@
+{
+  "updatedAt": "2026-06-29T20:33:16.32Z",
+  "createdAt": "2026-06-29T20:33:16.32Z",
+  "id": "sfqQan620IQ81UFP",
+  "name": "QA Notify via Telegram",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qa-notify-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        0
+      ],
+      "id": "webhook-trigger-1",
+      "name": "Webhook",
+      "webhookId": "7801f0be-440e-4d66-922e-4fdb9f4cdbc0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst message = String(body.message || \"Notificacion sin contenido.\");\n\nreturn [{ message }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        0
+      ],
+      "id": "validate-input-1",
+      "name": "validate_input"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8977117395:AAEOezIQYMbWRRF62th2v5C9vhaybcoDhUU/sendMessage",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "1734857807"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        240,
+        0
+      ],
+      "id": "wb-send-1",
+      "name": "WB Send",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"sent\": true } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        0
+      ],
+      "id": "respond-1",
+      "name": "respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "validate_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_input": {
+      "main": [
+        [
+          {
+            "node": "WB Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WB Send": {
+      "main": [
+        [
+          {
+            "node": "respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "ce78925a-47a6-4727-ba18-7cb2731a0c91",
+  "activeVersionId": "ce78925a-47a6-4727-ba18-7cb2731a0c91",
+  "versionCounter": 10,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-29T20:33:16.333Z",
+      "createdAt": "2026-06-29T20:33:16.333Z",
+      "role": "workflow:owner",
+      "workflowId": "sfqQan620IQ81UFP",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-29T20:33:16.338Z",
+    "createdAt": "2026-06-29T20:33:16.338Z",
+    "versionId": "ce78925a-47a6-4727-ba18-7cb2731a0c91",
+    "workflowId": "sfqQan620IQ81UFP",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "qa-notify-whatsapp",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -200,
+          0
+        ],
+        "id": "webhook-trigger-1",
+        "name": "Webhook",
+        "webhookId": "7801f0be-440e-4d66-922e-4fdb9f4cdbc0"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\nconst phone = String(body.phone || \"\").replace(/[^0-9]/g, \"\");\nconst message = String(body.message || \"Notificacion sin contenido.\");\n\nif (!phone) {\n  throw new Error(\"Falta phone en el body\");\n}\n\nreturn [{ phone, message }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          20,
+          0
+        ],
+        "id": "validate-input-1",
+        "name": "validate_input"
+      },
+      {
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1024332077436840",
+          "recipientPhoneNumber": "={{$json.phone}}",
+          "textBody": "={{$json.message}}",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          240,
+          0
+        ],
+        "id": "wb-send-1",
+        "name": "WB Send",
+        "credentials": {
+          "whatsAppApi": {
+            "id": "lHyvwqasIbVP59b8",
+            "name": "WhatsApp account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "webhookId": "c6786145-ff0d-4b5f-9600-c34292744803"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { \"sent\": true, \"phone\": $json.phone } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          460,
+          0
+        ],
+        "id": "respond-1",
+        "name": "respond"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "validate_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_input": {
+        "main": [
+          [
+            {
+              "node": "WB Send",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "WB Send": {
+        "main": [
+          [
+            {
+              "node": "respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-29T20:34:00.822Z",
+        "id": 1578,
+        "workflowId": "sfqQan620IQ81UFP",
+        "versionId": "ce78925a-47a6-4727-ba18-7cb2731a0c91",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

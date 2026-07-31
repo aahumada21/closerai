@@ -1,0 +1,134 @@
+# Deltas del motor de salon (rubro 2) contra bot_decision_tree.yaml (detailing).
+#
+# Por que un archivo de deltas y no un arbol completo paralelo: el motor de salon
+# (`3 rules_engine_salon`, id zhwv70Fiz7zdIDn8) es un CLON de `3 rules_engine` con un
+# solo nodo modificado (`rules_evaluation`) -- misma cadena de ~54 reglas, mismo orden,
+# mismos helpers genericos (normalizeText, buildRuleResult, fields_to_clear,
+# formatAppointmentWhen, etc). Duplicar el arbol de 635 lineas hubiera sido ~95%
+# identico y se habria desincronizado en la primera actualizacion de cualquiera de los
+# dos motores. Este archivo documenta SOLO lo que cambia. Para todo lo demas (el resto
+# de la cadena de reglas, el catalogo de acciones, los sub-workflows 6.x compartidos),
+# `bot_decision_tree.yaml` + `action_subflows.yaml` siguen siendo la fuente de verdad,
+# vigente para ambos rubros.
+
+meta:
+  bot: "Salon Bella (agente de prueba) - closer conversacional (peluqueria/salon de belleza)"
+  vertical: "salon"
+  base_document: "bot_decision_tree.yaml (detailing) -- este archivo solo documenta diferencias"
+  source_workflow: "3 rules_engine_salon, id zhwv70Fiz7zdIDn8 (clon de 3 rules_engine)"
+  agent_id_test: "fb3a6a81-012b-4828-88f9-09c1ed86c593 (salon_bella_test, agente de prueba interno, no un cliente real)"
+  last_verified_against_source: "2026-07-26"
+  plan_doc: "docs/MULTI_VERTICAL_INTEGRATION_PLAN_2026-07-25.md (Fase 0-3)"
+
+# Mecanismo de despacho: 2 lead_loader / nodo "Rules Engine" resuelve el workflowId por
+# expresion segun agent_business_config.config.vertical (mapa fijo: "detailing" -> id de
+# 3 rules_engine, "salon" -> id de 3 rules_engine_salon). Un agente con vertical=salon
+# nunca toca el motor de detailing y viceversa -- cero riesgo de mezcla en runtime.
+
+vocabulary_swap:
+  description: >
+    La columna `vehicle_type` de lead_state se sigue usando tal cual (no se puede
+    renombrar sin migracion de varios workflows -- ver restriccion documentada en
+    memoria de sesion) pero para salon guarda "Junior"/"Senior" (categoria de
+    estilista) en vez de tipo de vehiculo. `district` se autocompleta al entrar al
+    motor (primer valor de agent_business_config.config.coverage.districts, o "Local")
+    para que las referencias a ctx.leadState.district nunca lo vean vacio -- el salon
+    opera en un solo local, no hay conversacion sobre comuna. `service_address`/
+    `address_confirmed` tambien se autocompletan igual (a "Atencion en nuestro local")
+    para que el flujo de reserva nunca pida una direccion de domicilio.
+  redefined_functions:
+    - extractServiceInterestFromText: "corte / color / manicure / tratamiento_facial / peinado (antes lavado_basico/premium/encerado_full)"
+    - extractVehicleTypeFromText: "Junior / Senior (antes SUV/sedan/hatchback/camioneta/city car/moto/furgon)"
+    - normalizeVehicleType: "idem, normaliza a Junior/Senior"
+    - isGenericVehicleType: "detecta 'estilista'/'cualquiera'/'da lo mismo' (antes 'auto'/'vehiculo'/'automovil')"
+    - hasExplicitVehicleOwnership: "detecta preferencia de categoria de estilista (antes preferencia de tipo de vehiculo)"
+    - mentionsAnotherVehicle: "detecta 'otro servicio'/'otra cita'/'otra hora' (antes 'otro auto'/'2 autos')"
+  removed_rules_from_array:
+    description: >
+      Codigo de las funciones queda en el archivo (dead code, no se borro para
+      minimizar el diff contra el original) pero ya no estan en el array `rules`, asi
+      que son inalcanzables. Todas eran 100% especificas de auto sin equivalente de
+      negocio en salon.
+    list:
+      - ruleRecommendPremiumWhenVeryDirty
+      - ruleMultiVehicleFaq
+      - ruleVehicleRuralNeedsClarification
+      - ruleVehicleRuralClarificationReplyProvided (su reply-handler)
+      - ruleCheaperAlternativeRequest
+      - ruleInlineCompleteBookingRequest
+  new_rules_added:
+    - fn: ruleAdditionalServiceRequestWhileBooked
+      priority: 94
+      position_in_array: "justo antes de ruleAlreadyBookedAcknowledgment"
+      why: >
+        [ENCONTRADO Y ARREGLADO 2026-07-26, QA Fase 3] Sin esta regla, "quiero agendar
+        tambien un manicure" con una reserva ya confirmada (stage=booked) no matcheaba
+        ninguna regla deterministica y caia al LLM, que preguntaba/confirmaba en texto
+        libre sin nunca actualizar service_interest de verdad en el state -- la
+        confirmacion final ("si, agendalo") entonces disparaba
+        ruleAlreadyBookedAcknowledgment (que SI es deterministica) diciendole al
+        cliente que su reserva YA existia, y de hecho terminaba creando una SEGUNDA
+        reserva del MISMO servicio original en vez del servicio nuevo pedido. Con la
+        regla: detecta un segundo servicio distinto (via extractServiceInterestFromText)
+        mientras stage=booked, resetea service_interest/vehicle_type/campos
+        relacionados (fields_to_clear) y arranca un flujo de cotizacion limpio para el
+        servicio nuevo, sin tocar la reserva existente. Validado end-to-end: 2
+        reservas separadas y correctas (corte + manicure) coexistiendo para el mismo
+        lead.
+      branches:
+        - { rule_key: rule_additional_service_request_while_booked, action: ask_missing_data, trigger: "additional_service_requested_while_booked" }
+
+shared_infra_bugs_found_and_fixed_during_salon_qa:
+  description: >
+    Bugs reales en infraestructura COMPARTIDA (6.x sub-workflows usados por ambos
+    rubros), encontrados al probar el flujo end-to-end de salon por primera vez.
+    Ninguno es especifico del clon de salon -- afectarian a detailing tambien si
+    algun dia usara el mismo flag/condicion. Confirmado cero regresion en detailing
+    con escenarios reales existentes despues de cada fix.
+  items:
+    - node: "send_service_menu (inline en 6 action_executor)"
+      bug: >
+        El objeto `business` se resolvia como
+        `data.business || contextPacket.business || rawBusinessConfig`, y
+        `contextPacket.business` (snapshot armado antes por 4 context_builder) podia
+        llegar con config_source="legacy_business_rules" y politicas vacias, aunque
+        agent_business_config.config (rawBusinessConfig) llegara completo y fresco por
+        otro camino en el mismo payload. Causa raiz profunda no identificada (parece un
+        segundo pase de build_context_packet con agent_business_config: null en su
+        input) -- no se investigo mas alla porque el fix de precedencia alcanza.
+      fix: "invertir prioridad: rawBusinessConfig || data.business || contextPacket.business"
+    - node: "6.18 recommend_service"
+      bug: "heuristica 'que tan sucio esta el auto' hardcodeada, sin alternativa para negocios sin dimension vehiculo."
+      fix: "rama generica (gateada por pricing_policy.requires_service_vehicle_district=false) que matchea contra business.services[].aliases."
+    - node: "6.13 send_pre_service_instruction"
+      bug: "mismo problema de precedencia que send_service_menu, mas texto 100% de auto ('deja el vehiculo accesible', 'porton/conserje')."
+      fix: "misma reordenacion de precedencia + rama generica ('llega antes, trae referencia de imagen')."
+    - node: "6.14 notify_on_the_way"
+      bug: "mensaje 'voy en camino' asume modelo a domicilio."
+      fix: "rama generica -> recordatorio de hora ('te esperamos en nuestro local'). Nota: ninguna regla en rules_evaluation dispara esta accion directamente en ningun rubro -- solo alcanzable via LLM decision, fix defensivo."
+    - node: "6.15 request_review"
+      bug: "'Ahumada Detailing' hardcodeado en el mensaje de resena."
+      fix: "nombre de negocio dinamico (agent_business_config.config.business_name -> organization.name -> agent.name -> fallback generico)."
+    - node: "6.16 request_referral"
+      bug: "default 'dejar su auto impecable... trabajamos a domicilio' cuando no hay override explicito (que es siempre, hoy)."
+      fix: "default generico sin vocabulario de auto/domicilio."
+    - node: "6.5 confirm_booking_executor / build_booking_confirmation_message"
+      bug: >
+        (1) serviceLabel() solo mapeaba codigos de lavado, cualquier otro codigo caia a
+        "el servicio" generico en vez del nombre real (ej. "Servicio: el servicio" en
+        vez de "Servicio: Corte"). (2) cierre del mensaje siempre "Te escribire antes de
+        la visita para coordinar" (asume domicilio). (3) "Comuna: {district}" no aporta
+        valor para un negocio de un solo local.
+      fix: >
+        serviceLabel ahora busca en business.services[] configurado antes de caer al
+        codigo crudo; cierre condicional segun pricing_policy.requires_service_vehicle_district;
+        linea de comuna suprimida cuando ese flag es false.
+    - node: "6.10 reschedule_booking / build_reschedule_success_message"
+      bug: "mismo problema de serviceLabel() que 6.5 -- 'tu el servicio quedo reprogramado' en vez de 'tu corte quedo reprogramado'."
+      fix: "fallback a codigo crudo legible (reemplaza guiones bajos) en vez de 'el servicio'."
+    - node: "3 rules_engine_salon (propio, no compartido) -- ver new_rules_added arriba"
+
+known_gaps_remaining:
+  - "El patron 'serviceLabel() con mapa hardcodeado de lavados' pudo repetirse en algun otro sub-workflow 6.x no revisado en esta pasada (se revisaron 6.5, 6.10, 6.13, 6.18; no se encontraron mas ocurrencias vía grep en action_executor ni en los exports del repo, pero los exports estan desactualizados respecto a produccion)."
+  - "El camino LLM (5 llm_decision) para pedidos ambiguos de multi-servicio ('con la junior' sin contexto claro) puede seguir sin actualizar el state de forma limpia en casos no cubiertos por ruleAdditionalServiceRequestWhileBooked (ej. si el cliente no nombra el servicio explicitamente en el mismo mensaje que dispara la regla) -- mitigado pero no 100% eliminado, dado que el prompt del LLM no se toco en esta pasada."
+  - "No se probo agendar/pagar/cancelar contra un Google Calendar real (agente de prueba usa calendar_id vacio a proposito, para no arriesgar el calendario real de Ahumada Detailing) -- la disponibilidad y creacion de citas SI funcionan con calendar_id vacio (confirmado: 6.2 check_calendar_slot no depende de un calendario real para calcular slots candidatos contra la tabla appointments), pero el detalle de la escritura real a Google Calendar API queda sin probar para este rubro."

@@ -1,5 +1,12 @@
+param(
+  [switch]$SkipPreflight
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Default behavior: do not export archived workflows (n8n API rejects updating them via PUT anyway).
+$includeArchived = $false
 
 function Import-DotEnv([string]$Path) {
   if (-not (Test-Path $Path)) { return $false }
@@ -119,6 +126,11 @@ for (;;) {
   if ($data.Count -eq 0) { break }
 
   foreach ($wf in $data) {
+    if (-not $includeArchived) {
+      if ($wf.PSObject.Properties.Match('isArchived').Count -gt 0 -and $wf.isArchived -eq $true) { continue }
+      if ($wf.PSObject.Properties.Match('archived').Count -gt 0 -and $wf.archived -eq $true) { continue }
+    }
+
     $id = $wf.id
     $name = "$($wf.name)"
     $tags = @()
@@ -129,6 +141,10 @@ for (;;) {
 
     $detailUrl = "$baseUrl/api/v1/workflows/$id"
     $detail = Invoke-RestMethod -Method Get -Uri $detailUrl -Headers $headers
+    if (-not $includeArchived) {
+      if ($detail -and $detail.PSObject.Properties.Match('isArchived').Count -gt 0 -and $detail.isArchived -eq $true) { continue }
+      if ($detail -and $detail.PSObject.Properties.Match('archived').Count -gt 0 -and $detail.archived -eq $true) { continue }
+    }
 
     $safeName = Normalize-FileName -Name $name
     $fileName = if ($flowNumber) { "$flowNumber - ${safeName}__id-$id.json" } else { "${safeName}__id-$id.json" }
@@ -144,6 +160,7 @@ for (;;) {
       flow_number = $flowNumber
       export_path = ($outPath.Replace('\','/'))
       active = $wf.active
+      isArchived = if ($wf.PSObject.Properties.Match('isArchived').Count -gt 0) { [bool]$wf.isArchived } else { $null }
       updatedAt = $wf.updatedAt
       createdAt = $wf.createdAt
     })
@@ -166,3 +183,17 @@ $invPath = "workflows/catalog/workflows.inventory.json"
 
 Write-Host "OK: exportados $($inventory.Count) workflows."
 Write-Host "Inventario: $invPath"
+
+if (-not $SkipPreflight) {
+  $preflight = Join-Path $PSScriptRoot "check_workflow_exports.ps1"
+  if (Test-Path $preflight) {
+    Write-Host ""
+    Write-Host "Preflight: validando exports descargados..."
+    & powershell -ExecutionPolicy Bypass -File $preflight | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host ""
+      Write-Host "WARN: el sync descargó exports, pero el preflight falló. Revisa los archivos listados (encoding/� en jsCode)."
+      exit $LASTEXITCODE
+    }
+  }
+}

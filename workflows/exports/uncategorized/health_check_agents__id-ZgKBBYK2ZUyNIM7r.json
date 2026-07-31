@@ -1,0 +1,797 @@
+{
+  "updatedAt": "2026-06-22T15:54:15.983Z",
+  "createdAt": "2026-06-22T15:45:01.709Z",
+  "id": "ZgKBBYK2ZUyNIM7r",
+  "name": "health_check_agents",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "name": "CRON every_30_min",
+      "id": "hc-cron"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH agent_config AS (\n  SELECT\n    a.id AS agent_id,\n    a.organization_id,\n    a.name AS agent_name,\n    ac.id AS channel_id,\n    bc.id AS business_config_id,\n    bc.config AS config,\n    jsonb_array_length(COALESCE(bc.config->'schedule', '[]'::jsonb)) AS schedule_blocks,\n    bc.config->>'calendar_id' AS fallback_calendar_id,\n    pv.id AS pricing_version_id,\n    (SELECT count(*) FROM agent_staff s WHERE s.agent_id = a.id AND s.is_active = true) AS active_staff_count\n  FROM agents a\n  LEFT JOIN agent_channels ac ON ac.agent_id = a.id AND ac.is_active = true\n  LEFT JOIN agent_business_config bc ON bc.agent_id = a.id AND bc.is_active = true\n  LEFT JOIN pricing_versions pv ON pv.agent_id = a.id AND pv.is_active = true\n  WHERE a.is_active = true\n),\nconfig_failures AS (\n  SELECT organization_id, agent_id, agent_name, 'missing_channel' AS check_key, 'critical' AS severity,\n    'El agente \"' || agent_name || '\" no tiene ningun canal activo (WhatsApp/webchat) conectado.' AS message,\n    '{}'::jsonb AS details\n  FROM agent_config WHERE channel_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_business_config', 'critical',\n    'El agente \"' || agent_name || '\" no tiene una configuracion de negocio activa (agent_business_config).', '{}'::jsonb\n  FROM agent_config WHERE business_config_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'no_schedule', 'critical',\n    'El agente \"' || agent_name || '\" tiene configuracion de negocio pero sin horarios definidos (schedule vacio): no puede ofrecer horas.', '{}'::jsonb\n  FROM agent_config WHERE business_config_id IS NOT NULL AND schedule_blocks = 0\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_pricing', 'critical',\n    'El agente \"' || agent_name || '\" no tiene una version de precios activa: no puede cotizar.', '{}'::jsonb\n  FROM agent_config WHERE pricing_version_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_calendar', 'critical',\n    'El agente \"' || agent_name || '\" no tiene calendario configurado (ni calendario propio ni personal activo en agent_staff): no puede agendar.', '{}'::jsonb\n  FROM agent_config WHERE fallback_calendar_id IS NULL AND active_staff_count = 0\n),\nlast_inbound AS (\n  SELECT DISTINCT ON (m.lead_id)\n    m.lead_id, m.created_at AS inbound_at, l.agent_id, l.organization_id\n  FROM messages m\n  JOIN leads l ON l.id = m.lead_id\n  WHERE m.direction = 'inbound'\n    AND m.created_at > now() - interval '24 hours'\n  ORDER BY m.lead_id, m.created_at DESC\n),\nunanswered AS (\n  SELECT li.agent_id, li.organization_id, count(*) AS unanswered_count, max(li.inbound_at) AS most_recent_unanswered_at\n  FROM last_inbound li\n  WHERE li.inbound_at < now() - interval '15 minutes'\n    AND NOT EXISTS (\n      SELECT 1 FROM messages mo\n      WHERE mo.lead_id = li.lead_id AND mo.direction = 'outbound' AND mo.created_at > li.inbound_at\n    )\n  GROUP BY li.agent_id, li.organization_id\n),\nresponse_failures AS (\n  SELECT u.organization_id, u.agent_id, ac2.agent_name, 'no_response_gap' AS check_key, 'critical' AS severity,\n    'El agente \"' || ac2.agent_name || '\" tiene ' || u.unanswered_count || ' mensaje(s) de cliente sin respuesta hace mas de 15 minutos (ultimo: ' || to_char(u.most_recent_unanswered_at, 'DD/MM HH24:MI') || ').' AS message,\n    jsonb_build_object('unanswered_count', u.unanswered_count, 'most_recent_unanswered_at', u.most_recent_unanswered_at) AS details\n  FROM unanswered u\n  JOIN agent_config ac2 ON ac2.agent_id = u.agent_id\n),\nfailed_msgs AS (\n  SELECT l.agent_id, l.organization_id, count(*) AS failed_count\n  FROM messages m\n  JOIN leads l ON l.id = m.lead_id\n  WHERE m.direction = 'outbound' AND m.status = 'failed'\n    AND m.created_at > now() - interval '24 hours'\n  GROUP BY l.agent_id, l.organization_id\n),\nerror_failures AS (\n  SELECT f.organization_id, f.agent_id, ac3.agent_name, 'failed_messages' AS check_key, 'warning' AS severity,\n    'El agente \"' || ac3.agent_name || '\" tuvo ' || f.failed_count || ' mensaje(s) de salida fallidos en las ultimas 24h.' AS message,\n    jsonb_build_object('failed_count', f.failed_count) AS details\n  FROM failed_msgs f\n  JOIN agent_config ac3 ON ac3.agent_id = f.agent_id\n),\nall_failures AS (\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM config_failures\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM response_failures\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM error_failures\n)\nSELECT COALESCE(json_agg(row_to_json(all_failures)), '[]'::json) AS failures\nFROM all_failures;\n",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "name": "DB compute_current_failures",
+      "id": "hc-db-failures",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.failures;\nconst failures = Array.isArray(raw) ? raw : (typeof raw === \"string\" ? JSON.parse(raw) : []);\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid uuid in health check failure row: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? {} : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (failures.length === 0) {\n  return [{\n    json: {\n      alert_query: `\nWITH resolved AS (\n  UPDATE public.health_alerts\n  SET status = 'resolved', resolved_at = now()\n  WHERE status = 'open'\n  RETURNING id\n)\nSELECT 0 AS upserted_count, (SELECT count(*) FROM resolved) AS resolved_count;\n`,\n      has_failures: false\n    }\n  }];\n}\n\nconst valuesRows = failures.map((f) => {\n  return \"(\" + [\n    sqlUuid(f.organization_id),\n    sqlUuid(f.agent_id),\n    sqlText(f.check_key),\n    sqlText(f.severity || \"critical\"),\n    sqlText(f.message),\n    sqlJsonb(f.details)\n  ].join(\", \") + \")\";\n}).join(\",\\n    \");\n\nconst query = `\nWITH incoming(organization_id, agent_id, check_key, severity, message, details) AS (\n  VALUES\n    ${valuesRows}\n),\nprior AS (\n  SELECT ha.agent_id, ha.check_key, ha.status AS prior_status\n  FROM public.health_alerts ha\n  JOIN incoming i ON i.agent_id = ha.agent_id AND i.check_key = ha.check_key\n),\nupserted AS (\n  INSERT INTO public.health_alerts (organization_id, agent_id, check_key, severity, message, details, status, first_detected_at, last_detected_at)\n  SELECT organization_id, agent_id, check_key, severity, message, details, 'open', now(), now()\n  FROM incoming\n  ON CONFLICT (agent_id, check_key) DO UPDATE SET\n    severity = EXCLUDED.severity,\n    message = EXCLUDED.message,\n    details = EXCLUDED.details,\n    last_detected_at = now(),\n    first_detected_at = CASE WHEN public.health_alerts.status = 'open' THEN public.health_alerts.first_detected_at ELSE now() END,\n    status = 'open',\n    resolved_at = NULL\n  RETURNING id, organization_id, agent_id, check_key, severity, message\n),\nresolved AS (\n  UPDATE public.health_alerts ha\n  SET status = 'resolved', resolved_at = now()\n  WHERE ha.status = 'open'\n    AND NOT EXISTS (\n      SELECT 1 FROM incoming i WHERE i.agent_id = ha.agent_id AND i.check_key = ha.check_key\n    )\n  RETURNING ha.id\n)\nSELECT u.id, u.organization_id, u.agent_id, u.check_key, u.severity, u.message,\n       COALESCE(p.prior_status, 'none') AS prior_status,\n       o.alert_whatsapp_number, o.alert_email, o.name AS organization_name\nFROM upserted u\nLEFT JOIN prior p ON p.agent_id = u.agent_id AND p.check_key = u.check_key\nLEFT JOIN public.organizations o ON o.id = u.organization_id;\n`;\n\nreturn [{ json: { alert_query: query, has_failures: true } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "name": "build_alert_query",
+      "id": "hc-build-query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.alert_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        0
+      ],
+      "name": "DB apply_alert_state",
+      "id": "hc-db-apply",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map((item) => item.json);\n\nconst needsNotification = rows.filter((r) => r.prior_status && r.prior_status !== \"open\" && r.id);\n\nconst byOrg = {};\nfor (const r of needsNotification) {\n  const key = r.organization_id;\n  if (!byOrg[key]) {\n    byOrg[key] = {\n      organization_id: r.organization_id,\n      organization_name: r.organization_name || \"\",\n      whatsapp_to: r.alert_whatsapp_number || null,\n      email_to: r.alert_email || null,\n      alert_ids: [],\n      lines: []\n    };\n  }\n  byOrg[key].alert_ids.push(r.id);\n  byOrg[key].lines.push(\"- \" + r.message);\n}\n\nconst results = Object.values(byOrg).map((org) => {\n  const header = \"Alerta AI Closer (\" + org.organization_name + \"):\";\n  const body = header + \"\\n\" + org.lines.join(\"\\n\");\n  return {\n    organization_id: org.organization_id,\n    organization_name: org.organization_name,\n    whatsapp_to: org.whatsapp_to,\n    email_to: org.email_to,\n    alert_ids: org.alert_ids,\n    message_text: body,\n    alert_count: org.alert_ids.length\n  };\n});\n\nreturn results.map((r) => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "name": "build_notifications",
+      "id": "hc-build-notifications"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "hc-cond-whatsapp",
+              "leftValue": "={{ !!$json.whatsapp_to }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        -120
+      ],
+      "name": "IF has_whatsapp_to",
+      "id": "hc-if-whatsapp"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1024332077436840",
+        "recipientPhoneNumber": "={{ $json.whatsapp_to }}",
+        "textBody": "={{ $json.message_text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        -200
+      ],
+      "name": "WB send_alert",
+      "id": "hc-whatsapp-send",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "lHyvwqasIbVP59b8",
+          "name": "WhatsApp account"
+        }
+      },
+      "webhookId": "7d3c1583-b4e1-4505-8e1c-0d8174913592"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE public.health_alerts SET notified_whatsapp_at = now() WHERE id = ANY(ARRAY[{{ $json.alert_ids.map(id => \"'\" + id + \"'\").join(',') }}]::uuid[]);",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        -200
+      ],
+      "name": "DB mark_whatsapp_notified",
+      "id": "hc-db-mark-whatsapp",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "hc-cond-email",
+              "leftValue": "={{ !!$json.email_to }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        120
+      ],
+      "name": "IF has_email_to",
+      "id": "hc-if-email"
+    },
+    {
+      "parameters": {
+        "fromEmail": "alertas@aahumada.com",
+        "toEmail": "={{ $json.email_to }}",
+        "subject": "=Alerta AI Closer - {{ $json.organization_name }}",
+        "emailFormat": "text",
+        "text": "={{ $json.message_text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1320,
+        200
+      ],
+      "name": "EMAIL send_alert",
+      "id": "hc-email-send",
+      "webhookId": "c5d074b1-bf68-4c13-81de-9eee7a49c06b",
+      "credentials": {
+        "smtp": {
+          "id": "AZEOxOIAUcZMGToA",
+          "name": "Brevo SMTP alerts"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE public.health_alerts SET notified_email_at = now() WHERE id = ANY(ARRAY[{{ $json.alert_ids.map(id => \"'\" + id + \"'\").join(',') }}]::uuid[]);",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        200
+      ],
+      "name": "DB mark_email_notified",
+      "id": "hc-db-mark-email",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "CRON every_30_min": {
+      "main": [
+        [
+          {
+            "node": "DB compute_current_failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB compute_current_failures": {
+      "main": [
+        [
+          {
+            "node": "build_alert_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_alert_query": {
+      "main": [
+        [
+          {
+            "node": "DB apply_alert_state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB apply_alert_state": {
+      "main": [
+        [
+          {
+            "node": "build_notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_notifications": {
+      "main": [
+        [
+          {
+            "node": "IF has_whatsapp_to",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF has_email_to",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF has_whatsapp_to": {
+      "main": [
+        [
+          {
+            "node": "WB send_alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "WB send_alert": {
+      "main": [
+        [
+          {
+            "node": "DB mark_whatsapp_notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF has_email_to": {
+      "main": [
+        [
+          {
+            "node": "EMAIL send_alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "EMAIL send_alert": {
+      "main": [
+        [
+          {
+            "node": "DB mark_email_notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:CRON every_30_min": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "1bd8e02a-dded-4952-9951-108f6ed6c6c1",
+  "activeVersionId": "1bd8e02a-dded-4952-9951-108f6ed6c6c1",
+  "versionCounter": 14,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-22T15:45:02.961Z",
+      "createdAt": "2026-06-22T15:45:02.961Z",
+      "role": "workflow:owner",
+      "workflowId": "ZgKBBYK2ZUyNIM7r",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-22T15:54:15.992Z",
+    "createdAt": "2026-06-22T15:54:15.992Z",
+    "versionId": "1bd8e02a-dded-4952-9951-108f6ed6c6c1",
+    "workflowId": "ZgKBBYK2ZUyNIM7r",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 30
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "name": "CRON every_30_min",
+        "id": "hc-cron"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH agent_config AS (\n  SELECT\n    a.id AS agent_id,\n    a.organization_id,\n    a.name AS agent_name,\n    ac.id AS channel_id,\n    bc.id AS business_config_id,\n    bc.config AS config,\n    jsonb_array_length(COALESCE(bc.config->'schedule', '[]'::jsonb)) AS schedule_blocks,\n    bc.config->>'calendar_id' AS fallback_calendar_id,\n    pv.id AS pricing_version_id,\n    (SELECT count(*) FROM agent_staff s WHERE s.agent_id = a.id AND s.is_active = true) AS active_staff_count\n  FROM agents a\n  LEFT JOIN agent_channels ac ON ac.agent_id = a.id AND ac.is_active = true\n  LEFT JOIN agent_business_config bc ON bc.agent_id = a.id AND bc.is_active = true\n  LEFT JOIN pricing_versions pv ON pv.agent_id = a.id AND pv.is_active = true\n  WHERE a.is_active = true\n),\nconfig_failures AS (\n  SELECT organization_id, agent_id, agent_name, 'missing_channel' AS check_key, 'critical' AS severity,\n    'El agente \"' || agent_name || '\" no tiene ningun canal activo (WhatsApp/webchat) conectado.' AS message,\n    '{}'::jsonb AS details\n  FROM agent_config WHERE channel_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_business_config', 'critical',\n    'El agente \"' || agent_name || '\" no tiene una configuracion de negocio activa (agent_business_config).', '{}'::jsonb\n  FROM agent_config WHERE business_config_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'no_schedule', 'critical',\n    'El agente \"' || agent_name || '\" tiene configuracion de negocio pero sin horarios definidos (schedule vacio): no puede ofrecer horas.', '{}'::jsonb\n  FROM agent_config WHERE business_config_id IS NOT NULL AND schedule_blocks = 0\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_pricing', 'critical',\n    'El agente \"' || agent_name || '\" no tiene una version de precios activa: no puede cotizar.', '{}'::jsonb\n  FROM agent_config WHERE pricing_version_id IS NULL\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, 'missing_calendar', 'critical',\n    'El agente \"' || agent_name || '\" no tiene calendario configurado (ni calendario propio ni personal activo en agent_staff): no puede agendar.', '{}'::jsonb\n  FROM agent_config WHERE fallback_calendar_id IS NULL AND active_staff_count = 0\n),\nlast_inbound AS (\n  SELECT DISTINCT ON (m.lead_id)\n    m.lead_id, m.created_at AS inbound_at, l.agent_id, l.organization_id\n  FROM messages m\n  JOIN leads l ON l.id = m.lead_id\n  WHERE m.direction = 'inbound'\n    AND m.created_at > now() - interval '24 hours'\n  ORDER BY m.lead_id, m.created_at DESC\n),\nunanswered AS (\n  SELECT li.agent_id, li.organization_id, count(*) AS unanswered_count, max(li.inbound_at) AS most_recent_unanswered_at\n  FROM last_inbound li\n  WHERE li.inbound_at < now() - interval '15 minutes'\n    AND NOT EXISTS (\n      SELECT 1 FROM messages mo\n      WHERE mo.lead_id = li.lead_id AND mo.direction = 'outbound' AND mo.created_at > li.inbound_at\n    )\n  GROUP BY li.agent_id, li.organization_id\n),\nresponse_failures AS (\n  SELECT u.organization_id, u.agent_id, ac2.agent_name, 'no_response_gap' AS check_key, 'critical' AS severity,\n    'El agente \"' || ac2.agent_name || '\" tiene ' || u.unanswered_count || ' mensaje(s) de cliente sin respuesta hace mas de 15 minutos (ultimo: ' || to_char(u.most_recent_unanswered_at, 'DD/MM HH24:MI') || ').' AS message,\n    jsonb_build_object('unanswered_count', u.unanswered_count, 'most_recent_unanswered_at', u.most_recent_unanswered_at) AS details\n  FROM unanswered u\n  JOIN agent_config ac2 ON ac2.agent_id = u.agent_id\n),\nfailed_msgs AS (\n  SELECT l.agent_id, l.organization_id, count(*) AS failed_count\n  FROM messages m\n  JOIN leads l ON l.id = m.lead_id\n  WHERE m.direction = 'outbound' AND m.status = 'failed'\n    AND m.created_at > now() - interval '24 hours'\n  GROUP BY l.agent_id, l.organization_id\n),\nerror_failures AS (\n  SELECT f.organization_id, f.agent_id, ac3.agent_name, 'failed_messages' AS check_key, 'warning' AS severity,\n    'El agente \"' || ac3.agent_name || '\" tuvo ' || f.failed_count || ' mensaje(s) de salida fallidos en las ultimas 24h.' AS message,\n    jsonb_build_object('failed_count', f.failed_count) AS details\n  FROM failed_msgs f\n  JOIN agent_config ac3 ON ac3.agent_id = f.agent_id\n),\nall_failures AS (\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM config_failures\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM response_failures\n  UNION ALL\n  SELECT organization_id, agent_id, agent_name, check_key, severity, message, details FROM error_failures\n)\nSELECT COALESCE(json_agg(row_to_json(all_failures)), '[]'::json) AS failures\nFROM all_failures;\n",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          220,
+          0
+        ],
+        "name": "DB compute_current_failures",
+        "id": "hc-db-failures",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const raw = $json.failures;\nconst failures = Array.isArray(raw) ? raw : (typeof raw === \"string\" ? JSON.parse(raw) : []);\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid uuid in health check failure row: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? {} : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (failures.length === 0) {\n  return [{\n    json: {\n      alert_query: `\nWITH resolved AS (\n  UPDATE public.health_alerts\n  SET status = 'resolved', resolved_at = now()\n  WHERE status = 'open'\n  RETURNING id\n)\nSELECT 0 AS upserted_count, (SELECT count(*) FROM resolved) AS resolved_count;\n`,\n      has_failures: false\n    }\n  }];\n}\n\nconst valuesRows = failures.map((f) => {\n  return \"(\" + [\n    sqlUuid(f.organization_id),\n    sqlUuid(f.agent_id),\n    sqlText(f.check_key),\n    sqlText(f.severity || \"critical\"),\n    sqlText(f.message),\n    sqlJsonb(f.details)\n  ].join(\", \") + \")\";\n}).join(\",\\n    \");\n\nconst query = `\nWITH incoming(organization_id, agent_id, check_key, severity, message, details) AS (\n  VALUES\n    ${valuesRows}\n),\nprior AS (\n  SELECT ha.agent_id, ha.check_key, ha.status AS prior_status\n  FROM public.health_alerts ha\n  JOIN incoming i ON i.agent_id = ha.agent_id AND i.check_key = ha.check_key\n),\nupserted AS (\n  INSERT INTO public.health_alerts (organization_id, agent_id, check_key, severity, message, details, status, first_detected_at, last_detected_at)\n  SELECT organization_id, agent_id, check_key, severity, message, details, 'open', now(), now()\n  FROM incoming\n  ON CONFLICT (agent_id, check_key) DO UPDATE SET\n    severity = EXCLUDED.severity,\n    message = EXCLUDED.message,\n    details = EXCLUDED.details,\n    last_detected_at = now(),\n    first_detected_at = CASE WHEN public.health_alerts.status = 'open' THEN public.health_alerts.first_detected_at ELSE now() END,\n    status = 'open',\n    resolved_at = NULL\n  RETURNING id, organization_id, agent_id, check_key, severity, message\n),\nresolved AS (\n  UPDATE public.health_alerts ha\n  SET status = 'resolved', resolved_at = now()\n  WHERE ha.status = 'open'\n    AND NOT EXISTS (\n      SELECT 1 FROM incoming i WHERE i.agent_id = ha.agent_id AND i.check_key = ha.check_key\n    )\n  RETURNING ha.id\n)\nSELECT u.id, u.organization_id, u.agent_id, u.check_key, u.severity, u.message,\n       COALESCE(p.prior_status, 'none') AS prior_status,\n       o.alert_whatsapp_number, o.alert_email, o.name AS organization_name\nFROM upserted u\nLEFT JOIN prior p ON p.agent_id = u.agent_id AND p.check_key = u.check_key\nLEFT JOIN public.organizations o ON o.id = u.organization_id;\n`;\n\nreturn [{ json: { alert_query: query, has_failures: true } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "name": "build_alert_query",
+        "id": "hc-build-query"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.alert_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          660,
+          0
+        ],
+        "name": "DB apply_alert_state",
+        "id": "hc-db-apply",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const rows = $input.all().map((item) => item.json);\n\nconst needsNotification = rows.filter((r) => r.prior_status && r.prior_status !== \"open\" && r.id);\n\nconst byOrg = {};\nfor (const r of needsNotification) {\n  const key = r.organization_id;\n  if (!byOrg[key]) {\n    byOrg[key] = {\n      organization_id: r.organization_id,\n      organization_name: r.organization_name || \"\",\n      whatsapp_to: r.alert_whatsapp_number || null,\n      email_to: r.alert_email || null,\n      alert_ids: [],\n      lines: []\n    };\n  }\n  byOrg[key].alert_ids.push(r.id);\n  byOrg[key].lines.push(\"- \" + r.message);\n}\n\nconst results = Object.values(byOrg).map((org) => {\n  const header = \"Alerta AI Closer (\" + org.organization_name + \"):\";\n  const body = header + \"\\n\" + org.lines.join(\"\\n\");\n  return {\n    organization_id: org.organization_id,\n    organization_name: org.organization_name,\n    whatsapp_to: org.whatsapp_to,\n    email_to: org.email_to,\n    alert_ids: org.alert_ids,\n    message_text: body,\n    alert_count: org.alert_ids.length\n  };\n});\n\nreturn results.map((r) => ({ json: r }));\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          0
+        ],
+        "name": "build_notifications",
+        "id": "hc-build-notifications"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "hc-cond-whatsapp",
+                "leftValue": "={{ !!$json.whatsapp_to }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1100,
+          -120
+        ],
+        "name": "IF has_whatsapp_to",
+        "id": "hc-if-whatsapp"
+      },
+      {
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1024332077436840",
+          "recipientPhoneNumber": "={{ $json.whatsapp_to }}",
+          "textBody": "={{ $json.message_text }}",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          1320,
+          -200
+        ],
+        "name": "WB send_alert",
+        "id": "hc-whatsapp-send",
+        "credentials": {
+          "whatsAppApi": {
+            "id": "lHyvwqasIbVP59b8",
+            "name": "WhatsApp account"
+          }
+        },
+        "webhookId": "7d3c1583-b4e1-4505-8e1c-0d8174913592"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=UPDATE public.health_alerts SET notified_whatsapp_at = now() WHERE id = ANY(ARRAY[{{ $json.alert_ids.map(id => \"'\" + id + \"'\").join(',') }}]::uuid[]);",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1540,
+          -200
+        ],
+        "name": "DB mark_whatsapp_notified",
+        "id": "hc-db-mark-whatsapp",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "hc-cond-email",
+                "leftValue": "={{ !!$json.email_to }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1100,
+          120
+        ],
+        "name": "IF has_email_to",
+        "id": "hc-if-email"
+      },
+      {
+        "parameters": {
+          "fromEmail": "alertas@aahumada.com",
+          "toEmail": "={{ $json.email_to }}",
+          "subject": "=Alerta AI Closer - {{ $json.organization_name }}",
+          "emailFormat": "text",
+          "text": "={{ $json.message_text }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2.1,
+        "position": [
+          1320,
+          200
+        ],
+        "name": "EMAIL send_alert",
+        "id": "hc-email-send",
+        "webhookId": "c5d074b1-bf68-4c13-81de-9eee7a49c06b",
+        "credentials": {
+          "smtp": {
+            "id": "AZEOxOIAUcZMGToA",
+            "name": "Brevo SMTP alerts"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=UPDATE public.health_alerts SET notified_email_at = now() WHERE id = ANY(ARRAY[{{ $json.alert_ids.map(id => \"'\" + id + \"'\").join(',') }}]::uuid[]);",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1540,
+          200
+        ],
+        "name": "DB mark_email_notified",
+        "id": "hc-db-mark-email",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "CRON every_30_min": {
+        "main": [
+          [
+            {
+              "node": "DB compute_current_failures",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB compute_current_failures": {
+        "main": [
+          [
+            {
+              "node": "build_alert_query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_alert_query": {
+        "main": [
+          [
+            {
+              "node": "DB apply_alert_state",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB apply_alert_state": {
+        "main": [
+          [
+            {
+              "node": "build_notifications",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_notifications": {
+        "main": [
+          [
+            {
+              "node": "IF has_whatsapp_to",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "IF has_email_to",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has_whatsapp_to": {
+        "main": [
+          [
+            {
+              "node": "WB send_alert",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "WB send_alert": {
+        "main": [
+          [
+            {
+              "node": "DB mark_whatsapp_notified",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has_email_to": {
+        "main": [
+          [
+            {
+              "node": "EMAIL send_alert",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "EMAIL send_alert": {
+        "main": [
+          [
+            {
+              "node": "DB mark_email_notified",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-22T15:54:26.403Z",
+        "id": 1430,
+        "workflowId": "ZgKBBYK2ZUyNIM7r",
+        "versionId": "1bd8e02a-dded-4952-9951-108f6ed6c6c1",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

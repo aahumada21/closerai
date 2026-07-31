@@ -1,0 +1,169 @@
+{
+  "updatedAt": "2026-05-28T18:49:42.717Z",
+  "createdAt": "2026-05-22T22:29:40.73Z",
+  "id": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+  "name": "6.15 request_review",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"review_url\": \"={{ $json.review_url }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "IN request_review",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst input = $json;\n\nconst executionContext = parseMaybeJson(input.execution_context, {});\nconst contextPacket = parseMaybeJson(input.context_packet, {});\nconst decision = parseMaybeJson(input.decision, {});\nconst stateUpdate = parseMaybeJson(input.state_update, {});\nconst executionMeta = parseMaybeJson(input.execution_meta, {});\n\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in request_review\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_review\");\n}\n\nconst reviewUrl =\n  input.review_url ||\n  decision.review_url ||\n  decision.state_update?.review_url ||\n  executionContext.review_url ||\n  state.review_url ||\n  \"\";\n\nlet message = \"\";\n\nif (reviewUrl) {\n  message =\n    `Gracias por confiar en Ahumada Detailing. Si te gust el resultado, nos ayudara mucho que nos dejaras una resea aque:\\n\\n${reviewUrl}\\n\\nEso nos ayuda a seguir creciendo y a llegar a mas personas.`;\n} else {\n  message =\n    \"Gracias por confiar en Ahumada Detailing. Si te gust el resultado, nos ayudara mucho que nos dejaras una resea. Eso nos ayuda a seguir creciendo y a llegar a mas personas.\";\n}\n\nreturn [{\n  lead_id: leadId,\n  phone,\n  channel,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"request_review\"\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdate,\n    stage: \"post_service\",\n    intent_last: \"review_requested\",\n    next_goal: \"request_referral\",\n    last_bot_action: \"request_review\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"request_review_message_prepared\"\n  ]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        352
+      ],
+      "id": "a9332949-7a62-45eb-960f-b41a6f591bc2",
+      "name": "build_request_review_result"
+    }
+  ],
+  "connections": {
+    "IN request_review": {
+      "main": [
+        [
+          {
+            "node": "build_request_review_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+  "activeVersionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+  "versionCounter": 31,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-27T17:41:12.539Z",
+    "createdAt": "2026-05-27T17:41:12.539Z",
+    "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+    "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"review_url\": \"={{ $json.review_url }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+        },
+        "id": "c055762a-8fe7-4141-a639-df2372f30060",
+        "typeVersion": 1.1,
+        "name": "IN request_review",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "position": [
+          272,
+          352
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst input = $json;\n\nconst executionContext = parseMaybeJson(input.execution_context, {});\nconst contextPacket = parseMaybeJson(input.context_packet, {});\nconst decision = parseMaybeJson(input.decision, {});\nconst stateUpdate = parseMaybeJson(input.state_update, {});\nconst executionMeta = parseMaybeJson(input.execution_meta, {});\n\nconst state = contextPacket.state || {};\n\nconst leadId =\n  input.lead_id ||\n  executionContext.lead_id ||\n  contextPacket.lead?.id ||\n  null;\n\nconst phone =\n  input.phone ||\n  executionContext.phone ||\n  contextPacket.lead?.phone ||\n  null;\n\nconst channel =\n  input.channel ||\n  executionContext.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in request_review\");\n}\n\nif (!phone) {\n  throw new Error(\"Missing phone in request_review\");\n}\n\nconst reviewUrl =\n  input.review_url ||\n  decision.review_url ||\n  decision.state_update?.review_url ||\n  executionContext.review_url ||\n  state.review_url ||\n  \"\";\n\nlet message = \"\";\n\nif (reviewUrl) {\n  message =\n    `Gracias por confiar en Ahumada Detailing. Si te gust el resultado, nos ayudara mucho que nos dejaras una resea aque:\\n\\n${reviewUrl}\\n\\nEso nos ayuda a seguir creciendo y a llegar a mas personas.`;\n} else {\n  message =\n    \"Gracias por confiar en Ahumada Detailing. Si te gust el resultado, nos ayudara mucho que nos dejaras una resea. Eso nos ayuda a seguir creciendo y a llegar a mas personas.\";\n}\n\nreturn [{\n  lead_id: leadId,\n  phone,\n  channel,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"request_review\"\n  },\n\n  context_packet: contextPacket,\n  decision,\n  execution_meta: executionMeta,\n\n  message_to_send: message,\n  message_type: \"text\",\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...stateUpdate,\n    stage: \"post_service\",\n    intent_last: \"review_requested\",\n    next_goal: \"request_referral\",\n    last_bot_action: \"request_review\",\n    missing_fields: []\n  },\n\n  notes: [\n    ...(input.notes || []),\n    \"request_review_message_prepared\"\n  ]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          560,
+          352
+        ],
+        "id": "a9332949-7a62-45eb-960f-b41a6f591bc2",
+        "name": "build_request_review_result"
+      }
+    ],
+    "connections": {
+      "IN request_review": {
+        "main": [
+          [
+            {
+              "node": "build_request_review_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-27T17:41:12.612Z",
+        "id": 831,
+        "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+        "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:42.801Z",
+        "id": 939,
+        "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+        "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-27T17:41:12.587Z",
+        "id": 830,
+        "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+        "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:42.771Z",
+        "id": 938,
+        "workflowId": "5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49",
+        "versionId": "62a91e35-6b68-45d1-8b94-0c19c73ca0d6",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

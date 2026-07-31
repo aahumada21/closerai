@@ -1,0 +1,217 @@
+{
+  "updatedAt": "2026-05-28T18:49:41.145Z",
+  "createdAt": "2026-05-22T22:29:40.727Z",
+  "id": "213c2fee-a79a-479d-9210-3792201fa1b2",
+  "name": "6.14 notify_on_the_way",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"service_address\": \"={{ $json.service_address }}\",\n  \"address_reference\": \"={{ $json.address_reference }}\",\n  \"eta_minutes\": \"={{ $json.eta_minutes }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "6.14 notify_on_the_way",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  ...$json,\n\n  execution_context: parseMaybeJson($json.execution_context, $json.execution_context || {}),\n  context_packet: parseMaybeJson($json.context_packet, $json.context_packet || {}),\n  decision: parseMaybeJson($json.decision, $json.decision || {}),\n  state_update: parseMaybeJson($json.state_update, $json.state_update || {}),\n  execution_meta: parseMaybeJson($json.execution_meta, $json.execution_meta || {}),\n\n  lead_id: $json.lead_id || null,\n  channel: $json.channel || \"whatsapp\",\n  phone: $json.phone || null,\n\n  calendar_id: $json.calendar_id || null,\n  service_interest: $json.service_interest || null,\n  vehicle_type: $json.vehicle_type || null,\n  district: $json.district || null,\n\n  booking_date: $json.booking_date || null,\n  booking_time: $json.booking_time || null,\n  slot_id: $json.slot_id || null,\n\n  service_address: $json.service_address || null,\n  address_reference: $json.address_reference || null,\n  eta_minutes: $json.eta_minutes || null\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        352
+      ],
+      "id": "c112bbfe-eee2-4916-b48c-60a2462f59d2",
+      "name": "normalize_input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst leadId = firstValue(data.lead_id, ctx.lead_id, data.context_packet?.lead?.id);\nconst phone = firstValue(data.phone, ctx.phone, data.context_packet?.lead?.phone);\nconst channel = firstValue(data.channel, ctx.channel, data.context_packet?.lead?.channel, \"whatsapp\");\n\nconst etaMinutes = firstValue(\n  data.eta_minutes,\n  ctx.eta_minutes,\n  data.decision?.eta_minutes\n);\n\nlet message = \"Hola, voy en camino al servicio. Te aviso apenas esta llegando.\";\n\nif (etaMinutes) {\n  message = `Hola, voy en camino al servicio. Llego aproximadamente en ${etaMinutes} minutos. Te aviso apenas esta llegando.`;\n}\n\nreturn [{\n  ...data,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: state.stage || \"booked\",\n    next_goal: \"complete_service\",\n    last_bot_action: \"notify_on_the_way\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    success: true,\n    action: \"notify_on_the_way\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\n      \"notify_on_the_way_message_prepared\"\n    ]\n  },\n\n  notes: [\n    ...(data.notes || []),\n    \"notify_on_the_way_subworkflow_completed\"\n  ]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        352
+      ],
+      "id": "3898c905-5261-48b2-9975-a855fb5444dd",
+      "name": "build_notify_on_the_way_result"
+    }
+  ],
+  "connections": {
+    "6.14 notify_on_the_way": {
+      "main": [
+        [
+          {
+            "node": "normalize_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_input": {
+      "main": [
+        [
+          {
+            "node": "build_notify_on_the_way_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+  "activeVersionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+  "versionCounter": 31,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-27T17:41:10.682Z",
+    "createdAt": "2026-05-27T17:41:10.682Z",
+    "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+    "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"channel\": \"={{ $json.channel }}\",\n  \"phone\": \"={{ $json.phone }}\",\n  \"calendar_id\": \"={{ $json.calendar_id }}\",\n  \"service_interest\": \"={{ $json.service_interest }}\",\n  \"vehicle_type\": \"={{ $json.vehicle_type }}\",\n  \"district\": \"={{ $json.district }}\",\n  \"booking_date\": \"={{ $json.booking_date }}\",\n  \"booking_time\": \"={{ $json.booking_time }}\",\n  \"slot_id\": \"={{ $json.slot_id }}\",\n  \"service_address\": \"={{ $json.service_address }}\",\n  \"address_reference\": \"={{ $json.address_reference }}\",\n  \"eta_minutes\": \"={{ $json.eta_minutes }}\",\n  \"execution_context\": \"={{ JSON.stringify($json.execution_context || {}) }}\",\n  \"context_packet\": \"={{ JSON.stringify($json.context_packet || {}) }}\",\n  \"decision\": \"={{ JSON.stringify($json.decision || {}) }}\",\n  \"state_update\": \"={{ JSON.stringify($json.state_update || {}) }}\",\n  \"execution_meta\": \"={{ JSON.stringify($json.execution_meta || {}) }}\"\n}"
+        },
+        "id": "c055762a-8fe7-4141-a639-df2372f30060",
+        "typeVersion": 1.1,
+        "name": "6.14 notify_on_the_way",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "position": [
+          272,
+          352
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nreturn [{\n  ...$json,\n\n  execution_context: parseMaybeJson($json.execution_context, $json.execution_context || {}),\n  context_packet: parseMaybeJson($json.context_packet, $json.context_packet || {}),\n  decision: parseMaybeJson($json.decision, $json.decision || {}),\n  state_update: parseMaybeJson($json.state_update, $json.state_update || {}),\n  execution_meta: parseMaybeJson($json.execution_meta, $json.execution_meta || {}),\n\n  lead_id: $json.lead_id || null,\n  channel: $json.channel || \"whatsapp\",\n  phone: $json.phone || null,\n\n  calendar_id: $json.calendar_id || null,\n  service_interest: $json.service_interest || null,\n  vehicle_type: $json.vehicle_type || null,\n  district: $json.district || null,\n\n  booking_date: $json.booking_date || null,\n  booking_time: $json.booking_time || null,\n  slot_id: $json.slot_id || null,\n\n  service_address: $json.service_address || null,\n  address_reference: $json.address_reference || null,\n  eta_minutes: $json.eta_minutes || null\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          464,
+          352
+        ],
+        "id": "c112bbfe-eee2-4916-b48c-60a2462f59d2",
+        "name": "normalize_input"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst state = data.context_packet?.state || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst leadId = firstValue(data.lead_id, ctx.lead_id, data.context_packet?.lead?.id);\nconst phone = firstValue(data.phone, ctx.phone, data.context_packet?.lead?.phone);\nconst channel = firstValue(data.channel, ctx.channel, data.context_packet?.lead?.channel, \"whatsapp\");\n\nconst etaMinutes = firstValue(\n  data.eta_minutes,\n  ctx.eta_minutes,\n  data.decision?.eta_minutes\n);\n\nlet message = \"Hola, voy en camino al servicio. Te aviso apenas esta llegando.\";\n\nif (etaMinutes) {\n  message = `Hola, voy en camino al servicio. Llego aproximadamente en ${etaMinutes} minutos. Te aviso apenas esta llegando.`;\n}\n\nreturn [{\n  ...data,\n\n  lead_id: leadId,\n  phone,\n  channel,\n\n  message_to_send: message,\n\n  db_operations: [\"messages\", \"lead_state\"],\n\n  state_update: {\n    ...(data.state_update || {}),\n    stage: state.stage || \"booked\",\n    next_goal: \"complete_service\",\n    last_bot_action: \"notify_on_the_way\",\n    missing_fields: []\n  },\n\n  execution_result: {\n    success: true,\n    action: \"notify_on_the_way\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\n      \"notify_on_the_way_message_prepared\"\n    ]\n  },\n\n  notes: [\n    ...(data.notes || []),\n    \"notify_on_the_way_subworkflow_completed\"\n  ]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          704,
+          352
+        ],
+        "id": "3898c905-5261-48b2-9975-a855fb5444dd",
+        "name": "build_notify_on_the_way_result"
+      }
+    ],
+    "connections": {
+      "6.14 notify_on_the_way": {
+        "main": [
+          [
+            {
+              "node": "normalize_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_input": {
+        "main": [
+          [
+            {
+              "node": "build_notify_on_the_way_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-27T17:41:10.758Z",
+        "id": 829,
+        "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+        "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:41.219Z",
+        "id": 937,
+        "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+        "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-27T17:41:10.725Z",
+        "id": 828,
+        "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+        "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-05-28T18:49:41.182Z",
+        "id": 936,
+        "workflowId": "213c2fee-a79a-479d-9210-3792201fa1b2",
+        "versionId": "3e4e6b95-02ae-4d5c-9582-fc1fe4473e83",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

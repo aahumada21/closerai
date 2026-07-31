@@ -6,3 +6,17 @@ Contexto/INFO_ignore.txt
 
 # graphify (regenerable knowledge graph, run `graphify update .` to rebuild)
 graphify-out/
+
+# dumps de ejecuciones de n8n (30MB+, regenerables volviendo a correr
+# la ejecucion; no son fuente)
+QA/results/
+
+# backups ad-hoc por bug (workflows/backups/<id>_pre_<bug>_<fecha>.json).
+# Los snapshots deliberados y con nombre (ej. pre_rules_engine_consolidation_*)
+# si se versionan, por eso el ignore es solo del patron ad-hoc.
+workflows/backups/*_pre_*.json
+
+# configuracion local de editor/herramientas
+.claude/settings.local.json
+.claude/*.graphify-bak
+.vscode/

@@ -1,0 +1,787 @@
+{
+  "updatedAt": "2026-06-25T17:54:30.646Z",
+  "createdAt": "2026-06-22T16:13:09.758Z",
+  "id": "J3IJloxxmbHiaJgf",
+  "name": "get_fresh_google_calendar_token",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"agent_id\": \"\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "name": "When Executed by Another Workflow",
+      "id": "gct-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst agentId = String(input.agent_id || \"\").trim();\n\nconst isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId);\n\nif (!isUuid) {\n  // Sin agent_id valido no hay nada que buscar: no lanzamos error para no\n  // romper el flujo de booking de leads viejos sin agent_id asignado todavia\n  // (445 leads historicos no tienen agent_id). Simplemente no hay conexion.\n  return [{\n    json: {\n      agent_id: null,\n      lookup_query: \"SELECT false AS connected, NULL AS google_email, NULL AS refresh_token, NULL AS access_token, NULL::timestamptz AS access_token_expires_at, NULL AS calendar_id;\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    agent_id: agentId,\n    lookup_query: `\nSELECT\n  EXISTS(SELECT 1 FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS connected,\n  (SELECT google_email FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS google_email,\n  (SELECT refresh_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS refresh_token,\n  (SELECT access_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS access_token,\n  (SELECT access_token_expires_at FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS access_token_expires_at,\n  (SELECT calendar_id FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS calendar_id;\n`\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "name": "validate_token_input",
+      "id": "gct-validate-input"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.lookup_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        0
+      ],
+      "name": "DB lookup_connection",
+      "id": "gct-db-lookup",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nconst connected = input.connected === true || input.connected === \"t\" || input.connected === \"true\";\n\nif (!connected) {\n  return [{ json: { connected: false, needs_refresh: false } }];\n}\n\nconst expiresAt = input.access_token_expires_at ? new Date(input.access_token_expires_at).getTime() : 0;\nconst needsRefresh = !input.access_token || !expiresAt || expiresAt < (Date.now() + 60000);\n\nreturn [{\n  json: {\n    connected: true,\n    needs_refresh: needsRefresh,\n    refresh_token: input.refresh_token,\n    access_token: input.access_token,\n    google_email: input.google_email,\n    calendar_id: input.calendar_id\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "name": "decide_refresh_needed",
+      "id": "gct-decide-refresh"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "gct-cond-connected",
+              "leftValue": "={{ $json.connected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ],
+      "name": "IF connected",
+      "id": "gct-if-connected"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "gct-cond-needs-refresh",
+              "leftValue": "={{ $json.needs_refresh }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        -120
+      ],
+      "name": "IF needs_refresh",
+      "id": "gct-if-needs-refresh"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://oauth2.googleapis.com/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.refresh_token }}"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $env.GOOGLE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.GOOGLE_SECRET }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -220
+      ],
+      "name": "refresh_access_token",
+      "id": "gct-http-refresh"
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentId = $(\"validate_token_input\").first().json.agent_id;\nconst tokens = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid agent_id uuid: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nconst expiresAt = new Date(Date.now() + (Number(tokens.expires_in || 3600) * 1000)).toISOString();\n\nconst query = `\nUPDATE public.google_calendar_connections\nSET access_token = ${sqlText(tokens.access_token)},\n    access_token_expires_at = ${sqlText(expiresAt)}::timestamptz,\n    updated_at = now()\nWHERE agent_id = ${sqlUuid(agentId)}\nRETURNING agent_id, google_email, access_token;\n`;\n\nreturn [{ json: { update_query: query, new_access_token: tokens.access_token } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -220
+      ],
+      "name": "build_token_update_query",
+      "id": "gct-build-update-query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.update_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1760,
+        -220
+      ],
+      "name": "DB update_access_token",
+      "id": "gct-db-update",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const built = $(\"build_token_update_query\").first().json;\nconst dbResult = $json || {};\nconst auth = $(\"decide_refresh_needed\").first().json;\n\nreturn [{\n  json: {\n    connected: true,\n    access_token: dbResult.access_token || built.new_access_token,\n    google_email: dbResult.google_email || null,\n    calendar_id: auth.calendar_id || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -220
+      ],
+      "name": "finalize_refreshed",
+      "id": "gct-finalize-refreshed"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    connected: true,\n    access_token: input.access_token,\n    google_email: input.google_email || null,\n    calendar_id: input.calendar_id || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -20
+      ],
+      "name": "finalize_cached",
+      "id": "gct-finalize-cached"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    connected: false,\n    access_token: null,\n    google_email: null,\n    calendar_id: null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        160
+      ],
+      "name": "finalize_not_connected",
+      "id": "gct-finalize-not-connected"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "validate_token_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_token_input": {
+      "main": [
+        [
+          {
+            "node": "DB lookup_connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB lookup_connection": {
+      "main": [
+        [
+          {
+            "node": "decide_refresh_needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "decide_refresh_needed": {
+      "main": [
+        [
+          {
+            "node": "IF connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF connected": {
+      "main": [
+        [
+          {
+            "node": "IF needs_refresh",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "finalize_not_connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF needs_refresh": {
+      "main": [
+        [
+          {
+            "node": "refresh_access_token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "finalize_cached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "refresh_access_token": {
+      "main": [
+        [
+          {
+            "node": "build_token_update_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_token_update_query": {
+      "main": [
+        [
+          {
+            "node": "DB update_access_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB update_access_token": {
+      "main": [
+        [
+          {
+            "node": "finalize_refreshed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "666078c2-c93a-4973-8e53-c4ab0614a3bf",
+  "activeVersionId": "666078c2-c93a-4973-8e53-c4ab0614a3bf",
+  "versionCounter": 22,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-22T16:13:09.767Z",
+      "createdAt": "2026-06-22T16:13:09.767Z",
+      "role": "workflow:owner",
+      "workflowId": "J3IJloxxmbHiaJgf",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-25T17:54:30.649Z",
+    "createdAt": "2026-06-25T17:54:30.649Z",
+    "versionId": "666078c2-c93a-4973-8e53-c4ab0614a3bf",
+    "workflowId": "J3IJloxxmbHiaJgf",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"agent_id\": \"\"\n}"
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          0
+        ],
+        "name": "When Executed by Another Workflow",
+        "id": "gct-trigger"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nconst agentId = String(input.agent_id || \"\").trim();\n\nconst isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId);\n\nif (!isUuid) {\n  // Sin agent_id valido no hay nada que buscar: no lanzamos error para no\n  // romper el flujo de booking de leads viejos sin agent_id asignado todavia\n  // (445 leads historicos no tienen agent_id). Simplemente no hay conexion.\n  return [{\n    json: {\n      agent_id: null,\n      lookup_query: \"SELECT false AS connected, NULL AS google_email, NULL AS refresh_token, NULL AS access_token, NULL::timestamptz AS access_token_expires_at, NULL AS calendar_id;\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    agent_id: agentId,\n    lookup_query: `\nSELECT\n  EXISTS(SELECT 1 FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS connected,\n  (SELECT google_email FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS google_email,\n  (SELECT refresh_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS refresh_token,\n  (SELECT access_token FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS access_token,\n  (SELECT access_token_expires_at FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS access_token_expires_at,\n  (SELECT calendar_id FROM public.google_calendar_connections WHERE agent_id = '${agentId}'::uuid) AS calendar_id;\n`\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "name": "validate_token_input",
+        "id": "gct-validate-input"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.lookup_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          440,
+          0
+        ],
+        "name": "DB lookup_connection",
+        "id": "gct-db-lookup",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nconst connected = input.connected === true || input.connected === \"t\" || input.connected === \"true\";\n\nif (!connected) {\n  return [{ json: { connected: false, needs_refresh: false } }];\n}\n\nconst expiresAt = input.access_token_expires_at ? new Date(input.access_token_expires_at).getTime() : 0;\nconst needsRefresh = !input.access_token || !expiresAt || expiresAt < (Date.now() + 60000);\n\nreturn [{\n  json: {\n    connected: true,\n    needs_refresh: needsRefresh,\n    refresh_token: input.refresh_token,\n    access_token: input.access_token,\n    google_email: input.google_email,\n    calendar_id: input.calendar_id\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "name": "decide_refresh_needed",
+        "id": "gct-decide-refresh"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "gct-cond-connected",
+                "leftValue": "={{ $json.connected }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          880,
+          0
+        ],
+        "name": "IF connected",
+        "id": "gct-if-connected"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "gct-cond-needs-refresh",
+                "leftValue": "={{ $json.needs_refresh }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1100,
+          -120
+        ],
+        "name": "IF needs_refresh",
+        "id": "gct-if-needs-refresh"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://oauth2.googleapis.com/token",
+          "sendBody": true,
+          "contentType": "form-urlencoded",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "refresh_token",
+                "value": "={{ $json.refresh_token }}"
+              },
+              {
+                "name": "client_id",
+                "value": "={{ $env.GOOGLE_CLIENT_ID }}"
+              },
+              {
+                "name": "client_secret",
+                "value": "={{ $env.GOOGLE_SECRET }}"
+              },
+              {
+                "name": "grant_type",
+                "value": "refresh_token"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -220
+        ],
+        "name": "refresh_access_token",
+        "id": "gct-http-refresh"
+      },
+      {
+        "parameters": {
+          "jsCode": "const agentId = $(\"validate_token_input\").first().json.agent_id;\nconst tokens = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuid(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  if (!isUuid) throw new Error(\"Invalid agent_id uuid: \" + text);\n  return \"'\" + text + \"'::uuid\";\n}\n\nconst expiresAt = new Date(Date.now() + (Number(tokens.expires_in || 3600) * 1000)).toISOString();\n\nconst query = `\nUPDATE public.google_calendar_connections\nSET access_token = ${sqlText(tokens.access_token)},\n    access_token_expires_at = ${sqlText(expiresAt)}::timestamptz,\n    updated_at = now()\nWHERE agent_id = ${sqlUuid(agentId)}\nRETURNING agent_id, google_email, access_token;\n`;\n\nreturn [{ json: { update_query: query, new_access_token: tokens.access_token } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          -220
+        ],
+        "name": "build_token_update_query",
+        "id": "gct-build-update-query"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.update_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1760,
+          -220
+        ],
+        "name": "DB update_access_token",
+        "id": "gct-db-update",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const built = $(\"build_token_update_query\").first().json;\nconst dbResult = $json || {};\nconst auth = $(\"decide_refresh_needed\").first().json;\n\nreturn [{\n  json: {\n    connected: true,\n    access_token: dbResult.access_token || built.new_access_token,\n    google_email: dbResult.google_email || null,\n    calendar_id: auth.calendar_id || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1980,
+          -220
+        ],
+        "name": "finalize_refreshed",
+        "id": "gct-finalize-refreshed"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    connected: true,\n    access_token: input.access_token,\n    google_email: input.google_email || null,\n    calendar_id: input.calendar_id || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          -20
+        ],
+        "name": "finalize_cached",
+        "id": "gct-finalize-cached"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{\n  json: {\n    connected: false,\n    access_token: null,\n    google_email: null,\n    calendar_id: null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          160
+        ],
+        "name": "finalize_not_connected",
+        "id": "gct-finalize-not-connected"
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
+            {
+              "node": "validate_token_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_token_input": {
+        "main": [
+          [
+            {
+              "node": "DB lookup_connection",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB lookup_connection": {
+        "main": [
+          [
+            {
+              "node": "decide_refresh_needed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "decide_refresh_needed": {
+        "main": [
+          [
+            {
+              "node": "IF connected",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF connected": {
+        "main": [
+          [
+            {
+              "node": "IF needs_refresh",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "finalize_not_connected",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF needs_refresh": {
+        "main": [
+          [
+            {
+              "node": "refresh_access_token",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "finalize_cached",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "refresh_access_token": {
+        "main": [
+          [
+            {
+              "node": "build_token_update_query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_token_update_query": {
+        "main": [
+          [
+            {
+              "node": "DB update_access_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB update_access_token": {
+        "main": [
+          [
+            {
+              "node": "finalize_refreshed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-25T17:54:31.5Z",
+        "id": 1456,
+        "workflowId": "J3IJloxxmbHiaJgf",
+        "versionId": "666078c2-c93a-4973-8e53-c4ab0614a3bf",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-25T17:54:31.425Z",
+        "id": 1455,
+        "workflowId": "J3IJloxxmbHiaJgf",
+        "versionId": "666078c2-c93a-4973-8e53-c4ab0614a3bf",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

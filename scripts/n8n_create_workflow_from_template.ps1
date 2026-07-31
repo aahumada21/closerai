@@ -3,11 +3,21 @@ param(
   [string]$TemplatePath,
 
   [Parameter(Mandatory = $false)]
-  [string]$Category = "uncategorized"
+  [string]$Category = "uncategorized",
+
+  [switch]$SkipPreflight
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not $SkipPreflight) {
+  $preflight = Join-Path $PSScriptRoot "check_workflow_exports.ps1"
+  if (Test-Path $preflight) {
+    & powershell -ExecutionPolicy Bypass -File $preflight -Paths $TemplatePath | Out-Host
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  }
+}
 
 function Require-Env([string]$Name) {
   $value = [Environment]::GetEnvironmentVariable($Name)

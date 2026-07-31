@@ -1,0 +1,13 @@
+INSERT INTO public.qa_test_scenarios_temp
+  (scenario_key, name, suite, enabled, priority, tags, steps, expected_outcome, category)
+VALUES
+  ('5693300001', 'BASE 01: flujo completo descubrimiento -> cotizacion -> agenda -> direccion -> confirmacion', 'closer_base_flows', true, 10, ARRAY['base','decision_tree','booking','happy_path']::text[], '[{"role":"user","text":"Hola, quiero el lavado premium","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["ask_missing_data"],"response_not_includes":["null","undefined","NaN"]}},{"role":"user","text":"Vivo en Las Condes, tengo un SUV","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["send_quote"],"response_not_includes":["null","undefined","NaN"]}},{"role":"user","text":"Dale, quiero agendar","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["offer_available_slots"],"response_not_includes":["null","undefined","NaN"]}},{"role":"user","text":"2","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["collect_address","offer_available_slots","answer_question"],"response_not_includes":["null","undefined","NaN"]}},{"role":"user","text":"Mi direccion es Av. Apoquindo 4500","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["confirm_address","confirm_booking"],"response_not_includes":["null","undefined","NaN"]}},{"role":"user","text":"Si, confirmo la reserva","source_metadata":{"provider":"meta_whatsapp_cloud_api","phone_number_id":"qa-phone-ahumada-agent-aware"},"expect":{"must_have_audit":true,"decision_action_any":["confirm_booking","offer_available_slots","confirm_address"],"response_not_includes":["null","undefined","NaN"]}}]'::jsonb, 'El bot debe guiar al lead desde el saludo inicial hasta una reserva confirmada: pide la comuna que falta, cotiza al recibir vehiculo y comuna, ofrece horarios reales disponibles (prepago_only), y tras elegir un horario por numero, pide la direccion, la confirma, y finalmente confirma la reserva.', 'base')
+ON CONFLICT (scenario_key) DO UPDATE SET
+  name = EXCLUDED.name,
+  suite = EXCLUDED.suite,
+  priority = EXCLUDED.priority,
+  tags = EXCLUDED.tags,
+  steps = EXCLUDED.steps,
+  expected_outcome = EXCLUDED.expected_outcome,
+  category = EXCLUDED.category,
+  updated_at = now();

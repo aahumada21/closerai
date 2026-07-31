@@ -1,0 +1,611 @@
+{
+  "updatedAt": "2026-07-10T17:04:24.631Z",
+  "createdAt": "2026-05-22T22:29:40.804Z",
+  "id": "48860882-12ae-40c1-be93-c9778cade549",
+  "name": "6.8 send_quote",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+      },
+      "id": "69549bf9-8bb8-4169-8237-9cbefe3cdb87",
+      "name": "6.8 send_quote",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowsend_quoteinput_normalized\"\n  ]\n}];"
+      },
+      "id": "88b661b3-6402-4ae9-be52-e8b50a9d68f5",
+      "name": "normalize_input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    ...$json,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n\n    state_update: {\n      ...($json.execution_context.state_update || {}),\n      missing_fields: []\n    },\n\n    internal_status: \"send_quote_in_progress\"\n  }\n];"
+      },
+      "id": "5c2cf377-95b7-4633-986a-2f8e4b1d6336",
+      "name": "send_quote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "72b60f14-db90-436e-b48c-02b96dd4f946",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/72b60f14-db90-436e-b48c-02b96dd4f946",
+          "cachedResultName": "6.0 resolve_pricing_from_db"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "service_interest": "={{$json.execution_context.service_interest}}",
+            "vehicle_type": "={{$json.execution_context.vehicle_type}}",
+            "district": "={{$json.execution_context.district}}",
+            "agent_id": "={{$json.execution_context.agent_id}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "service_interest",
+              "displayName": "service_interest",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "vehicle_type",
+              "displayName": "vehicle_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "district",
+              "displayName": "district",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "agent_id",
+              "displayName": "agent_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        96
+      ],
+      "id": "3d2fffef-9772-4c66-a9d0-e99b8c12f501",
+      "name": "Call 6.0 resolve_pricing_from_db"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "79c53f91-06e2-4516-84ed-dfb68704558e",
+              "leftValue": "={{ $json.pricing_found === true || ($json.success === true && (!!$json.quote?.base_price || (Array.isArray($json.price_list) && $json.price_list.length > 0))) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        16
+      ],
+      "id": "a04f32d0-7548-439a-a440-501faef298c4",
+      "name": "IF pricing_found1"
+    },
+    {
+      "parameters": {
+        "jsCode": "function formatCLP(value) {\n  const number = Number(value);\n\n  if (!Number.isFinite(number)) {\n    return `$${value}`;\n  }\n\n  return `$${number.toLocaleString(\"es-CL\")}`;\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado basico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado basico\"\n  };\n\n  return map[service] || service || \"servicio\";\n}\n\nconst vehicle =\n  $json.normalized_inputs?.vehicle_type ||\n  $json.quote?.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  \"tu vehiculo\";\n\nconst district =\n  $json.normalized_inputs?.district_key ||\n  $json.quote?.district ||\n  $json.execution_context?.district ||\n  $json.context_packet?.state?.district ||\n  \"tu comuna\";\n\nif (Array.isArray($json.price_list) && $json.price_list.length > 0) {\n  const lines = $json.price_list.map((item) =>\n    `- ${serviceLabel(item.service_code)}: ${formatCLP(item.price)}`\n  );\n\n  const message =\n    `Perfecto. Para tu ${vehicle} en ${district}, estos son los valores:\\n\\n` +\n    lines.join(\"\\n\") +\n    \"\\n\\nSi quieres, te puedo mandar horarios para agendar el servicio que prefieras.\";\n\n  return [{\n    ...$json,\n    message_to_send: message,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"quoted\",\n      intent_last: \"price_list_sent\",\n      next_goal: \"choose_service_or_book\",\n      last_bot_action: \"send_quote\",\n      vehicle_type: vehicle,\n      district: district,\n      missing_fields: []\n    },\n    internal_status: \"send_quote_in_progress\"\n  }];\n}\n\nconst q = $json.quote;\n\nif (!q || !q.price) {\n  throw new Error(\"Missing resolved quote\");\n}\n\nconst service =\n  q.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst message = `Perfecto. Para tu ${vehicle} en ${district}, el ${serviceLabel(service)} tiene un valor de ${formatCLP(q.price)}. Quieres que te mande los horarios para agendar?`;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"offers_or_quotes\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"quoted\",\n    intent_last: \"quote_sent\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"send_quote\",\n    service_interest: service,\n    vehicle_type: vehicle,\n    district: district,\n    missing_fields: [],\n    quoted_price: q.price || null,\n    quoted_service: service || null\n  },\n  internal_status: \"send_quote_in_progress\"\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        -128
+      ],
+      "id": "0c8bd8e4-a88f-4e7b-b6b8-c0e5ef62d2f4",
+      "name": "build_quote_message"
+    },
+    {
+      "parameters": {
+        "jsCode": "function serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado basico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado basico\"\n  };\n\n  return map[service] || service || \"ese servicio\";\n}\n\nconst vehicle =\n  $json.normalized_inputs?.vehicle_type ||\n  $json.quote?.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  null;\n\nconst service =\n  $json.quote?.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst message = vehicle\n  ? `No tengo una tarifa definida para ${serviceLabel(service)} en ${vehicle}. Te derivare con un asesor para confirmar el precio antes de agendar.`\n  : \"No pude calcular la cotizacion en este momento. Te derivare con un asesor para revisar precio y horarios antes de agendar.\";\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    last_bot_action: \"pricing_rule_not_found\",\n    next_goal: \"manual_pricing_review\"\n  },\n  notes: [\n    ...($json.notes || []),\n    \"pricing_rule_not_found\",\n    \"handoff_required_after_quote_failure\"\n  ]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        16
+      ],
+      "id": "a209e70b-566b-4614-897a-f73227f8c2cc",
+      "name": "build_pricing_unavailable_result"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        928,
+        -32
+      ],
+      "id": "bf860dd8-4b4a-4610-9fbe-9de91e45c798",
+      "name": "merge_pricing_with_context"
+    }
+  ],
+  "connections": {
+    "6.8 send_quote": {
+      "main": [
+        [
+          {
+            "node": "normalize_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_input": {
+      "main": [
+        [
+          {
+            "node": "send_quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.0 resolve_pricing_from_db": {
+      "main": [
+        [
+          {
+            "node": "merge_pricing_with_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF pricing_found1": {
+      "main": [
+        [
+          {
+            "node": "build_quote_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_pricing_unavailable_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_pricing_with_context": {
+      "main": [
+        [
+          {
+            "node": "IF pricing_found1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_quote": {
+      "main": [
+        [
+          {
+            "node": "Call 6.0 resolve_pricing_from_db",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "merge_pricing_with_context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "4a06973b-d576-4abf-beae-0495c32d27ba",
+  "activeVersionId": "4a06973b-d576-4abf-beae-0495c32d27ba",
+  "versionCounter": 56,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "48860882-12ae-40c1-be93-c9778cade549",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-10T17:04:24.634Z",
+    "createdAt": "2026-07-10T17:04:24.634Z",
+    "versionId": "4a06973b-d576-4abf-beae-0495c32d27ba",
+    "workflowId": "48860882-12ae-40c1-be93-c9778cade549",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"payload\": \"={{ JSON.stringify($json) }}\"\n}"
+        },
+        "id": "69549bf9-8bb8-4169-8237-9cbefe3cdb87",
+        "name": "6.8 send_quote",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst payload = parseMaybeJson($json.payload, {});\nreturn [{\n  ...payload,\n  notes: [\n    ...(payload.notes || []),\n    \"subworkflowsend_quoteinput_normalized\"\n  ]\n}];"
+        },
+        "id": "88b661b3-6402-4ae9-be52-e8b50a9d68f5",
+        "name": "normalize_input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    ...$json,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n\n    state_update: {\n      ...($json.execution_context.state_update || {}),\n      missing_fields: []\n    },\n\n    internal_status: \"send_quote_in_progress\"\n  }\n];"
+        },
+        "id": "5c2cf377-95b7-4633-986a-2f8e4b1d6336",
+        "name": "send_quote",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "72b60f14-db90-436e-b48c-02b96dd4f946",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/72b60f14-db90-436e-b48c-02b96dd4f946",
+            "cachedResultName": "6.0 resolve_pricing_from_db"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "service_interest": "={{$json.execution_context.service_interest}}",
+              "vehicle_type": "={{$json.execution_context.vehicle_type}}",
+              "district": "={{$json.execution_context.district}}",
+              "agent_id": "={{$json.execution_context.agent_id}}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "service_interest",
+                "displayName": "service_interest",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "vehicle_type",
+                "displayName": "vehicle_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "district",
+                "displayName": "district",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "agent_id",
+                "displayName": "agent_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          704,
+          96
+        ],
+        "id": "3d2fffef-9772-4c66-a9d0-e99b8c12f501",
+        "name": "Call 6.0 resolve_pricing_from_db"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "79c53f91-06e2-4516-84ed-dfb68704558e",
+                "leftValue": "={{ $json.pricing_found === true || ($json.success === true && (!!$json.quote?.base_price || (Array.isArray($json.price_list) && $json.price_list.length > 0))) }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1136,
+          16
+        ],
+        "id": "a04f32d0-7548-439a-a440-501faef298c4",
+        "name": "IF pricing_found1"
+      },
+      {
+        "parameters": {
+          "jsCode": "function formatCLP(value) {\n  const number = Number(value);\n\n  if (!Number.isFinite(number)) {\n    return `$${value}`;\n  }\n\n  return `$${number.toLocaleString(\"es-CL\")}`;\n}\n\nfunction serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado basico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado basico\"\n  };\n\n  return map[service] || service || \"servicio\";\n}\n\nconst vehicle =\n  $json.normalized_inputs?.vehicle_type ||\n  $json.quote?.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  \"tu vehiculo\";\n\nconst district =\n  $json.normalized_inputs?.district_key ||\n  $json.quote?.district ||\n  $json.execution_context?.district ||\n  $json.context_packet?.state?.district ||\n  \"tu comuna\";\n\nif (Array.isArray($json.price_list) && $json.price_list.length > 0) {\n  const lines = $json.price_list.map((item) =>\n    `- ${serviceLabel(item.service_code)}: ${formatCLP(item.price)}`\n  );\n\n  const message =\n    `Perfecto. Para tu ${vehicle} en ${district}, estos son los valores:\\n\\n` +\n    lines.join(\"\\n\") +\n    \"\\n\\nSi quieres, te puedo mandar horarios para agendar el servicio que prefieras.\";\n\n  return [{\n    ...$json,\n    message_to_send: message,\n    db_operations: [\"messages\", \"offers_or_quotes\"],\n    state_update: {\n      ...($json.state_update || {}),\n      stage: \"quoted\",\n      intent_last: \"price_list_sent\",\n      next_goal: \"choose_service_or_book\",\n      last_bot_action: \"send_quote\",\n      vehicle_type: vehicle,\n      district: district,\n      missing_fields: []\n    },\n    internal_status: \"send_quote_in_progress\"\n  }];\n}\n\nconst q = $json.quote;\n\nif (!q || !q.price) {\n  throw new Error(\"Missing resolved quote\");\n}\n\nconst service =\n  q.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst message = `Perfecto. Para tu ${vehicle} en ${district}, el ${serviceLabel(service)} tiene un valor de ${formatCLP(q.price)}. Quieres que te mande los horarios para agendar?`;\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"offers_or_quotes\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"quoted\",\n    intent_last: \"quote_sent\",\n    next_goal: \"book_appointment\",\n    last_bot_action: \"send_quote\",\n    service_interest: service,\n    vehicle_type: vehicle,\n    district: district,\n    missing_fields: [],\n    quoted_price: q.price || null,\n    quoted_service: service || null\n  },\n  internal_status: \"send_quote_in_progress\"\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1328,
+          -128
+        ],
+        "id": "0c8bd8e4-a88f-4e7b-b6b8-c0e5ef62d2f4",
+        "name": "build_quote_message"
+      },
+      {
+        "parameters": {
+          "jsCode": "function serviceLabel(service) {\n  const map = {\n    lavado_basico: \"lavado basico\",\n    lavado_premium: \"lavado premium\",\n    encerado_full: \"encerado full\",\n    lavado_profundo: \"lavado premium\",\n    lavado_esencial: \"lavado basico\"\n  };\n\n  return map[service] || service || \"ese servicio\";\n}\n\nconst vehicle =\n  $json.normalized_inputs?.vehicle_type ||\n  $json.quote?.vehicle_type ||\n  $json.execution_context?.vehicle_type ||\n  $json.context_packet?.state?.vehicle_type ||\n  null;\n\nconst service =\n  $json.quote?.service ||\n  $json.execution_context?.service_interest ||\n  $json.context_packet?.state?.service_interest ||\n  null;\n\nconst message = vehicle\n  ? `No tengo una tarifa definida para ${serviceLabel(service)} en ${vehicle}. Te derivare con un asesor para confirmar el precio antes de agendar.`\n  : \"No pude calcular la cotizacion en este momento. Te derivare con un asesor para revisar precio y horarios antes de agendar.\";\n\nreturn [{\n  ...$json,\n  message_to_send: message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: {\n    ...($json.state_update || {}),\n    stage: \"human_handoff\",\n    human_handoff: true,\n    last_bot_action: \"pricing_rule_not_found\",\n    next_goal: \"manual_pricing_review\"\n  },\n  notes: [\n    ...($json.notes || []),\n    \"pricing_rule_not_found\",\n    \"handoff_required_after_quote_failure\"\n  ]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1328,
+          16
+        ],
+        "id": "a209e70b-566b-4614-897a-f73227f8c2cc",
+        "name": "build_pricing_unavailable_result"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          928,
+          -32
+        ],
+        "id": "bf860dd8-4b4a-4610-9fbe-9de91e45c798",
+        "name": "merge_pricing_with_context"
+      }
+    ],
+    "connections": {
+      "6.8 send_quote": {
+        "main": [
+          [
+            {
+              "node": "normalize_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_input": {
+        "main": [
+          [
+            {
+              "node": "send_quote",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.0 resolve_pricing_from_db": {
+        "main": [
+          [
+            {
+              "node": "merge_pricing_with_context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF pricing_found1": {
+        "main": [
+          [
+            {
+              "node": "build_quote_message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_pricing_unavailable_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_pricing_with_context": {
+        "main": [
+          [
+            {
+              "node": "IF pricing_found1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "send_quote": {
+        "main": [
+          [
+            {
+              "node": "Call 6.0 resolve_pricing_from_db",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "merge_pricing_with_context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-10T17:04:25.013Z",
+        "id": 1966,
+        "workflowId": "48860882-12ae-40c1-be93-c9778cade549",
+        "versionId": "4a06973b-d576-4abf-beae-0495c32d27ba",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-10T17:04:24.798Z",
+        "id": 1965,
+        "workflowId": "48860882-12ae-40c1-be93-c9778cade549",
+        "versionId": "4a06973b-d576-4abf-beae-0495c32d27ba",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

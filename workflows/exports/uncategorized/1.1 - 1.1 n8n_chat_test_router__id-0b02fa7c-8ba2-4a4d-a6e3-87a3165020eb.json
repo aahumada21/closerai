@@ -1,0 +1,892 @@
+{
+  "updatedAt": "2026-06-18T15:12:11.719Z",
+  "createdAt": "2026-05-22T22:29:40.747Z",
+  "id": "0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb",
+  "name": "1.1 n8n_chat_test_router",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -176,
+        -32
+      ],
+      "id": "7f7a91a4-6537-4213-9e7e-d26429aed495",
+      "name": "When chat message received",
+      "webhookId": "7477a1e5-16b7-4400-88c1-5d55a84b72e7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\n\nconst chatInput =\n  input.chatInput ||\n  input.text ||\n  input.message ||\n  input.input ||\n  '';\n\nconst chatSessionId =\n  input.sessionId ||\n  input.chatSessionId ||\n  input.chat_id ||\n  input.conversationId ||\n  'manual_chat_session';\n\nconst text = String(chatInput || '').trim();\n\nconst numberCommandMatch = text.match(/^\\/(?:numero|n¿mero|phone)\\s+(\\+?\\d[\\d\\s+-]*)$/i);\n\nlet requestedPhone = null;\n\nif (numberCommandMatch) {\n  requestedPhone = numberCommandMatch[1].replace(/\\D/g, '');\n\n  // Si colocas 949186386, lo convierte a 56949186386\n  if (!requestedPhone.startsWith('56') && requestedPhone.length === 9) {\n    requestedPhone = `56${requestedPhone}`;\n  }\n}\n\nreturn [\n  {\n    json: {\n      raw_chat_payload: input,\n      chat_session_id: chatSessionId,\n      text,\n      is_number_command: Boolean(requestedPhone),\n      requested_phone: requestedPhone,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -32
+      ],
+      "id": "e0abab30-3b8a-45f7-86b4-51fdb9c68a1c",
+      "name": "parse_chat_input"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.test_chat_sessions (\n  chat_session_id,\n  assigned_phone,\n  assigned_name,\n  channel,\n  updated_at\n)\nVALUES (\n  '{{ $json.chat_session_id.replace(/'/g, \"''\") }}',\n  '{{ $json.requested_phone.replace(/'/g, \"''\") }}',\n  'Test Chat {{ $json.requested_phone.replace(/'/g, \"''\") }}',\n  'n8n_chat',\n  now()\n)\nON CONFLICT (chat_session_id)\nDO UPDATE SET\n  assigned_phone = EXCLUDED.assigned_phone,\n  assigned_name = EXCLUDED.assigned_name,\n  updated_at = now()\nRETURNING *;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        528,
+        -176
+      ],
+      "id": "b52772d2-598e-4565-9d2a-613c84f2d2db",
+      "name": "db Guardar Numero",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM public.test_chat_sessions\nWHERE chat_session_id = '{{ $json.chat_session_id.replace(/'/g, \"''\") }}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        448,
+        64
+      ],
+      "id": "d151ccb3-f6d7-44d5-adb7-cb59045a8496",
+      "name": "db BuscarNumero",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatInput = $('parse_chat_input').first().json;\nconst session = $json;\n\nconst phone = String(session.assigned_phone || '').replace(/\\D/g, '');\n\nif (!phone || !phone.startsWith('56')) {\n  throw new Error('Invalid assigned_phone for n8n_chat test session');\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      channel: 'n8n_chat',\n      lead_id: phone,\n      phone,\n      message_id: `n8n_chat_${chatInput.chat_session_id}_${Date.now()}`,\n      timestamp: now,\n      message_type: 'text',\n      text: chatInput.text,\n      attachments: [],\n      contact: {\n        wa_id: phone,\n        name: session.assigned_name || `Test Chat ${phone}`\n      },\n      source_metadata: {\n        provider: 'n8n_chat',\n        chat_session_id: chatInput.chat_session_id,\n        assigned_phone: phone,\n        test_mode: true\n      },\n      raw_message: {\n        chat_session_id: chatInput.chat_session_id,\n        text: chatInput.text\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        64
+      ],
+      "id": "e0e7a677-934e-4738-ba28-ba54558c152b",
+      "name": "build_normalized_event"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT agent_id, organization_id\nFROM public.agent_channels\nWHERE provider = 'n8n_chat_test'\n  AND external_channel_id = '{{ $json.phone.replace(/'/g, \"''\") }}'\n  AND is_active = true\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        928,
+        64
+      ],
+      "id": "aeb0a767-c1d9-476f-8623-c8aef350470b",
+      "name": "lookup_test_agent_channel",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('build_normalized_event').first().json;\nconst match = $json || {};\n\n// Fallback: si el numero de prueba no esta registrado en agent_channels,\n// usamos el agente Ahumada Detailing por defecto (unico agente real en uso).\nconst DEFAULT_AGENT_ID = '90351a2d-1c0c-4918-b3ef-b4cef1f3df9d';\nconst DEFAULT_ORGANIZATION_ID = '0f709b9c-23b3-4fd5-9fd5-db11a767d364';\n\nconst agentId = match.agent_id || DEFAULT_AGENT_ID;\nconst organizationId = match.organization_id || DEFAULT_ORGANIZATION_ID;\n\nreturn [\n  {\n    json: {\n      ...event,\n      agent_id: agentId,\n      organization_id: organizationId,\n      routing: {\n        ...(event.routing || {}),\n        agent_id: agentId,\n        organization_id: organizationId\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        64
+      ],
+      "id": "90cee33e-d624-46b9-8e3f-c05bad348267",
+      "name": "attach_test_agent_context"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "cachedResultName": "2 lead_loader"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1072,
+        64
+      ],
+      "id": "825ceb0f-e7f2-4242-954e-67d0a678df53",
+      "name": "Call '2 lead_loader'"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      output: `Listo. Este chat ahora simula el n¿mero ${$json.assigned_phone}.`\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -176
+      ],
+      "id": "35cf5041-bd82-4f97-b30b-e1f8224119d7",
+      "name": "Responder n¿mero asignado"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      output: `Primero asigna un n¿mero para este chat usando:\\n\\n/numero 569900000001`\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        224
+      ],
+      "id": "a95c4482-b3a2-410b-9767-f70b1b180d2a",
+      "name": "responder pedir n¿mero"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "19970663-7d98-4e4b-ac3c-4802dbb664ac",
+              "leftValue": "={{ $json.assigned_phone !== undefined && $json.assigned_phone !== null && $json.assigned_phone !== \"\" }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        656,
+        64
+      ],
+      "id": "1758b83f-dcf4-4cd4-a25a-5757a8ab54bb",
+      "name": "IF: existe sesin"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cbf2912c-b90b-46c0-b4fb-d9a1e3088d53",
+              "leftValue": "={{ $json.is_number_command === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        240,
+        -32
+      ],
+      "id": "4a51bcd4-662e-425c-b052-501788e90121",
+      "name": "IF: es comando n¿mero"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE\n    phone = '{{ $(\"build_normalized_event\").first().json.phone }}'\n    OR external_id = '{{ $(\"build_normalized_event\").first().json.phone }}'\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT\n  m.content,\n  m.created_at,\n  m.status,\n  m.channel\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE\n  m.direction = 'outbound'\n  AND m.channel = 'n8n_chat'\n  AND m.created_at >= NOW() - INTERVAL '2 minutes'\nORDER BY m.created_at DESC\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1280,
+        64
+      ],
+      "id": "cfc38259-578c-460d-8bcb-0a37615cd585",
+      "name": "DB buscar respuesta outbound chat",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\n\nconst message =\n  row.content ||\n  row.message ||\n  row.output ||\n  null;\n\nif (!message) {\n  return [\n    {\n      json: {\n        output: \"No encontr una respuesta generada por el bot. Revisa si el action_executor lleg a enviar/guardar el mensaje outbound.\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      output: message\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        64
+      ],
+      "id": "875c43d7-7019-41f6-9a6a-6838d1c945d2",
+      "name": "Responder al chat"
+    }
+  ],
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "parse_chat_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_chat_input": {
+      "main": [
+        [
+          {
+            "node": "IF: es comando n¿mero",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db BuscarNumero": {
+      "main": [
+        [
+          {
+            "node": "IF: existe sesin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_normalized_event": {
+      "main": [
+        [
+          {
+            "node": "lookup_test_agent_channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lookup_test_agent_channel": {
+      "main": [
+        [
+          {
+            "node": "attach_test_agent_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_test_agent_context": {
+      "main": [
+        [
+          {
+            "node": "Call '2 lead_loader'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db Guardar Numero": {
+      "main": [
+        [
+          {
+            "node": "Responder n¿mero asignado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: existe sesin": {
+      "main": [
+        [
+          {
+            "node": "build_normalized_event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "responder pedir n¿mero",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '2 lead_loader'": {
+      "main": [
+        [
+          {
+            "node": "DB buscar respuesta outbound chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: es comando n¿mero": {
+      "main": [
+        [
+          {
+            "node": "db Guardar Numero",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "db BuscarNumero",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB buscar respuesta outbound chat": {
+      "main": [
+        [
+          {
+            "node": "Responder al chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "91f27ef6-18a7-49cc-91ca-7309c8403171",
+  "activeVersionId": "91f27ef6-18a7-49cc-91ca-7309c8403171",
+  "versionCounter": 50,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-18T15:12:11.734Z",
+    "createdAt": "2026-06-18T15:12:11.734Z",
+    "versionId": "91f27ef6-18a7-49cc-91ca-7309c8403171",
+    "workflowId": "0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb",
+    "nodes": [
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+        "typeVersion": 1.4,
+        "position": [
+          -176,
+          -32
+        ],
+        "id": "7f7a91a4-6537-4213-9e7e-d26429aed495",
+        "name": "When chat message received",
+        "webhookId": "7477a1e5-16b7-4400-88c1-5d55a84b72e7"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json;\n\nconst chatInput =\n  input.chatInput ||\n  input.text ||\n  input.message ||\n  input.input ||\n  '';\n\nconst chatSessionId =\n  input.sessionId ||\n  input.chatSessionId ||\n  input.chat_id ||\n  input.conversationId ||\n  'manual_chat_session';\n\nconst text = String(chatInput || '').trim();\n\nconst numberCommandMatch = text.match(/^\\/(?:numero|n¿mero|phone)\\s+(\\+?\\d[\\d\\s+-]*)$/i);\n\nlet requestedPhone = null;\n\nif (numberCommandMatch) {\n  requestedPhone = numberCommandMatch[1].replace(/\\D/g, '');\n\n  // Si colocas 949186386, lo convierte a 56949186386\n  if (!requestedPhone.startsWith('56') && requestedPhone.length === 9) {\n    requestedPhone = `56${requestedPhone}`;\n  }\n}\n\nreturn [\n  {\n    json: {\n      raw_chat_payload: input,\n      chat_session_id: chatSessionId,\n      text,\n      is_number_command: Boolean(requestedPhone),\n      requested_phone: requestedPhone,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          32,
+          -32
+        ],
+        "id": "e0abab30-3b8a-45f7-86b4-51fdb9c68a1c",
+        "name": "parse_chat_input"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.test_chat_sessions (\n  chat_session_id,\n  assigned_phone,\n  assigned_name,\n  channel,\n  updated_at\n)\nVALUES (\n  '{{ $json.chat_session_id.replace(/'/g, \"''\") }}',\n  '{{ $json.requested_phone.replace(/'/g, \"''\") }}',\n  'Test Chat {{ $json.requested_phone.replace(/'/g, \"''\") }}',\n  'n8n_chat',\n  now()\n)\nON CONFLICT (chat_session_id)\nDO UPDATE SET\n  assigned_phone = EXCLUDED.assigned_phone,\n  assigned_name = EXCLUDED.assigned_name,\n  updated_at = now()\nRETURNING *;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          528,
+          -176
+        ],
+        "id": "b52772d2-598e-4565-9d2a-613c84f2d2db",
+        "name": "db Guardar Numero",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT *\nFROM public.test_chat_sessions\nWHERE chat_session_id = '{{ $json.chat_session_id.replace(/'/g, \"''\") }}'\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          448,
+          64
+        ],
+        "id": "d151ccb3-f6d7-44d5-adb7-cb59045a8496",
+        "name": "db BuscarNumero",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const chatInput = $('parse_chat_input').first().json;\nconst session = $json;\n\nconst phone = String(session.assigned_phone || '').replace(/\\D/g, '');\n\nif (!phone || !phone.startsWith('56')) {\n  throw new Error('Invalid assigned_phone for n8n_chat test session');\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      channel: 'n8n_chat',\n      lead_id: phone,\n      phone,\n      message_id: `n8n_chat_${chatInput.chat_session_id}_${Date.now()}`,\n      timestamp: now,\n      message_type: 'text',\n      text: chatInput.text,\n      attachments: [],\n      contact: {\n        wa_id: phone,\n        name: session.assigned_name || `Test Chat ${phone}`\n      },\n      source_metadata: {\n        provider: 'n8n_chat',\n        chat_session_id: chatInput.chat_session_id,\n        assigned_phone: phone,\n        test_mode: true\n      },\n      raw_message: {\n        chat_session_id: chatInput.chat_session_id,\n        text: chatInput.text\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          864,
+          64
+        ],
+        "id": "e0e7a677-934e-4738-ba28-ba54558c152b",
+        "name": "build_normalized_event"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT agent_id, organization_id\nFROM public.agent_channels\nWHERE provider = 'n8n_chat_test'\n  AND external_channel_id = '{{ $json.phone.replace(/'/g, \"''\") }}'\n  AND is_active = true\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          928,
+          64
+        ],
+        "id": "aeb0a767-c1d9-476f-8623-c8aef350470b",
+        "name": "lookup_test_agent_channel",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const event = $('build_normalized_event').first().json;\nconst match = $json || {};\n\n// Fallback: si el numero de prueba no esta registrado en agent_channels,\n// usamos el agente Ahumada Detailing por defecto (unico agente real en uso).\nconst DEFAULT_AGENT_ID = '90351a2d-1c0c-4918-b3ef-b4cef1f3df9d';\nconst DEFAULT_ORGANIZATION_ID = '0f709b9c-23b3-4fd5-9fd5-db11a767d364';\n\nconst agentId = match.agent_id || DEFAULT_AGENT_ID;\nconst organizationId = match.organization_id || DEFAULT_ORGANIZATION_ID;\n\nreturn [\n  {\n    json: {\n      ...event,\n      agent_id: agentId,\n      organization_id: organizationId,\n      routing: {\n        ...(event.routing || {}),\n        agent_id: agentId,\n        organization_id: organizationId\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1104,
+          64
+        ],
+        "id": "90cee33e-d624-46b9-8e3f-c05bad348267",
+        "name": "attach_test_agent_context"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+            "cachedResultName": "2 lead_loader"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          1072,
+          64
+        ],
+        "id": "825ceb0f-e7f2-4242-954e-67d0a678df53",
+        "name": "Call '2 lead_loader'"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      output: `Listo. Este chat ahora simula el n¿mero ${$json.assigned_phone}.`\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          736,
+          -176
+        ],
+        "id": "35cf5041-bd82-4f97-b30b-e1f8224119d7",
+        "name": "Responder n¿mero asignado"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      output: `Primero asigna un n¿mero para este chat usando:\\n\\n/numero 569900000001`\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          224
+        ],
+        "id": "a95c4482-b3a2-410b-9767-f70b1b180d2a",
+        "name": "responder pedir n¿mero"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "19970663-7d98-4e4b-ac3c-4802dbb664ac",
+                "leftValue": "={{ $json.assigned_phone !== undefined && $json.assigned_phone !== null && $json.assigned_phone !== \"\" }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          656,
+          64
+        ],
+        "id": "1758b83f-dcf4-4cd4-a25a-5757a8ab54bb",
+        "name": "IF: existe sesin"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "cbf2912c-b90b-46c0-b4fb-d9a1e3088d53",
+                "leftValue": "={{ $json.is_number_command === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          240,
+          -32
+        ],
+        "id": "4a51bcd4-662e-425c-b052-501788e90121",
+        "name": "IF: es comando n¿mero"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH lead_ref AS (\n  SELECT id\n  FROM public.leads\n  WHERE\n    phone = '{{ $(\"build_normalized_event\").first().json.phone }}'\n    OR external_id = '{{ $(\"build_normalized_event\").first().json.phone }}'\n  ORDER BY created_at DESC\n  LIMIT 1\n)\nSELECT\n  m.content,\n  m.created_at,\n  m.status,\n  m.channel\nFROM public.messages m\nJOIN lead_ref l ON l.id = m.lead_id\nWHERE\n  m.direction = 'outbound'\n  AND m.channel = 'n8n_chat'\n  AND m.created_at >= NOW() - INTERVAL '2 minutes'\nORDER BY m.created_at DESC\nLIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1280,
+          64
+        ],
+        "id": "cfc38259-578c-460d-8bcb-0a37615cd585",
+        "name": "DB buscar respuesta outbound chat",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const row = $json;\n\nconst message =\n  row.content ||\n  row.message ||\n  row.output ||\n  null;\n\nif (!message) {\n  return [\n    {\n      json: {\n        output: \"No encontr una respuesta generada por el bot. Revisa si el action_executor lleg a enviar/guardar el mensaje outbound.\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      output: message\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1488,
+          64
+        ],
+        "id": "875c43d7-7019-41f6-9a6a-6838d1c945d2",
+        "name": "Responder al chat"
+      }
+    ],
+    "connections": {
+      "When chat message received": {
+        "main": [
+          [
+            {
+              "node": "parse_chat_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "parse_chat_input": {
+        "main": [
+          [
+            {
+              "node": "IF: es comando n¿mero",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "db BuscarNumero": {
+        "main": [
+          [
+            {
+              "node": "IF: existe sesin",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_normalized_event": {
+        "main": [
+          [
+            {
+              "node": "lookup_test_agent_channel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "lookup_test_agent_channel": {
+        "main": [
+          [
+            {
+              "node": "attach_test_agent_context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "attach_test_agent_context": {
+        "main": [
+          [
+            {
+              "node": "Call '2 lead_loader'",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "db Guardar Numero": {
+        "main": [
+          [
+            {
+              "node": "Responder n¿mero asignado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF: existe sesin": {
+        "main": [
+          [
+            {
+              "node": "build_normalized_event",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "responder pedir n¿mero",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call '2 lead_loader'": {
+        "main": [
+          [
+            {
+              "node": "DB buscar respuesta outbound chat",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF: es comando n¿mero": {
+        "main": [
+          [
+            {
+              "node": "db Guardar Numero",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "db BuscarNumero",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB buscar respuesta outbound chat": {
+        "main": [
+          [
+            {
+              "node": "Responder al chat",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-18T15:12:12.164Z",
+        "id": 1336,
+        "workflowId": "0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb",
+        "versionId": "91f27ef6-18a7-49cc-91ca-7309c8403171",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-18T15:12:12.1Z",
+        "id": 1335,
+        "workflowId": "0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb",
+        "versionId": "91f27ef6-18a7-49cc-91ca-7309c8403171",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

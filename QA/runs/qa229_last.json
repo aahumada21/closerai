@@ -1,0 +1,97 @@
+{
+    "steps": [
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "Hola",
+            "step_index": 1,
+            "bot_response": "Perfecto. ┬┐Qu├⌐ servicio te interesa?",
+            "decision_action": "ask_missing_data",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_1_1779659409185__ask_missing_data",
+            "requirements_ok": "true",
+            "execution_success": null
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "Quiero cotizar lavado premium",
+            "step_index": 2,
+            "bot_response": "Perfecto. Para ayudarte bien, ┬┐en qu├⌐ comuna est├ís?",
+            "decision_action": "ask_missing_data",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_2_1779659417924__ask_missing_data",
+            "requirements_ok": "true",
+            "execution_success": null
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "SUV, Huechuraba",
+            "step_index": 3,
+            "bot_response": "Perfecto. Para tu suv en huechuraba, el lavado premium tiene un valor de $40.000. ┬┐Te gustar├¡a agendar?",
+            "decision_action": "send_quote",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_3_1779659426584__send_quote",
+            "requirements_ok": "true",
+            "execution_success": null
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "Agendar",
+            "step_index": 4,
+            "bot_response": "Tengo estos horarios disponibles para lavado premium durante los pr├│ximos d├¡as:\n\n1. martes, 26 de mayo a las 09:00 a. m.\n2. jueves, 28 de mayo a las 09:00 a. m.\n3. domingo, 31 de mayo a las 09:00 a. m.\n\n∩┐╜Cu∩┐╜l te acomoda? Puedes responder con 1, 2 o 3.",
+            "decision_action": "offer_available_slots",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_4_1779659435325__offer_available_slots",
+            "requirements_ok": "true",
+            "execution_success": null
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "3",
+            "step_index": 5,
+            "bot_response": "Perfecto. Para dejar la reserva bien registrada en Huechuraba, ∩┐╜me puedes enviar la direcci∩┐╜n exacta donde ser∩┐╜a el servicio?",
+            "decision_action": "collect_address",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_5_1779659444048__collect_address",
+            "requirements_ok": null,
+            "execution_success": "true"
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "camino del roble 1251 casa 34",
+            "step_index": 6,
+            "bot_response": "Perfecto, dejo registrada la direcci∩┐╜n: camino del roble 1251 casa 34. ∩┐╜Quieres que confirme la reserva ahora para el 2026-05-31 a las 09:00?",
+            "decision_action": "confirm_address",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_6_1779659452757__confirm_address",
+            "requirements_ok": null,
+            "execution_success": "true"
+        },
+        {
+            "errors": [
+            ],
+            "passed": true,
+            "flow_name": "action_executor",
+            "text_sent": "Si, confirmar",
+            "step_index": 7,
+            "bot_response": "Perfecto, tu reserva qued├│ confirmada para el domingo, 31 de mayo a las 09:00. Servicio: lavado premium en Huechuraba en camino del roble 1251 casa 34. Te escribir├⌐ antes de la visita para coordinar.",
+            "decision_action": "confirm_booking",
+            "idempotency_key": "b9f2647b-a272-4ea6-b701-ba5319afaa9c__qa_569900229_7_1779659461444__confirm_booking",
+            "requirements_ok": "true",
+            "execution_success": "true"
+        }
+    ],
+    "run_id": "qa_2026-05-24T21:50:08.880Z_569900229",
+    "scenario_id": "569900229"
+}

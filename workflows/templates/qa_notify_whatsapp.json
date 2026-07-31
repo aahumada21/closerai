@@ -1,0 +1,72 @@
+{
+  "name": "QA Notify via WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qa-notify-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 0],
+      "id": "webhook-trigger-1",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst phone = String(body.phone || \"\").replace(/[^0-9]/g, \"\");\nconst message = String(body.message || \"Notificacion sin contenido.\");\n\nif (!phone) {\n  throw new Error(\"Falta phone en el body\");\n}\n\nreturn [{ phone, message }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0],
+      "id": "validate-input-1",
+      "name": "validate_input"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1024332077436840",
+        "recipientPhoneNumber": "={{$json.phone}}",
+        "textBody": "={{$json.message}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [240, 0],
+      "id": "wb-send-1",
+      "name": "WB Send",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "lHyvwqasIbVP59b8",
+          "name": "WhatsApp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"sent\": true, \"phone\": $json.phone } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 0],
+      "id": "respond-1",
+      "name": "respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "validate_input", "type": "main", "index": 0 }]]
+    },
+    "validate_input": {
+      "main": [[{ "node": "WB Send", "type": "main", "index": 0 }]]
+    },
+    "WB Send": {
+      "main": [[{ "node": "respond", "type": "main", "index": 0 }]]
+    }
+  }
+}

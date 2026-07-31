@@ -1,0 +1,44 @@
+﻿[
+    {
+        "flow_number":  "1",
+        "workflow_id":  "a5202fbc-eded-44b4-a98a-492a742c1368",
+        "workflow_name":  "1 Inbound_router",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/1 Exec"
+    },
+    {
+        "flow_number":  "2",
+        "workflow_id":  "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+        "workflow_name":  "2 lead_loader",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/2 Exec"
+    },
+    {
+        "flow_number":  "3",
+        "workflow_id":  "e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5",
+        "workflow_name":  "3 rules_engine",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/3 Exec"
+    },
+    {
+        "flow_number":  "4",
+        "workflow_id":  "5f5ef274-4b7a-4a1a-b463-ff22e5eae55e",
+        "workflow_name":  "4 context_builder",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/4 Exec"
+    },
+    {
+        "flow_number":  "5",
+        "workflow_id":  "8e8b11be-4a3d-4804-80ec-30582eeb5384",
+        "workflow_name":  "5 llm_decision",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/5 Exec"
+    },
+    {
+        "flow_number":  "6",
+        "workflow_id":  "80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13",
+        "workflow_name":  "6 action_executor",
+        "exported_count":  0,
+        "output_folder":  "workflows/executions_snapshot/2026-05-23_15-06-52/6 Exec"
+    }
+]

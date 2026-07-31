@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+re#!/usr/bin/env node
 import { createDatabaseAdapter } from '../database/database-adapter';
 import { TemplateRepository } from '../templates/template-repository';
 import { TemplateFetcher } from '../templates/template-fetcher';

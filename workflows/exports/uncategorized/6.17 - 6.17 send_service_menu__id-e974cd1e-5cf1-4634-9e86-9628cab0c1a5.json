@@ -1,0 +1,201 @@
+{
+  "updatedAt": "2026-06-16T15:00:36.473Z",
+  "createdAt": "2026-05-22T22:29:40.735Z",
+  "id": "e974cd1e-5cf1-4634-9e86-9628cab0c1a5",
+  "name": "6.17 send_service_menu",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"send_service_menu\\\",\\\"service_interest\\\":null,\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustn\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"new_lead\\\",\\\"missing_fields\\\":[\\\"service_interest\\\"],\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Cules ofrecen?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"send_service_menu\\\",\\\"state_update\\\":{}}}\"\n  }"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "6.17 send_service_menu",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in send_service_menu\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in send_service_menu\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"send_service_menu\",\n\n  service_interest: firstValue(ctx.service_interest, state.service_interest),\n  vehicle_type: firstValue(ctx.vehicle_type, state.vehicle_type),\n  district: firstValue(ctx.district, state.district)\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        352
+      ],
+      "id": "c281eb84-d2c0-4d35-bffd-bd36a4e08ee1",
+      "name": "normalize_service_menu_input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = data.business || contextPacket.business || rawBusinessConfig || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        352
+      ],
+      "id": "d46c07bd-4624-4c0b-8fa2-69d75f143834",
+      "name": "build_service_menu_result"
+    }
+  ],
+  "connections": {
+    "6.17 send_service_menu": {
+      "main": [
+        [
+          {
+            "node": "normalize_service_menu_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_service_menu_input": {
+      "main": [
+        [
+          {
+            "node": "build_service_menu_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "c02105e6-1a48-48d7-8106-20c9d7c71d5f",
+  "activeVersionId": "c02105e6-1a48-48d7-8106-20c9d7c71d5f",
+  "versionCounter": 43,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "e974cd1e-5cf1-4634-9e86-9628cab0c1a5",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-16T15:00:36.475Z",
+    "createdAt": "2026-06-16T15:00:36.475Z",
+    "versionId": "c02105e6-1a48-48d7-8106-20c9d7c71d5f",
+    "workflowId": "e974cd1e-5cf1-4634-9e86-9628cab0c1a5",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"payload\": \"{\\\"execution_context\\\":{\\\"lead_id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\",\\\"action\\\":\\\"send_service_menu\\\",\\\"service_interest\\\":null,\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"context_packet\\\":{\\\"lead\\\":{\\\"id\\\":\\\"76329124-66ae-497b-a2a0-e45250ae56cf\\\",\\\"name\\\":\\\"Agustn\\\",\\\"phone\\\":\\\"56949186386\\\",\\\"channel\\\":\\\"whatsapp\\\"},\\\"state\\\":{\\\"stage\\\":\\\"new_lead\\\",\\\"missing_fields\\\":[\\\"service_interest\\\"],\\\"vehicle_type\\\":null,\\\"district\\\":null},\\\"conversation\\\":{\\\"latest_user_message\\\":\\\"Cules ofrecen?\\\"}},\\\"decision\\\":{\\\"action\\\":\\\"send_service_menu\\\",\\\"state_update\\\":{}}}\"\n  }"
+        },
+        "id": "c055762a-8fe7-4141-a639-df2372f30060",
+        "typeVersion": 1.1,
+        "name": "6.17 send_service_menu",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "position": [
+          272,
+          352
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nconst input = parseMaybeJson($json.payload, $json);\n\nconst ctx = input.execution_context || {};\nconst contextPacket = input.context_packet || {};\nconst lead = contextPacket.lead || {};\nconst state = contextPacket.state || {};\nconst decision = input.decision || {};\nconst decisionStateUpdate = decision.state_update || {};\nconst inputStateUpdate = input.state_update || {};\n\nconst leadId = firstValue(\n  ctx.lead_id,\n  lead.id,\n  input.lead_id\n);\n\nconst channel = firstValue(\n  ctx.channel,\n  lead.channel,\n  input.channel,\n  \"whatsapp\"\n);\n\nconst phone = firstValue(\n  ctx.phone,\n  lead.phone,\n  input.phone\n);\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in send_service_menu\");\n}\n\nif (!channel) {\n  throw new Error(\"Missing channel in send_service_menu\");\n}\n\nconst normalizedExecutionContext = {\n  ...ctx,\n  lead_id: leadId,\n  channel,\n  phone,\n  action: \"send_service_menu\",\n\n  service_interest: firstValue(ctx.service_interest, state.service_interest),\n  vehicle_type: firstValue(ctx.vehicle_type, state.vehicle_type),\n  district: firstValue(ctx.district, state.district)\n};\n\nreturn [{\n  ...input,\n\n  lead_id: leadId,\n  channel,\n  phone,\n\n  execution_context: normalizedExecutionContext,\n  context_packet: contextPacket,\n  decision,\n\n  state_update: {\n    ...decisionStateUpdate,\n    ...inputStateUpdate\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          352
+        ],
+        "id": "c281eb84-d2c0-4d35-bffd-bd36a4e08ee1",
+        "name": "normalize_service_menu_input"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = data.business || contextPacket.business || rawBusinessConfig || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          752,
+          352
+        ],
+        "id": "d46c07bd-4624-4c0b-8fa2-69d75f143834",
+        "name": "build_service_menu_result"
+      }
+    ],
+    "connections": {
+      "6.17 send_service_menu": {
+        "main": [
+          [
+            {
+              "node": "normalize_service_menu_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_service_menu_input": {
+        "main": [
+          [
+            {
+              "node": "build_service_menu_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-16T15:00:36.633Z",
+        "id": 1266,
+        "workflowId": "e974cd1e-5cf1-4634-9e86-9628cab0c1a5",
+        "versionId": "c02105e6-1a48-48d7-8106-20c9d7c71d5f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-16T15:00:36.554Z",
+        "id": 1265,
+        "workflowId": "e974cd1e-5cf1-4634-9e86-9628cab0c1a5",
+        "versionId": "c02105e6-1a48-48d7-8106-20c9d7c71d5f",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

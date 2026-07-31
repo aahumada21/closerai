@@ -1,0 +1,292 @@
+# Posibilidades del pipeline de entrada (antes/alrededor de rules_engine).
+#
+# Mismo metodo y mismo criterio que bot_decision_tree.yaml: solo puntos de
+# decision reales (condicion -> resultados posibles), extraidos leyendo el
+# jsCode / parameters.conditions real de cada nodo. NO se describe que hace
+# cada workflow en prosa (eso es una pasada futura, ver README.md).
+#
+# Cubre: 1 whatsapp_inbound_adapter, 1.1 n8n_chat_test_router, 2 lead_loader,
+# 2.1 channel_config_resolver, 4 context_builder, 5 llm_decision.
+# 3 rules_engine y 6 action_executor ya estan en bot_decision_tree.yaml.
+
+meta:
+  last_verified_against_source: "2026-07-18"
+  extraction_method: "Igual que bot_decision_tree.yaml (ver su campo meta.extraction_method)."
+
+flows:
+  - workflow: "1 whatsapp_inbound_adapter"
+    file: "workflows/exports/uncategorized/1 - 1 whatsapp_inbound_adapter__id-a5202fbc-eded-44b4-a98a-492a742c1368.json"
+    purpose: >
+      Punto de entrada real del canal WhatsApp: recibe el webhook crudo de Meta, lo
+      normaliza a un evento interno unico (texto/adjuntos/tipo de mensaje), separa los
+      eventos de "status" (entregado/leido) de los mensajes reales, y -- si
+      2.1 channel_config_resolver confirma que el canal esta habilitado -- reenvia el
+      evento a 2 lead_loader. Es el primer filtro: todo lo que el bot "ve" pasa por aca.
+    note: "Hay un export duplicado y obsoleto con el mismo id bajo el nombre viejo '1 Inbound_router' (previo a un rename) -- ignorar ese archivo."
+    branch_points:
+      - node: "normalize_whatsapp_event (forma del payload)"
+        type: code_branch
+        condition: "value.statuses vs value.messages vs ninguno, en el webhook de WhatsApp"
+        outcomes:
+          - "value ausente -> return [] (no se emite nada)"
+          - "value.statuses no vacio -> un item por status (event_type=status; status en sent/delivered/read/failed se marca normalized_ok, otros no)"
+          - "value.messages vacio/ausente -> return []"
+          - "value.messages presente -> un item por mensaje (event_type=message); descarta mensajes sin msg.from"
+      - node: "normalize_whatsapp_event (switch interno por msg.type)"
+        type: code_branch
+        condition: "msg.type"
+        outcomes:
+          - "text -> normalizedText = msg.text.body"
+          - "image -> caption como texto + attachments:[image]"
+          - "document -> caption como texto + attachments:[document]"
+          - "audio -> sin texto + attachments:[audio]"
+          - "button -> texto/payload del boton + attachments:[button]"
+          - "interactive -> title de button_reply/list_reply + attachments:[interactive]"
+          - "video -> caption como texto + attachments:[video]"
+          - "location -> texto fijo 'El usuario envio una ubicacion' + attachments:[location]"
+          - "default/desconocido -> attachments:[{type: msg.type||'unknown', raw: msg}], sin texto"
+      - node: "IF event_is_status"
+        type: if
+        condition: "$json.event_type === 'status'"
+        outcomes:
+          - "true -> DB log_whatsapp_status (se loguea, NO llega a lead_loader)"
+          - "false -> continua hacia channel_config_resolver / lead_loader"
+      - node: "IF should_process"
+        type: if
+        condition: "$json.should_process === true (resuelto por 2.1 channel_config_resolver)"
+        outcomes:
+          - "true -> llama a '2 lead_loader'"
+          - "false -> mensaje descartado en silencio (canal/agente/org no resoluble o inactivo)"
+
+  - workflow: "1.1 n8n_chat_test_router"
+    file: "workflows/exports/uncategorized/1.1 - 1.1 n8n_chat_test_router__id-0b02fa7c-8ba2-4a4d-a6e3-87a3165020eb.json"
+    purpose: >
+      Entrada alternativa para pruebas manuales: permite conversar con el bot directo
+      desde el panel de chat nativo de n8n (sin WhatsApp real), asignandole un numero de
+      telefono simulado a la sesion de chat (comando "/numero <telefono>") y leyendo de
+      vuelta la respuesta que el bot dejo guardada en la base de datos.
+    branch_points:
+      - node: "parse_chat_input"
+        type: code_branch
+        condition: "text matchea /^\\/(?:numero|número|phone)\\s+(\\+?\\d[\\d\\s+-]*)$/i"
+        outcomes:
+          - "matchea -> is_number_command=true, requested_phone extraido; si es numero local de 9 digitos sin prefijo '56', se le antepone '56'"
+          - "no matchea -> is_number_command=false, requested_phone=null"
+      - node: "attach_test_agent_context"
+        type: code_branch
+        condition: "session.assigned_phone presente y empieza con '56' (tras limpiar no-digitos)"
+        outcomes:
+          - "valido -> arma evento normalizado de test con channel='n8n_chat'"
+          - "invalido/ausente -> throw Error('Invalid assigned_phone for n8n_chat test session') (corte duro)"
+      - node: "build_normalized_event"
+        type: code_branch
+        condition: "match.agent_id / match.organization_id presentes (resultado de lookup_test_agent_channel)"
+        outcomes:
+          - "presentes -> usa agent_id/organization_id encontrados"
+          - "ausentes -> fallback a DEFAULT_AGENT_ID/DEFAULT_ORGANIZATION_ID hardcodeados (el unico agente real en uso)"
+      - node: "IF: existe sesion"
+        type: if
+        condition: "$json.assigned_phone !== undefined/null/''"
+        outcomes:
+          - "true -> sesion existe, sigue con el numero asignado"
+          - "false -> sin sesion, ruta de pedir numero"
+      - node: "IF: es comando numero"
+        type: if
+        condition: "$json.is_number_command === true"
+        outcomes:
+          - "true -> confirma numero asignado (simulado)"
+          - "false -> pide al usuario correr /numero <phone> primero"
+      - node: "Responder al chat"
+        type: code_branch
+        condition: "row.content || row.message || row.output presente (mensaje saliente encontrado en DB)"
+        outcomes:
+          - "encontrado -> output = ese mensaje"
+          - "no encontrado -> output = texto fijo de error 'No encontre una respuesta generada por el bot...'"
+
+  - workflow: "2 lead_loader"
+    file: "workflows/exports/uncategorized/2 - 2 lead_loader__id-f5383ae7-dd2e-4177-9875-c6dcff27e3d5.json"
+    purpose: >
+      Dado un evento normalizado (lead_id, channel, texto, etc.), crea o actualiza el
+      lead y su lead_state en la base de datos (upsert), y arma el payload combinado
+      que alimenta directamente a 3 rules_engine. Es el puente entre "llego un mensaje"
+      y "el bot tiene el estado del lead cargado para decidir que hacer".
+    branch_points:
+      - node: "code_prepare_lookup"
+        type: code_branch
+        condition: "campos requeridos del evento entrante"
+        outcomes:
+          - "!event.channel -> throw Error('Missing required field: channel')"
+          - "!event.lead_id -> throw Error('Missing required field: lead_id')"
+          - "!event.timestamp -> throw Error('Missing required field: timestamp')"
+          - "todos presentes -> continua a db_upsert_lead/db_upsert_lead_state"
+    note: "code_build_output no tiene puntos de decision reales (solo cadenas de fallback || y parseo de booleanos tri-state); es armado de datos, no ramifica el comportamiento del bot."
+
+  - workflow: "2.1 channel_config_resolver"
+    file: "workflows/exports/uncategorized/2.1 - 2.1 channel_config_resolver__id-gYYvc3jTVgDnAB8K.json"
+    purpose: >
+      Dado el canal + id externo del mensaje entrante, resuelve a que agent_channel /
+      agente / organizacion pertenece y si esa cadena completa esta activa e
+      inbound_enabled. Es el gate multi-tenant: decide si el mensaje se procesa o se
+      descarta antes de gastar tiempo armando el resto del contexto.
+    branch_points:
+      - node: "db_resolve_agent_channel (Postgres, CASE WHEN en parameters.query -- no es Code node)"
+        type: code_branch
+        condition: "cadena CASE WHEN ordenada, primer match gana; not_processed_reason=NULL significa exito"
+        outcomes:
+          - "external_channel_id IS NULL -> 'missing_external_channel_id'"
+          - "sin fila en agent_channels (provider+external_channel_id) -> 'agent_channel_not_found'"
+          - "agent_channels.is_active=false -> 'agent_channel_inactive'"
+          - "agent no encontrado -> 'agent_not_found'"
+          - "agent.is_active=false -> 'agent_inactive'"
+          - "organization no encontrada -> 'organization_not_found'"
+          - "organization.is_active=false -> 'organization_inactive'"
+          - "channel_config->>'inbound_enabled' in ('false','0','no','off') -> 'channel_inbound_disabled'"
+          - "ninguno de los anteriores -> not_processed_reason=NULL, found=true, should_process=true"
+      - node: "build_resolver_output"
+        type: code_branch
+        condition: "shouldProcess boolean"
+        outcomes:
+          - "true -> error_code/error_message=null, audit.event_type='channel_config_resolved'"
+          - "false -> error_code/error_message = el not_processed_reason, audit.event_type='channel_config_discarded'"
+
+  - workflow: "4 context_builder"
+    file: "workflows/exports/uncategorized/4 - 4 context_builder__id-5f5ef274-4b7a-4a1a-b463-ff22e5eae55e.json"
+    purpose: >
+      Arma el "context_packet" completo (lead, estado, negocio, servicios/precios,
+      herramientas, conocimiento) que necesita 5 llm_decision para poder decidir. Se
+      llama solo cuando 3 rules_engine NO resolvio el mensaje por regla y hace falta el
+      LLM. Su output mas importante es allowed_actions: la lista acotada de acciones
+      que el LLM tiene permitido elegir segun el stage y que datos ya se conocen del lead.
+    note: "buildAllowedActions es la logica mas importante de este workflow: calcula la LISTA de acciones que 5 llm_decision tiene permitido elegir. Es el 'menu' que acota al LLM."
+    branch_points:
+      - node: "build_context_packet (normalizeBusinessFromAgentConfig)"
+        type: code_branch
+        condition: "agentBusinessConfig trae datos (hasObjectData)"
+        outcomes:
+          - "presente -> business.config_source='agent_business_config' (via moderna)"
+          - "ausente -> fallback a business_rules legado, business.config_source='legacy_business_rules'"
+      - node: "build_context_packet (gate de campos requeridos)"
+        type: code_branch
+        condition: "leadId / phone resolubles"
+        outcomes:
+          - "!leadId -> throw Error('context_builder missing lead_id')"
+          - "!phone -> throw Error('context_builder missing phone')"
+      - node: "build_context_packet (buildAllowedActions)"
+        type: code_branch
+        condition: "cadena de prioridad ordenada segun stage + flags de completitud de datos"
+        outcomes:
+          - "isHandoffLocked (human_handoff=true o stage='human_handoff') -> allowed_actions=[] (nada permitido)"
+          - "ruleResult.action ya definido (rules_engine matcheo) -> allowed_actions=[esa unica accion] si es soportada, sino []"
+          - "sin accion de regla -> candidatos base = ALLOWED_ACTIONS_BY_STAGE[stage] (allow-list por cada uno de los ~16 stages)"
+          - "missingFields.length>0 -> candidatos se acotan a [send_service_menu, recommend_service, ask_missing_data, answer_question, handoff_human]"
+          - "hasService && hasVehicle && hasDistrict -> descarta 'recommend_service'; si stage no esta en [quoted,closing,booking_selection,booking_confirmation,collecting_address,address_confirmation,booked] antepone 'send_quote'; agrega offer_available_slots, answer_question, offer_booking"
+          - "hasBookingDate && hasBookingTime && !hasAddress -> candidatos=['collect_address',...] si availability_confirmed===true, sino ['offer_available_slots',...]"
+          - "hasService && hasVehicle && hasDistrict && hasBookingDate && hasBookingTime && hasAddress -> antepone 'confirm_booking'"
+          - "hasActiveAppointment o stage='booked' -> agrega cancel_booking, reschedule_booking, send_pre_service_instructions, notify_on_the_way"
+          - "lista final filtrada por canRunAction(action) (gate por accion: confirm_booking requiere hasAddress; send_quote/offer_available_slots requieren hasService+hasVehicle+hasDistrict; collect_address requiere candidato de booking o stage en [quoted,closing,booking_selection,booking_confirmation]; request_review/request_referral requieren stage='post_service' o ruleResult.action coincidente; schedule_followup requiere followup_type+scheduled_for)"
+          - "handoff_human siempre se agrega si no estaba ya"
+      - node: "build_context_packet (override de intencion textual)"
+        type: code_branch
+        condition: "userWantsCancel(text) / userWantsReschedule(text) -- keywords sobre latest_user_message"
+        outcomes:
+          - "userWantsCancel=true -> 'cancel_booking' se mueve al frente de allowed_actions (si esta en la lista)"
+          - "userWantsReschedule=true -> 'reschedule_booking' se mueve al frente"
+      - node: "validate_context_packet"
+        type: code_branch
+        condition: "12 chequeos estructurales sobre context_packet"
+        outcomes:
+          - "cualquier chequeo falla -> throw Error(errores acumulados) (corte duro, el contexto nunca llega a llm_decision)"
+          - "todos pasan -> context_packet_valid=true"
+
+  - workflow: "5 llm_decision"
+    file: "workflows/exports/uncategorized/5 - 5 llm_decision__id-8e8b11be-4a3d-4804-80ec-30582eeb5384.json"
+    purpose: >
+      El "segundo cerebro" del bot: cuando ninguna de las 54 reglas de 3 rules_engine
+      matchea, este workflow le pide a un LLM que elija UNA accion dentro de las
+      allowed_actions que calculo 4 context_builder, validando estrictamente la
+      respuesta (schema + reglas de negocio). Si el LLM falla la validacion o no
+      responde algo usable, un fallback determinista propio (no el LLM) termina
+      decidiendo la accion, para que el bot nunca se quede sin responder.
+    note: >
+      Camino usado cuando 3 rules_engine no matchea ninguna regla (ruleDefaultContinue).
+      Tiene su propia cadena de fallback determinista (build_fallback_decision) con la
+      MISMA forma que rule_chain de bot_decision_tree.yaml (prioridad ordenada, primer
+      match gana), que se activa cuando la respuesta del LLM no pasa validate_business_rules.
+    branch_points:
+      - node: "prepare_context_and_guardrail"
+        type: code_branch
+        condition: "presencia de context_packet / allowed_actions"
+        outcomes:
+          - "!context_packet o no es objeto -> throw Error('context_packet missing or invalid')"
+          - "allowed_actions vacio -> throw Error('allowed_actions missing or empty')"
+      - node: "prepare_context_and_guardrail (fuente del prompt)"
+        type: code_branch
+        condition: "agent_prompt_templates en DB tiene contenido no vacio para [decision_prompt, tone_policy, business_boundaries, output_schema, fallback_policy]"
+        outcomes:
+          - "al menos una seccion dinamica encontrada -> developer_prompt armado desde templates de DB; prompt_config.source='agent_prompt_templates'"
+          - "ninguna encontrada -> developer_prompt cae a legacyDecisionPrompt hardcodeado; prompt_config.source='legacy_fallback'"
+      - node: "If (valid)"
+        type: if
+        condition: "$json.valid === true (salida de validate_business_rules)"
+        outcomes:
+          - "true -> finalize_decision (se usa la decision del LLM)"
+          - "false -> build_fallback_decision (fallback determinista pisa al LLM)"
+      - node: "validate_business_rules"
+        type: code_branch
+        condition: "schema_valid + chequeos estructurales + chequeos de datos requeridos por accion"
+        outcomes:
+          - "!schema_valid -> valid=false (la llamada de structured output del LLM fallo el schema)"
+          - "parsed_output ausente -> valid=false"
+          - "parsed.action no esta en allowedActions -> error 'action_not_allowed:<action>'"
+          - "action='offer_available_slots' sin service_interest/vehicle_type/district -> errores respectivos"
+          - "action='send_quote' sin service_interest/vehicle_type/district -> errores respectivos"
+          - "action='confirm_booking' sin service_interest/vehicle_type/district/booking_date/booking_time/booking_context/address -> errores respectivos"
+          - "action='confirm_address' sin candidato de direccion ni latest_user_message -> error"
+          - "action='collect_address' sin candidato de booking -> warning (no fatal)"
+          - "action='schedule_followup' sin followup_type/scheduled_for -> errores respectivos"
+          - "action='handoff_human' con state_update.stage !== 'human_handoff' -> warning (no fatal)"
+          - "confidence < 0.45 Y handoff_human esta permitido -> warning 'low_confidence_recommend_handoff' (no fatal)"
+          - "valid = (errors.length === 0)"
+      - node: "build_fallback_decision (cadena de prioridad, primer match gana)"
+        type: code_branch
+        condition: "chequeos deterministas de keywords/estado, acotados por pertenencia a allowed_actions"
+        outcomes:
+          - "1. validation_errors incluye 'confirm_booking_without_address' Y collect_address permitido -> collect_address"
+          - "2. esperando direccion (stage=collecting_address o next_goal/last_bot_action=collect_address) Y looksLikeAddress(text) Y confirm_address permitido -> confirm_address"
+          - "3. keywords de cancelacion Y cancel_booking permitido -> cancel_booking"
+          - "4. keywords de reagendar Y reschedule_booking permitido -> reschedule_booking"
+          - "5. pregunta disponibilidad Y tiene datos base (service+vehicle+district) Y offer_available_slots permitido -> offer_available_slots (ventana derivada del texto: 'proxima/siguiente/otra semana'->next_week 7d; 'mas adelante/otros dias/otras semanas'->next_14_days; 'este mes'->next_30_days; default this_week 7d/3 slots)"
+          - "6. missingFields.length>0 Y ask_missing_data permitido -> ask_missing_data (mensaje segun primer campo faltante: district/vehicle_type/service_interest con menu de 3 servicios/address)"
+          - "7. answer_question permitido -> answer_question (respuesta generica conservadora)"
+          - "8. handoff_human permitido -> handoff_human"
+          - "9. catch-all final -> allowed_actions[0] o 'handoff_human'"
+        note: "todas las decisiones de fallback llevan confidence=0.2 y fallback_used=true"
+      - node: "finalize_decision"
+        type: code_branch
+        condition: "presencia de input.decision"
+        outcomes:
+          - "ausente/no objeto -> throw Error('Missing decision in finalize_decision')"
+          - "presente -> decision normalizada devuelta al padre"
+    llm_allowed_actions:
+      note: >
+        No es una lista fija en el texto del prompt: el prompt exige que 'action' pertenezca
+        a allowed_actions, y allowed_actions se inyecta dinamicamente por request desde
+        context_packet.allowed_actions (calculado en 4 context_builder). El superset de
+        acciones soportadas (SUPPORTED_ACTIONS, 19 valores) es: ask_missing_data, send_quote,
+        answer_question, answer_objection, offer_booking, offer_available_slots, confirm_booking,
+        schedule_followup, handoff_human, cancel_booking, reschedule_booking, collect_address,
+        confirm_address, send_pre_service_instructions, notify_on_the_way, request_review,
+        request_referral, send_service_menu, recommend_service.
+      hard_constraint: "response_format es un json_schema estricto estilo OpenAI (decisionSchema) con action.enum=allowedActions -- el modelo esta forzado a nivel API, no solo por instruccion de prompt."
+    llm_decision_criteria:
+      source: "legacyDecisionPrompt (solo se usa si NO hay filas en agent_prompt_templates para las 5 keys; en produccion es muy probable que estas filas de DB reemplacen este texto por completo -- no asumir que este wording exacto gobierna el comportamiento en vivo sin verificar la DB)"
+      verbatim_rules:
+        - "action debe pertenecer a allowed_actions."
+        - "Elige solo una action."
+        - "No inventes acciones, precios, reservas ni horarios disponibles."
+        - "state_update debe ser conservador y coherente."
+        - "confidence debe ser un numero entre 0 y 1."
+        - "Si el contexto es ambiguo, elige la opcion mas segura dentro de allowed_actions."
+        - "No pidas mas de un dato faltante por turno."
+        - "(userPrompt) Usa SOLO acciones dentro de allowed_actions. Elige SOLO UNA accion. No inventes datos. No prometas cosas no respaldadas por el contexto."
+        - "Usa knowledge para responder preguntas de servicios. Si no hay respaldo en business o knowledge, no inventes servicios ni inclusiones."

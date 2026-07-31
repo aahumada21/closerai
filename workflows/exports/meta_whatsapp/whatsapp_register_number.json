@@ -1,0 +1,174 @@
+{
+  "name": "whatsapp_register_number",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "whatsapp-register-number",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -720,
+        -80
+      ],
+      "id": "webhook-register-number",
+      "name": "WEBHOOK register_number"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        160
+      ],
+      "id": "manual-execute-trigger",
+      "name": "MANUAL trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body || $json;\nconst phoneNumberId = String(input.phone_number_id || '').trim();\nconst pin = String(input.pin || $env.DEFAULT_PIN || '').trim();\nconst graphVersion = String($env.META_GRAPH_VERSION || 'v20.0').trim();\nif (!phoneNumberId) throw new Error('phone_number_id is required');\nif (!pin) throw new Error('pin is required');\nif (!$env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN is required');\nreturn [{ json: {\n  phone_number_id: phoneNumberId,\n  pin,\n  graph_version: graphVersion,\n  graph_url: 'https://graph.facebook.com/' + graphVersion + '/' + encodeURIComponent(phoneNumberId) + '/register',\n  requested_at: new Date().toISOString()\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        40
+      ],
+      "id": "code-prepare-register-request",
+      "name": "CODE prepare_register_request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.graph_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $env.META_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: \"whatsapp\", pin: $json.pin } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        40
+      ],
+      "id": "http-register-phone-number",
+      "name": "HTTP register_phone_number"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json;\nconst error = raw.error || raw.body?.error || raw.response?.error;\nif (error) {\n  return [{ json: {\n    success: false,\n    error_code: String(error.code || error.type || 'meta_register_error'),\n    error_message: String(error.message || 'register failed'),\n    raw\n  } }];\n}\nreturn [{ json: {\n  success: true,\n  phone_number_id: $('CODE prepare_register_request').first().json.phone_number_id,\n  registered_at: new Date().toISOString(),\n  raw\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        40
+      ],
+      "id": "code-normalize-register-result",
+      "name": "CODE normalize_register_result"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.success ? 200 : 400 }}"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        360,
+        40
+      ],
+      "id": "respond-register-result",
+      "name": "RESPOND register_result"
+    }
+  ],
+  "connections": {
+    "WEBHOOK register_number": {
+      "main": [
+        [
+          {
+            "node": "CODE prepare_register_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MANUAL trigger": {
+      "main": [
+        [
+          {
+            "node": "CODE prepare_register_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE prepare_register_request": {
+      "main": [
+        [
+          {
+            "node": "HTTP register_phone_number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP register_phone_number": {
+      "main": [
+        [
+          {
+            "node": "CODE normalize_register_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE normalize_register_result": {
+      "main": [
+        [
+          {
+            "node": "RESPOND register_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

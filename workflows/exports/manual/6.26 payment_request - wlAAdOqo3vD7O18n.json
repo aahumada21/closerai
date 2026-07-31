@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-08T17:07:00.485Z",
+  "updatedAt": "2026-07-13T15:51:21.546Z",
   "createdAt": "2026-07-08T17:06:11.571Z",
   "id": "wlAAdOqo3vD7O18n",
   "name": "6.26 payment_request",
@@ -28,7 +28,28 @@
         300
       ],
       "parameters": {
-        "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\nconst payload = parseMaybeJson($json.payload, $json);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"pagos@ahumadadetailing.cl\");\nconst service = firstVal(ctx.service_interest, state.service_interest, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + lead_id + \"-\" + Date.now();\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+        "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\n\nconst triggerData = $(\"6.26 payment_request\").first().json;\nconst payload = parseMaybeJson(triggerData.payload, triggerData);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\n\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\n\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"contacto@aahumada.com\");\nconst latestPrice = ($json.latest_price !== null && $json.latest_price !== undefined) ? Number($json.latest_price) : null;\nconst computedPrice = ($json.computed_price !== null && $json.computed_price !== undefined) ? Number($json.computed_price) : null;\nconst service = firstVal(ctx.service_interest, state.service_interest, $json.latest_service, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, latestPrice, computedPrice, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + (lead_id || \"x\").slice(0, 8) + \"-\" + Date.now();\n\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+      }
+    },
+    {
+      "id": "fetch-org-creds-0001",
+      "name": "fetch_org_flow_credentials",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        590,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(o.flow_api_key, '') AS org_flow_api_key, COALESCE(o.flow_secret_key, '') AS org_flow_secret_key FROM organizations o WHERE o.id = NULLIF('{{ (($json.execution_context || {}).organization_id || \"\").replace(/\\'/g, \"''\") }}', '')::uuid LIMIT 1",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
       }
     },
     {
@@ -41,7 +62,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const crypto = require(\"crypto\");\nconst data = $json;\nconst pCtx = data.payment_context;\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(function(k) { return k + params[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{\n  ...data,\n  flow_params: Object.assign({}, params, { s: signature }),\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
+        "jsCode": "// Pure-JS HMAC-SHA256 — no require, no crypto, no helpers needed\nfunction sha256(data) {\n  const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length, bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0;\n  w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16);\n    const s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){\n      const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);\n      const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);\n      s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;\n    }\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){\n      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);\n      const ch=(e&f)^(~e&g);\n      const temp1=(hh+S1+ch+K[i]+s[i])>>>0;\n      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);\n      const maj=(a&b2)^(a&c)^(b2&c);\n      const temp2=(S0+maj)>>>0;\n      hh=g; g=f; f=e; e=(d+temp1)>>>0;\n      d=c; c=b2; b2=a; a=(temp1+temp2)>>>0;\n    }\n    h[0]=(h[0]+a)>>>0; h[1]=(h[1]+b2)>>>0; h[2]=(h[2]+c)>>>0; h[3]=(h[3]+d)>>>0;\n    h[4]=(h[4]+e)>>>0; h[5]=(h[5]+f)>>>0; h[6]=(h[6]+g)>>>0; h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(str){\n  const b=[];\n  for(let i=0;i<str.length;i++){\n    const c=str.charCodeAt(i);\n    if(c<128) b.push(c);\n    else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}\n    else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}\n  }\n  return b;\n}\nfunction hmacSha256hex(msg, key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ipad=kb.map(v=>v^0x36); const opad=kb.map(v=>v^0x5c);\n  while(ipad.length<64) ipad.push(0x36); while(opad.length<64) opad.push(0x5c);\n  const inner=sha256([...ipad,...strToBytes(msg)]);\n  const innerBytes=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const outer=sha256([...opad,...innerBytes]);\n  return outer.map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst data = $(\"normalize_payment_input\").first().json;\nconst pCtx = data.payment_context;\n\nconst flowApiKey = ($json && $json.org_flow_api_key && $json.org_flow_api_key.trim()) || $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = ($json && $json.org_flow_secret_key && $json.org_flow_secret_key.trim()) || $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = $env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\n\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\n\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(k => k + params[k]).join(\"\");\nconst signature = hmacSha256hex(sigString, flowSecretKey);\n\nconst allParams = Object.assign({}, params, { s: signature });\n\n// Build URL-encoded form body for Flow.cl API (expects application/x-www-form-urlencoded)\nconst flowBody = Object.keys(allParams)\n  .map(k => encodeURIComponent(k) + \"=\" + encodeURIComponent(allParams[k]))\n  .join(\"&\");\n\nreturn [{\n  ...data,\n  flow_params: allParams,\n  flow_body: flowBody,\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
       }
     },
     {
@@ -57,8 +78,48 @@
         "method": "POST",
         "url": "={{ $json.flow_api_url }}",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.flow_params) }}",
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $json.flow_params.apiKey }}"
+            },
+            {
+              "name": "amount",
+              "value": "={{ $json.flow_params.amount }}"
+            },
+            {
+              "name": "commerceOrder",
+              "value": "={{ $json.flow_params.commerceOrder }}"
+            },
+            {
+              "name": "currency",
+              "value": "={{ $json.flow_params.currency }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.flow_params.email }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.flow_params.subject }}"
+            },
+            {
+              "name": "urlConfirmation",
+              "value": "={{ $json.flow_params.urlConfirmation }}"
+            },
+            {
+              "name": "urlReturn",
+              "value": "={{ $json.flow_params.urlReturn }}"
+            },
+            {
+              "name": "s",
+              "value": "={{ $json.flow_params.s }}"
+            }
+          ]
+        },
         "options": {}
       }
     },
@@ -72,7 +133,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const data = $json;\nconst pCtx = data.payment_context || {};\nconst flowUrl = data.url || \"\";\nconst flowToken = data.token || \"\";\nconst flowOrderId = String(data.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || 0;\nconst service = pCtx.service || \"servicio\";\nconst dateText = (pCtx.booking_date && pCtx.booking_time)\n  ? \"\\nFecha reservada: \" + pCtx.booking_date + \" a las \" + pCtx.booking_time\n  : \"\";\nconst msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n  \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\" +\n  \"\\nServicio: \" + service + dateText +\n  \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\nconst payloadObj = {\n  ...data,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, data.execution_context || {}, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+        "jsCode": "const flowResp = $json;\nconst prevData = $(\"build_flow_signature\").first().json;\nconst ctx = prevData.execution_context || {};\nconst pCtx = prevData.payment_context || {};\nconst flowUrl = flowResp.url || \"\";\nconst flowToken = flowResp.token || \"\";\nconst flowOrderId = String(flowResp.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || prevData.amount || ctx.quoted_price || 0;\nconst service = pCtx.service || prevData.service || ctx.service_interest || \"servicio\";\nconst dateText = (ctx.booking_date && ctx.booking_time)\n  ? \"\\nFecha: \" + ctx.booking_date + \" a las \" + ctx.booking_time\n  : \"\";\n\nconst isPrepagoreRequired = prevData.payment_for_mode === \"prepago_required\" ||\n  ctx.payment_mode === \"prepago_required\" ||\n  (prevData.context_packet && prevData.context_packet.state && prevData.context_packet.state.payment_mode === \"prepago_required\");\n\nlet msg;\nif (isPrepagoreRequired) {\n  msg = \"Para confirmar tu turno\" + dateText + \", necesito que pagues primero.\\n\\nLink de pago: \" + paymentUrl +\n    \"\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\\nServicio: \" + service +\n    \"\\n\\nEn cuanto confirmes el pago, te reservo el turno en el calendario!\";\n} else {\n  msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n    \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\\nServicio: \" + service + dateText +\n    \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\n}\n\nconst payloadObj = {\n  ...prevData,\n  token: flowToken,\n  url: flowUrl,\n  flowOrder: flowResp.flowOrder,\n  channel: ctx.channel || \"whatsapp\",\n  phone: ctx.phone || \"\",\n  message: msg,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, ctx, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: isPrepagoreRequired ? \"payment_link_pending_booking\" : \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
       }
     },
     {
@@ -105,7 +166,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $json.flow_order_id }}', flow_payment_url='{{ $json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ ($json.execution_context || {}).lead_id || ($json.payment_context || {}).lead_id }}';",
+        "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $(\"build_payment_message\").first().json.flow_order_id }}', flow_payment_url='{{ $(\"build_payment_message\").first().json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ $(\"build_payment_message\").first().json.execution_context.lead_id }}'::uuid;",
         "options": {}
       },
       "credentials": {
@@ -140,10 +201,63 @@
       "parameters": {
         "jsCode": "const ctx = ($json.execution_context || $json.payment_context || {});\nreturn [{ ...$json, message_to_send: \"Hubo un problema al generar el link de pago. Contactame directamente para coordinar el pago.\", payment_request_status: \"error\" }];"
       }
+    },
+    {
+      "id": "fetch_latest_quote_pg",
+      "name": "fetch_latest_quote",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH exec_ctx AS (\n  SELECT\n    NULLIF('{{ (($json.execution_context || {}).lead_id || \"\").replace(/'/g, \"''\") }}', '')::uuid AS lead_id,\n    replace(lower(trim('{{ (($json.execution_context || {}).service_interest || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.service_interest) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS service_code,\n    replace(lower(trim('{{ (($json.execution_context || {}).vehicle_type || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.vehicle_type) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS vehicle_type,\n    replace(lower(trim('{{ (($json.execution_context || {}).district || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.district) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS district_key\n),\nstored_quote AS (\n  SELECT price AS latest_price, service AS latest_service\n  FROM offers_or_quotes oq\n  CROSS JOIN exec_ctx ec\n  WHERE oq.lead_id = ec.lead_id\n  ORDER BY oq.created_at DESC\n  LIMIT 1\n),\nagent_lookup AS (\n  SELECT ls.agent_id\n  FROM lead_state ls\n  CROSS JOIN exec_ctx ec\n  WHERE ls.lead_id = ec.lead_id\n  LIMIT 1\n),\nactive_version AS (\n  SELECT pv.id\n  FROM public.pricing_versions pv\n  JOIN agent_lookup al ON al.agent_id = pv.agent_id\n  WHERE pv.is_active = true AND pv.valid_from <= NOW()\n  ORDER BY pv.valid_from DESC\n  LIMIT 1\n),\nbase_price_row AS (\n  SELECT p.base_price\n  FROM public.service_vehicle_prices p\n  JOIN active_version av ON av.id = p.pricing_version_id\n  CROSS JOIN exec_ctx ec\n  WHERE replace(lower(trim(p.service_code)), ' ', '_') = ec.service_code\n    AND (\n      replace(lower(trim(p.vehicle_type)), ' ', '_') = ec.vehicle_type\n      OR (ec.vehicle_type IN ('hatchback','city_car') AND replace(lower(trim(p.vehicle_type)), ' ', '_') = 'sedan')\n    )\n    AND p.is_active = true\n  LIMIT 1\n),\nsurcharge_row AS (\n  SELECT COALESCE(d.surcharge, 0) AS surcharge\n  FROM public.district_surcharges d\n  JOIN active_version av ON av.id = d.pricing_version_id\n  CROSS JOIN exec_ctx ec\n  WHERE replace(lower(trim(d.district_key)), ' ', '_') IN (ec.district_key, '*')\n    AND d.is_active = true\n  ORDER BY CASE WHEN replace(lower(trim(d.district_key)), ' ', '_') = ec.district_key THEN 0 ELSE 1 END\n  LIMIT 1\n),\ncomputed AS (\n  SELECT\n    COALESCE(b.base_price, 0) + COALESCE(s.surcharge, 0) AS computed_price\n  FROM base_price_row b\n  CROSS JOIN surcharge_row s\n)\nSELECT\n  sq.latest_price,\n  sq.latest_service,\n  CASE WHEN c.computed_price > 0 THEN c.computed_price ELSE NULL END AS computed_price,\n  ec.service_code AS context_service_code\nFROM exec_ctx ec\nLEFT JOIN stored_quote sq ON true\nLEFT JOIN computed c ON true",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "id": "a7f3d2c1-5b8e-4f9a-b3c2-1d0e7f8a9b6c",
+      "name": "insert_payment_message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1470,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (lead_id, direction, content, channel, created_at)\nVALUES (\n  NULLIF('{{ $(\"build_payment_message\").first().json.execution_context.lead_id }}', '')::uuid,\n  'outbound',\n  '{{ $(\"build_payment_message\").first().json.message_to_send.replace(/'/g, \"''\") }}',\n  '{{ $(\"build_payment_message\").first().json.channel || \"whatsapp\" }}',\n  NOW()\n)\nON CONFLICT DO NOTHING\nRETURNING id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
     }
   ],
   "connections": {
     "6.26 payment_request": {
+      "main": [
+        [
+          {
+            "node": "fetch_latest_quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch_latest_quote": {
       "main": [
         [
           {
@@ -158,7 +272,7 @@
       "main": [
         [
           {
-            "node": "build_flow_signature",
+            "node": "fetch_org_flow_credentials",
             "type": "main",
             "index": 0
           }
@@ -209,7 +323,7 @@
       "main": [
         [
           {
-            "node": "update_lead_state_payment_pending",
+            "node": "insert_payment_message",
             "type": "main",
             "index": 0
           }
@@ -226,17 +340,41 @@
           }
         ]
       ]
+    },
+    "insert_payment_message": {
+      "main": [
+        [
+          {
+            "node": "update_lead_state_payment_pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch_org_flow_credentials": {
+      "main": [
+        [
+          {
+            "node": "build_flow_signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "saveDataSuccessExecution": "all"
   },
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
-  "activeVersionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
-  "versionCounter": 4,
+  "versionId": "66e2c9f2-2776-48b6-a4b0-dffb01fcdeb3",
+  "activeVersionId": "66e2c9f2-2776-48b6-a4b0-dffb01fcdeb3",
+  "versionCounter": 55,
   "triggerCount": 0,
   "shared": [
     {
@@ -259,9 +397,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-08T17:07:00.497Z",
-    "createdAt": "2026-07-08T17:07:00.497Z",
-    "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+    "updatedAt": "2026-07-13T15:51:23.756Z",
+    "createdAt": "2026-07-13T15:51:23.756Z",
+    "versionId": "66e2c9f2-2776-48b6-a4b0-dffb01fcdeb3",
     "workflowId": "wlAAdOqo3vD7O18n",
     "nodes": [
       {
@@ -285,7 +423,28 @@
           300
         ],
         "parameters": {
-          "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\nconst payload = parseMaybeJson($json.payload, $json);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"pagos@ahumadadetailing.cl\");\nconst service = firstVal(ctx.service_interest, state.service_interest, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + lead_id + \"-\" + Date.now();\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+          "jsCode": "function parseMaybeJson(value, fallback) {\n  if (fallback === undefined) fallback = {};\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n  try { return JSON.parse(value); } catch(e) { return fallback; }\n}\n\nconst triggerData = $(\"6.26 payment_request\").first().json;\nconst payload = parseMaybeJson(triggerData.payload, triggerData);\nconst ctx = payload.execution_context || {};\nconst state = (payload.context_packet && payload.context_packet.state) || {};\n\nfunction firstVal() {\n  for (var i = 0; i < arguments.length; i++) {\n    var v = arguments[i];\n    if (v !== undefined && v !== null && String(v).trim() !== \"\") return v;\n  }\n  return null;\n}\n\nconst lead_id = firstVal(ctx.lead_id, payload.lead_id);\nconst phone = firstVal(ctx.phone, payload.phone);\nconst email = firstVal(ctx.email, payload.email, \"contacto@aahumada.com\");\nconst latestPrice = ($json.latest_price !== null && $json.latest_price !== undefined) ? Number($json.latest_price) : null;\nconst computedPrice = ($json.computed_price !== null && $json.computed_price !== undefined) ? Number($json.computed_price) : null;\nconst service = firstVal(ctx.service_interest, state.service_interest, $json.latest_service, \"Servicio de lavado\");\nconst amount = firstVal(ctx.quoted_price, state.quoted_price, latestPrice, computedPrice, ctx.amount, 0);\nconst booking_date = firstVal(ctx.booking_date, state.booking_date);\nconst booking_time = firstVal(ctx.booking_time, state.booking_time);\nconst commerceOrder = \"AHD-\" + (lead_id || \"x\").slice(0, 8) + \"-\" + Date.now();\n\nreturn [{\n  ...payload,\n  payment_context: {\n    lead_id, phone, email, service,\n    amount: Math.round(Number(amount) || 0),\n    commerce_order: commerceOrder,\n    subject: \"Ahumada Detailing - \" + service,\n    booking_date, booking_time\n  }\n}];"
+        }
+      },
+      {
+        "id": "fetch-org-creds-0001",
+        "name": "fetch_org_flow_credentials",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          590,
+          300
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT COALESCE(o.flow_api_key, '') AS org_flow_api_key, COALESCE(o.flow_secret_key, '') AS org_flow_secret_key FROM organizations o WHERE o.id = NULLIF('{{ (($json.execution_context || {}).organization_id || \"\").replace(/\\'/g, \"''\") }}', '')::uuid LIMIT 1",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
         }
       },
       {
@@ -298,7 +457,7 @@
           300
         ],
         "parameters": {
-          "jsCode": "const crypto = require(\"crypto\");\nconst data = $json;\nconst pCtx = data.payment_context;\nconst flowApiKey = process.env.FLOW_API_KEY || \"\";\nconst flowSecretKey = process.env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = process.env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(function(k) { return k + params[k]; }).join(\"\");\nconst signature = crypto.createHmac(\"sha256\", flowSecretKey).update(sigString).digest(\"hex\");\nreturn [{\n  ...data,\n  flow_params: Object.assign({}, params, { s: signature }),\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
+          "jsCode": "// Pure-JS HMAC-SHA256 — no require, no crypto, no helpers needed\nfunction sha256(data) {\n  const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length, bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0;\n  w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16);\n    const s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){\n      const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);\n      const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);\n      s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;\n    }\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){\n      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);\n      const ch=(e&f)^(~e&g);\n      const temp1=(hh+S1+ch+K[i]+s[i])>>>0;\n      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);\n      const maj=(a&b2)^(a&c)^(b2&c);\n      const temp2=(S0+maj)>>>0;\n      hh=g; g=f; f=e; e=(d+temp1)>>>0;\n      d=c; c=b2; b2=a; a=(temp1+temp2)>>>0;\n    }\n    h[0]=(h[0]+a)>>>0; h[1]=(h[1]+b2)>>>0; h[2]=(h[2]+c)>>>0; h[3]=(h[3]+d)>>>0;\n    h[4]=(h[4]+e)>>>0; h[5]=(h[5]+f)>>>0; h[6]=(h[6]+g)>>>0; h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(str){\n  const b=[];\n  for(let i=0;i<str.length;i++){\n    const c=str.charCodeAt(i);\n    if(c<128) b.push(c);\n    else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}\n    else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}\n  }\n  return b;\n}\nfunction hmacSha256hex(msg, key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ipad=kb.map(v=>v^0x36); const opad=kb.map(v=>v^0x5c);\n  while(ipad.length<64) ipad.push(0x36); while(opad.length<64) opad.push(0x5c);\n  const inner=sha256([...ipad,...strToBytes(msg)]);\n  const innerBytes=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const outer=sha256([...opad,...innerBytes]);\n  return outer.map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst data = $(\"normalize_payment_input\").first().json;\nconst pCtx = data.payment_context;\n\nconst flowApiKey = ($json && $json.org_flow_api_key && $json.org_flow_api_key.trim()) || $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = ($json && $json.org_flow_secret_key && $json.org_flow_secret_key.trim()) || $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = $env.FLOW_API_URL || \"https://www.flow.cl/api\";\nconst baseUrl = \"https://n8n.aahumada.com\";\n\nconst params = {\n  apiKey: flowApiKey,\n  amount: String(pCtx.amount),\n  commerceOrder: pCtx.commerce_order,\n  currency: \"CLP\",\n  email: pCtx.email,\n  subject: pCtx.subject,\n  urlConfirmation: baseUrl + \"/webhook/flow-payment-confirmed\",\n  urlReturn: baseUrl + \"/webhook/flow-payment-return\"\n};\n\nconst sortedKeys = Object.keys(params).sort();\nconst sigString = sortedKeys.map(k => k + params[k]).join(\"\");\nconst signature = hmacSha256hex(sigString, flowSecretKey);\n\nconst allParams = Object.assign({}, params, { s: signature });\n\n// Build URL-encoded form body for Flow.cl API (expects application/x-www-form-urlencoded)\nconst flowBody = Object.keys(allParams)\n  .map(k => encodeURIComponent(k) + \"=\" + encodeURIComponent(allParams[k]))\n  .join(\"&\");\n\nreturn [{\n  ...data,\n  flow_params: allParams,\n  flow_body: flowBody,\n  flow_api_url: flowApiUrl + \"/payment/create\"\n}];"
         }
       },
       {
@@ -314,8 +473,48 @@
           "method": "POST",
           "url": "={{ $json.flow_api_url }}",
           "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify($json.flow_params) }}",
+          "contentType": "form-urlencoded",
+          "specifyBody": "keypair",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "apiKey",
+                "value": "={{ $json.flow_params.apiKey }}"
+              },
+              {
+                "name": "amount",
+                "value": "={{ $json.flow_params.amount }}"
+              },
+              {
+                "name": "commerceOrder",
+                "value": "={{ $json.flow_params.commerceOrder }}"
+              },
+              {
+                "name": "currency",
+                "value": "={{ $json.flow_params.currency }}"
+              },
+              {
+                "name": "email",
+                "value": "={{ $json.flow_params.email }}"
+              },
+              {
+                "name": "subject",
+                "value": "={{ $json.flow_params.subject }}"
+              },
+              {
+                "name": "urlConfirmation",
+                "value": "={{ $json.flow_params.urlConfirmation }}"
+              },
+              {
+                "name": "urlReturn",
+                "value": "={{ $json.flow_params.urlReturn }}"
+              },
+              {
+                "name": "s",
+                "value": "={{ $json.flow_params.s }}"
+              }
+            ]
+          },
           "options": {}
         }
       },
@@ -329,7 +528,7 @@
           300
         ],
         "parameters": {
-          "jsCode": "const data = $json;\nconst pCtx = data.payment_context || {};\nconst flowUrl = data.url || \"\";\nconst flowToken = data.token || \"\";\nconst flowOrderId = String(data.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || 0;\nconst service = pCtx.service || \"servicio\";\nconst dateText = (pCtx.booking_date && pCtx.booking_time)\n  ? \"\\nFecha reservada: \" + pCtx.booking_date + \" a las \" + pCtx.booking_time\n  : \"\";\nconst msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n  \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\" +\n  \"\\nServicio: \" + service + dateText +\n  \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\nconst payloadObj = {\n  ...data,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, data.execution_context || {}, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
+          "jsCode": "const flowResp = $json;\nconst prevData = $(\"build_flow_signature\").first().json;\nconst ctx = prevData.execution_context || {};\nconst pCtx = prevData.payment_context || {};\nconst flowUrl = flowResp.url || \"\";\nconst flowToken = flowResp.token || \"\";\nconst flowOrderId = String(flowResp.flowOrder || \"\");\nconst paymentUrl = flowUrl + \"?token=\" + flowToken;\nconst amount = pCtx.amount || prevData.amount || ctx.quoted_price || 0;\nconst service = pCtx.service || prevData.service || ctx.service_interest || \"servicio\";\nconst dateText = (ctx.booking_date && ctx.booking_time)\n  ? \"\\nFecha: \" + ctx.booking_date + \" a las \" + ctx.booking_time\n  : \"\";\n\nconst isPrepagoreRequired = prevData.payment_for_mode === \"prepago_required\" ||\n  ctx.payment_mode === \"prepago_required\" ||\n  (prevData.context_packet && prevData.context_packet.state && prevData.context_packet.state.payment_mode === \"prepago_required\");\n\nlet msg;\nif (isPrepagoreRequired) {\n  msg = \"Para confirmar tu turno\" + dateText + \", necesito que pagues primero.\\n\\nLink de pago: \" + paymentUrl +\n    \"\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\\nServicio: \" + service +\n    \"\\n\\nEn cuanto confirmes el pago, te reservo el turno en el calendario!\";\n} else {\n  msg = \"Perfecto! Aqui tienes el link para pagar:\\n\\n\" + paymentUrl +\n    \"\\n\\nMonto: $\" + Number(amount).toLocaleString(\"es-CL\") + \" CLP\\nServicio: \" + service + dateText +\n    \"\\n\\nUna vez que confirmes el pago, tu cita queda asegurada!\";\n}\n\nconst payloadObj = {\n  ...prevData,\n  token: flowToken,\n  url: flowUrl,\n  flowOrder: flowResp.flowOrder,\n  channel: ctx.channel || \"whatsapp\",\n  phone: ctx.phone || \"\",\n  message: msg,\n  payment_url: paymentUrl,\n  flow_order_id: flowOrderId,\n  message_to_send: msg,\n  execution_context: Object.assign({}, ctx, {\n    action: \"payment_link_sent\",\n    message: msg,\n    state_update: {\n      payment_preference: \"prepago\",\n      payment_status: \"pending\",\n      flow_order_id: flowOrderId,\n      flow_payment_url: paymentUrl,\n      last_bot_action: isPrepagoreRequired ? \"payment_link_pending_booking\" : \"payment_link_sent\"\n    }\n  }),\n  db_operations: [\"messages\", \"lead_state\"]\n};\nreturn [{ ...payloadObj, payload: JSON.stringify(payloadObj) }];"
         }
       },
       {
@@ -362,7 +561,7 @@
         ],
         "parameters": {
           "operation": "executeQuery",
-          "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $json.flow_order_id }}', flow_payment_url='{{ $json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ ($json.execution_context || {}).lead_id || ($json.payment_context || {}).lead_id }}';",
+          "query": "UPDATE lead_state SET payment_status='pending', flow_order_id='{{ $(\"build_payment_message\").first().json.flow_order_id }}', flow_payment_url='{{ $(\"build_payment_message\").first().json.payment_url }}', last_bot_action='payment_link_sent', updated_at=NOW() WHERE lead_id='{{ $(\"build_payment_message\").first().json.execution_context.lead_id }}'::uuid;",
           "options": {}
         },
         "credentials": {
@@ -397,10 +596,63 @@
         "parameters": {
           "jsCode": "const ctx = ($json.execution_context || $json.payment_context || {});\nreturn [{ ...$json, message_to_send: \"Hubo un problema al generar el link de pago. Contactame directamente para coordinar el pago.\", payment_request_status: \"error\" }];"
         }
+      },
+      {
+        "id": "fetch_latest_quote_pg",
+        "name": "fetch_latest_quote",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          250,
+          300
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH exec_ctx AS (\n  SELECT\n    NULLIF('{{ (($json.execution_context || {}).lead_id || \"\").replace(/'/g, \"''\") }}', '')::uuid AS lead_id,\n    replace(lower(trim('{{ (($json.execution_context || {}).service_interest || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.service_interest) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS service_code,\n    replace(lower(trim('{{ (($json.execution_context || {}).vehicle_type || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.vehicle_type) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS vehicle_type,\n    replace(lower(trim('{{ (($json.execution_context || {}).district || ($json.context_packet && $json.context_packet.state && $json.context_packet.state.district) || \"\").replace(/'/g, \"''\") }}')), ' ', '_') AS district_key\n),\nstored_quote AS (\n  SELECT price AS latest_price, service AS latest_service\n  FROM offers_or_quotes oq\n  CROSS JOIN exec_ctx ec\n  WHERE oq.lead_id = ec.lead_id\n  ORDER BY oq.created_at DESC\n  LIMIT 1\n),\nagent_lookup AS (\n  SELECT ls.agent_id\n  FROM lead_state ls\n  CROSS JOIN exec_ctx ec\n  WHERE ls.lead_id = ec.lead_id\n  LIMIT 1\n),\nactive_version AS (\n  SELECT pv.id\n  FROM public.pricing_versions pv\n  JOIN agent_lookup al ON al.agent_id = pv.agent_id\n  WHERE pv.is_active = true AND pv.valid_from <= NOW()\n  ORDER BY pv.valid_from DESC\n  LIMIT 1\n),\nbase_price_row AS (\n  SELECT p.base_price\n  FROM public.service_vehicle_prices p\n  JOIN active_version av ON av.id = p.pricing_version_id\n  CROSS JOIN exec_ctx ec\n  WHERE replace(lower(trim(p.service_code)), ' ', '_') = ec.service_code\n    AND (\n      replace(lower(trim(p.vehicle_type)), ' ', '_') = ec.vehicle_type\n      OR (ec.vehicle_type IN ('hatchback','city_car') AND replace(lower(trim(p.vehicle_type)), ' ', '_') = 'sedan')\n    )\n    AND p.is_active = true\n  LIMIT 1\n),\nsurcharge_row AS (\n  SELECT COALESCE(d.surcharge, 0) AS surcharge\n  FROM public.district_surcharges d\n  JOIN active_version av ON av.id = d.pricing_version_id\n  CROSS JOIN exec_ctx ec\n  WHERE replace(lower(trim(d.district_key)), ' ', '_') IN (ec.district_key, '*')\n    AND d.is_active = true\n  ORDER BY CASE WHEN replace(lower(trim(d.district_key)), ' ', '_') = ec.district_key THEN 0 ELSE 1 END\n  LIMIT 1\n),\ncomputed AS (\n  SELECT\n    COALESCE(b.base_price, 0) + COALESCE(s.surcharge, 0) AS computed_price\n  FROM base_price_row b\n  CROSS JOIN surcharge_row s\n)\nSELECT\n  sq.latest_price,\n  sq.latest_service,\n  CASE WHEN c.computed_price > 0 THEN c.computed_price ELSE NULL END AS computed_price,\n  ec.service_code AS context_service_code\nFROM exec_ctx ec\nLEFT JOIN stored_quote sq ON true\nLEFT JOIN computed c ON true",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "id": "a7f3d2c1-5b8e-4f9a-b3c2-1d0e7f8a9b6c",
+        "name": "insert_payment_message",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2,
+        "position": [
+          1470,
+          300
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO messages (lead_id, direction, content, channel, created_at)\nVALUES (\n  NULLIF('{{ $(\"build_payment_message\").first().json.execution_context.lead_id }}', '')::uuid,\n  'outbound',\n  '{{ $(\"build_payment_message\").first().json.message_to_send.replace(/'/g, \"''\") }}',\n  '{{ $(\"build_payment_message\").first().json.channel || \"whatsapp\" }}',\n  NOW()\n)\nON CONFLICT DO NOTHING\nRETURNING id;",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
       }
     ],
     "connections": {
       "6.26 payment_request": {
+        "main": [
+          [
+            {
+              "node": "fetch_latest_quote",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "fetch_latest_quote": {
         "main": [
           [
             {
@@ -415,7 +667,7 @@
         "main": [
           [
             {
-              "node": "build_flow_signature",
+              "node": "fetch_org_flow_credentials",
               "type": "main",
               "index": 0
             }
@@ -466,7 +718,7 @@
         "main": [
           [
             {
-              "node": "update_lead_state_payment_pending",
+              "node": "insert_payment_message",
               "type": "main",
               "index": 0
             }
@@ -483,6 +735,28 @@
             }
           ]
         ]
+      },
+      "insert_payment_message": {
+        "main": [
+          [
+            {
+              "node": "update_lead_state_payment_pending",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "fetch_org_flow_credentials": {
+        "main": [
+          [
+            {
+              "node": "build_flow_signature",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -491,11 +765,19 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-08T17:07:02.177Z",
-        "id": 1853,
+        "createdAt": "2026-07-13T15:51:24.308Z",
+        "id": 1989,
         "workflowId": "wlAAdOqo3vD7O18n",
-        "versionId": "2c21f853-155b-4666-80d2-cbaf231545fe",
+        "versionId": "66e2c9f2-2776-48b6-a4b0-dffb01fcdeb3",
         "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-13T15:51:24.094Z",
+        "id": 1988,
+        "workflowId": "wlAAdOqo3vD7O18n",
+        "versionId": "66e2c9f2-2776-48b6-a4b0-dffb01fcdeb3",
+        "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }
     ]

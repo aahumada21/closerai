@@ -1,0 +1,763 @@
+{
+  "updatedAt": "2026-06-22T15:18:31.144Z",
+  "createdAt": "2026-06-22T15:18:31.144Z",
+  "id": "OnHysjH5lvf77zbJ",
+  "name": "onboarding_create_agent",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "onboarding-create-agent",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "name": "WEBHOOK onboarding_post",
+      "id": "node-onboarding-webhook",
+      "webhookId": "onboarding-create-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();\n  }\n  return \"\";\n}\n\nfunction stripAccents(value) {\n  return String(value || \"\").split(\"\").map(function (ch) {\n    var code = ch.charCodeAt(0);\n    var map = {\n      225: \"a\", 224: \"a\", 228: \"a\", 226: \"a\",\n      233: \"e\", 232: \"e\", 235: \"e\", 234: \"e\",\n      237: \"i\", 236: \"i\", 239: \"i\", 238: \"i\",\n      243: \"o\", 242: \"o\", 246: \"o\", 244: \"o\",\n      250: \"u\", 249: \"u\", 252: \"u\", 251: \"u\",\n      241: \"n\"\n    };\n    return map[code] || ch;\n  }).join(\"\");\n}\n\nfunction slugify(value) {\n  return stripAccents(String(value || \"\"))\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, \"-\")\n    .replace(/^-+|-+$/g, \"\")\n    .slice(0, 60);\n}\n\nfunction randomSuffix() {\n  return Math.random().toString(36).slice(2, 8);\n}\n\nconst expectedToken = $env.ONBOARDING_API_TOKEN;\nconst providedToken = header(\"x-onboarding-token\");\n\nconst userId = firstValue(body.user_id, body.userId);\nconst organizationId = firstValue(body.organization_id, body.organizationId);\nconst agentName = firstValue(body.agent_name, body.agentName);\nconst businessName = firstValue(body.business_name, body.businessName) || agentName;\nconst calendarId = firstValue(body.calendar_id, body.calendarId) || null;\nconst districts = Array.isArray(body.districts) ? body.districts.filter((d) => typeof d === \"string\" && d.trim()) : [];\n\nconst channelInput = body.channel && typeof body.channel === \"object\" ? body.channel : null;\n\nlet error = null;\nif (!expectedToken) error = \"missing_onboarding_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_onboarding_token\";\nelse if (!userId) error = \"missing_user_id\";\nelse if (!organizationId) error = \"missing_organization_id\";\nelse if (!agentName) error = \"missing_agent_name\";\n\nconst slug = agentName ? `${slugify(agentName)}-${randomSuffix()}` : null;\n\n// Config inicial generica para la linea de detailing/lavado de autos.\n// Pensada para editarse despues desde el panel (agent_business_config\n// ya tiene RLS para que la propia organizacion la actualice).\nconst businessConfig = {\n  business_name: businessName,\n  locale: \"es-CL\",\n  timezone: \"America/Santiago\",\n  currency: \"CLP\",\n  calendar_id: calendarId,\n\n  coverage: {\n    districts\n  },\n\n  staff_selection_mode: \"auto\",\n\n  schedule: [\n    { days: [1, 2, 3, 4, 5], start_time: \"09:00\", end_time: \"18:00\", slot_interval_minutes: 60 },\n    { days: [6], start_time: \"09:00\", end_time: \"14:00\", slot_interval_minutes: 60 }\n  ],\n\n  booking_policy: {\n    timezone: \"America/Santiago\",\n    max_slots_default: 3,\n    duration_minutes_default: 120,\n    requires_address_confirmation: true,\n    requires_availability_confirmation: true\n  },\n\n  pricing_policy: {\n    source: \"legacy_pricing_workflow\",\n    on_pricing_error: \"handoff_or_retry_before_booking\",\n    must_not_invent_prices: true,\n    requires_service_vehicle_district: true\n  },\n\n  agent_limits: {\n    max_booking_options: 3,\n    do_not_invent_availability: true,\n    do_not_confirm_without_address: true,\n    do_not_book_without_valid_quote: true\n  },\n\n  messages: {\n    handoff: \"Te derivo con una persona para revisar esto manualmente.\",\n    no_slots: \"Por ahora no encontre horarios disponibles para los proximos dias. Si quieres, te puedo derivar para revisar manualmente una hora.\",\n    ask_service: \"Perfecto. Que servicio te interesa?\",\n    ask_district: \"Perfecto. Para ayudarte bien, en que comuna estas?\",\n    ask_vehicle_type: \"Perfecto. Para cotizar bien, que tipo de vehiculo tienes? Puede ser SUV, camioneta, hatchback, sedan, city car, moto o furgon.\"\n  },\n\n  service_aliases: {\n    basico: \"lavado_basico\",\n    \"lavado basico\": \"lavado_basico\",\n    premium: \"lavado_premium\",\n    \"lavado premium\": \"lavado_premium\",\n    encerado: \"encerado_full\",\n    cera: \"encerado_full\"\n  },\n\n  services: [\n    {\n      key: \"lavado_basico\",\n      name: \"Lavado basico\",\n      aliases: [\"lavado basico\", \"basico\", \"simple\", \"normal\"],\n      description: \"Mantencion rapida para dejarlo limpio por dentro y fuera.\",\n      includes: [\"Lavado exterior de carroceria\", \"Aspirado rapido del interior\"],\n      duration_minutes: 60\n    },\n    {\n      key: \"lavado_premium\",\n      name: \"Lavado premium\",\n      aliases: [\"lavado premium\", \"premium\", \"detallado\"],\n      description: \"Limpieza mas completa y detallada.\",\n      includes: [\"Lavado exterior completo\", \"Aspirado interior completo\", \"Limpieza de tablero y consola\"],\n      duration_minutes: 120\n    },\n    {\n      key: \"encerado_full\",\n      name: \"Encerado full\",\n      aliases: [\"encerado\", \"encerado full\", \"cera\"],\n      description: \"Proteccion y brillo para la pintura.\",\n      includes: [\"Lavado exterior previo\", \"Aplicacion de cera o sellador\", \"Pulido y realce de brillo\"],\n      duration_minutes: 180\n    }\n  ]\n};\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    user_id: userId || null,\n    organization_id: organizationId || null,\n    agent_name: agentName || null,\n    description: `Agente de detailing/lavado creado por onboarding`,\n    slug,\n    business_config: businessConfig,\n    channel: channelInput\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "name": "validate_and_build_request",
+      "id": "node-onboarding-validate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? null : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (!input.valid) {\n  return [{ json: { ...input, create_agent_query: null } }];\n}\n\nconst query = `\nWITH membership AS (\n  SELECT EXISTS (\n    SELECT 1 FROM organization_members\n    WHERE user_id = ${sqlUuidOrNull(input.user_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS is_member\n),\nnew_agent AS (\n  INSERT INTO agents (organization_id, slug, name, role, is_active)\n  SELECT ${sqlUuidOrNull(input.organization_id)}, ${sqlText(input.slug)}, ${sqlText(input.agent_name)}, 'closer', true\n  FROM membership WHERE membership.is_member\n  RETURNING id, organization_id\n),\nnew_business_config AS (\n  INSERT INTO agent_business_config (organization_id, agent_id, version, is_active, config)\n  SELECT organization_id, id, 1, true, ${sqlJsonb(input.business_config)}\n  FROM new_agent\n  RETURNING id, agent_id\n),\nnew_pricing_version AS (\n  INSERT INTO pricing_versions (agent_id, name, is_active, valid_from)\n  SELECT id, 'onboarding_v1', true, now()\n  FROM new_agent\n  RETURNING id, agent_id\n),\nnew_prices AS (\n  INSERT INTO service_vehicle_prices (pricing_version_id, service_code, vehicle_type, base_price, is_active)\n  SELECT npv.id, v.service_code, v.vehicle_type, v.base_price, true\n  FROM new_pricing_version npv\n  CROSS JOIN (\n    VALUES\n      ('lavado_basico', 'sedan', 25000),\n      ('lavado_basico', 'suv', 30000),\n      ('lavado_basico', 'camioneta', 32000),\n      ('lavado_premium', 'sedan', 35000),\n      ('lavado_premium', 'suv', 40000),\n      ('lavado_premium', 'camioneta', 45000),\n      ('encerado_full', 'sedan', 60000),\n      ('encerado_full', 'suv', 70000),\n      ('encerado_full', 'camioneta', 80000)\n  ) AS v(service_code, vehicle_type, base_price)\n  RETURNING id\n)\nSELECT\n  (SELECT is_member FROM membership) AS is_member,\n  (SELECT id FROM new_agent) AS agent_id,\n  (SELECT organization_id FROM new_agent) AS organization_id,\n  (SELECT id FROM new_business_config) AS business_config_id,\n  (SELECT id FROM new_pricing_version) AS pricing_version_id,\n  (SELECT count(*) FROM new_prices) AS prices_created;\n`;\n\nreturn [{\n  json: {\n    ...input,\n    create_agent_query: query\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "name": "build_create_agent_query",
+      "id": "node-onboarding-build-query"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-valid-request",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "name": "IF valid_request",
+      "id": "node-onboarding-if-valid"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.create_agent_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        -100
+      ],
+      "name": "DB create_agent",
+      "id": "node-onboarding-db-create",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstream = $(\"build_create_agent_query\").first().json;\nconst dbResult = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nconst isMember = dbResult.is_member === true || dbResult.is_member === \"t\" || dbResult.is_member === \"true\";\nconst agentId = dbResult.agent_id || null;\n\nlet status = \"ok\";\nif (!isMember) status = \"forbidden\";\nelse if (!agentId) status = \"creation_failed\";\n\nconst channel = upstream.channel && typeof upstream.channel === \"object\" ? upstream.channel : null;\nlet channelInsertQuery = null;\n\nif (status === \"ok\" && channel && channel.channel && channel.provider && channel.external_channel_id) {\n  channelInsertQuery = `\nINSERT INTO agent_channels (organization_id, agent_id, channel, provider, external_channel_id, display_name, is_active)\nVALUES (\n  ${sqlUuidOrNull(dbResult.organization_id)},\n  ${sqlUuidOrNull(agentId)},\n  ${sqlText(channel.channel)},\n  ${sqlText(channel.provider)},\n  ${sqlText(channel.external_channel_id)},\n  ${sqlText(channel.display_name || upstream.agent_name)},\n  true\n)\nRETURNING id;\n`;\n}\n\nreturn [{\n  json: {\n    status,\n    agent_id: agentId,\n    organization_id: dbResult.organization_id || upstream.organization_id || null,\n    slug: upstream.slug || null,\n    agent_name: upstream.agent_name || null,\n    business_config_id: dbResult.business_config_id || null,\n    pricing_version_id: dbResult.pricing_version_id || null,\n    prices_created: dbResult.prices_created || 0,\n    channel_insert_query: channelInsertQuery\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ],
+      "name": "interpret_create_result",
+      "id": "node-onboarding-interpret"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-should-insert-channel",
+              "leftValue": "={{ !!$json.channel_insert_query }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        -100
+      ],
+      "name": "IF should_insert_channel",
+      "id": "node-onboarding-if-channel"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.channel_insert_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1540,
+        -200
+      ],
+      "name": "DB insert_channel",
+      "id": "node-onboarding-db-channel",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $(\"interpret_create_result\").first().json;\nconst channelRow = $json || {};\n\nreturn [{\n  json: {\n    ...base,\n    channel_created: true,\n    channel_id: channelRow.id || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -200
+      ],
+      "name": "attach_channel_created",
+      "id": "node-onboarding-attach-channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $json || {};\n\nreturn [{\n  json: {\n    ...base,\n    channel_created: false,\n    channel_id: null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "name": "attach_no_channel",
+      "id": "node-onboarding-attach-no-channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nif (input.status === \"forbidden\") {\n  return [{\n    json: {\n      ok: false,\n      error: \"forbidden\",\n      message: \"El usuario no pertenece a esa organizacion.\",\n      agent_id: null\n    }\n  }];\n}\n\nif (input.status === \"creation_failed\") {\n  return [{\n    json: {\n      ok: false,\n      error: \"creation_failed\",\n      message: \"No se pudo crear el agente. Revisa el slug o intenta de nuevo.\",\n      agent_id: null\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ok: true,\n    agent_id: input.agent_id,\n    organization_id: input.organization_id,\n    slug: input.slug,\n    agent_name: input.agent_name,\n    business_config_id: input.business_config_id,\n    pricing_version_id: input.pricing_version_id,\n    prices_created: input.prices_created,\n    channel_created: input.channel_created || false,\n    channel_id: input.channel_id || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -100
+      ],
+      "name": "build_response",
+      "id": "node-onboarding-build-response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: input.error || \"invalid_request\",\n    agent_id: null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ],
+      "name": "build_validation_error_response",
+      "id": "node-onboarding-validation-error"
+    }
+  ],
+  "connections": {
+    "WEBHOOK onboarding_post": {
+      "main": [
+        [
+          {
+            "node": "validate_and_build_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_and_build_request": {
+      "main": [
+        [
+          {
+            "node": "build_create_agent_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_create_agent_query": {
+      "main": [
+        [
+          {
+            "node": "IF valid_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF valid_request": {
+      "main": [
+        [
+          {
+            "node": "DB create_agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_validation_error_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB create_agent": {
+      "main": [
+        [
+          {
+            "node": "interpret_create_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "interpret_create_result": {
+      "main": [
+        [
+          {
+            "node": "IF should_insert_channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF should_insert_channel": {
+      "main": [
+        [
+          {
+            "node": "DB insert_channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "attach_no_channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB insert_channel": {
+      "main": [
+        [
+          {
+            "node": "attach_channel_created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_channel_created": {
+      "main": [
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_no_channel": {
+      "main": [
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "67f04e68-a9a2-41bb-9cff-252264388554",
+  "activeVersionId": "67f04e68-a9a2-41bb-9cff-252264388554",
+  "versionCounter": 13,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-22T15:18:31.238Z",
+      "createdAt": "2026-06-22T15:18:31.238Z",
+      "role": "workflow:owner",
+      "workflowId": "OnHysjH5lvf77zbJ",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-22T15:18:31.286Z",
+    "createdAt": "2026-06-22T15:18:31.286Z",
+    "versionId": "67f04e68-a9a2-41bb-9cff-252264388554",
+    "workflowId": "OnHysjH5lvf77zbJ",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "onboarding-create-agent",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "name": "WEBHOOK onboarding_post",
+        "id": "node-onboarding-webhook",
+        "webhookId": "onboarding-create-agent"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();\n  }\n  return \"\";\n}\n\nfunction stripAccents(value) {\n  return String(value || \"\").split(\"\").map(function (ch) {\n    var code = ch.charCodeAt(0);\n    var map = {\n      225: \"a\", 224: \"a\", 228: \"a\", 226: \"a\",\n      233: \"e\", 232: \"e\", 235: \"e\", 234: \"e\",\n      237: \"i\", 236: \"i\", 239: \"i\", 238: \"i\",\n      243: \"o\", 242: \"o\", 246: \"o\", 244: \"o\",\n      250: \"u\", 249: \"u\", 252: \"u\", 251: \"u\",\n      241: \"n\"\n    };\n    return map[code] || ch;\n  }).join(\"\");\n}\n\nfunction slugify(value) {\n  return stripAccents(String(value || \"\"))\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, \"-\")\n    .replace(/^-+|-+$/g, \"\")\n    .slice(0, 60);\n}\n\nfunction randomSuffix() {\n  return Math.random().toString(36).slice(2, 8);\n}\n\nconst expectedToken = $env.ONBOARDING_API_TOKEN;\nconst providedToken = header(\"x-onboarding-token\");\n\nconst userId = firstValue(body.user_id, body.userId);\nconst organizationId = firstValue(body.organization_id, body.organizationId);\nconst agentName = firstValue(body.agent_name, body.agentName);\nconst businessName = firstValue(body.business_name, body.businessName) || agentName;\nconst calendarId = firstValue(body.calendar_id, body.calendarId) || null;\nconst districts = Array.isArray(body.districts) ? body.districts.filter((d) => typeof d === \"string\" && d.trim()) : [];\n\nconst channelInput = body.channel && typeof body.channel === \"object\" ? body.channel : null;\n\nlet error = null;\nif (!expectedToken) error = \"missing_onboarding_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_onboarding_token\";\nelse if (!userId) error = \"missing_user_id\";\nelse if (!organizationId) error = \"missing_organization_id\";\nelse if (!agentName) error = \"missing_agent_name\";\n\nconst slug = agentName ? `${slugify(agentName)}-${randomSuffix()}` : null;\n\n// Config inicial generica para la linea de detailing/lavado de autos.\n// Pensada para editarse despues desde el panel (agent_business_config\n// ya tiene RLS para que la propia organizacion la actualice).\nconst businessConfig = {\n  business_name: businessName,\n  locale: \"es-CL\",\n  timezone: \"America/Santiago\",\n  currency: \"CLP\",\n  calendar_id: calendarId,\n\n  coverage: {\n    districts\n  },\n\n  staff_selection_mode: \"auto\",\n\n  schedule: [\n    { days: [1, 2, 3, 4, 5], start_time: \"09:00\", end_time: \"18:00\", slot_interval_minutes: 60 },\n    { days: [6], start_time: \"09:00\", end_time: \"14:00\", slot_interval_minutes: 60 }\n  ],\n\n  booking_policy: {\n    timezone: \"America/Santiago\",\n    max_slots_default: 3,\n    duration_minutes_default: 120,\n    requires_address_confirmation: true,\n    requires_availability_confirmation: true\n  },\n\n  pricing_policy: {\n    source: \"legacy_pricing_workflow\",\n    on_pricing_error: \"handoff_or_retry_before_booking\",\n    must_not_invent_prices: true,\n    requires_service_vehicle_district: true\n  },\n\n  agent_limits: {\n    max_booking_options: 3,\n    do_not_invent_availability: true,\n    do_not_confirm_without_address: true,\n    do_not_book_without_valid_quote: true\n  },\n\n  messages: {\n    handoff: \"Te derivo con una persona para revisar esto manualmente.\",\n    no_slots: \"Por ahora no encontre horarios disponibles para los proximos dias. Si quieres, te puedo derivar para revisar manualmente una hora.\",\n    ask_service: \"Perfecto. Que servicio te interesa?\",\n    ask_district: \"Perfecto. Para ayudarte bien, en que comuna estas?\",\n    ask_vehicle_type: \"Perfecto. Para cotizar bien, que tipo de vehiculo tienes? Puede ser SUV, camioneta, hatchback, sedan, city car, moto o furgon.\"\n  },\n\n  service_aliases: {\n    basico: \"lavado_basico\",\n    \"lavado basico\": \"lavado_basico\",\n    premium: \"lavado_premium\",\n    \"lavado premium\": \"lavado_premium\",\n    encerado: \"encerado_full\",\n    cera: \"encerado_full\"\n  },\n\n  services: [\n    {\n      key: \"lavado_basico\",\n      name: \"Lavado basico\",\n      aliases: [\"lavado basico\", \"basico\", \"simple\", \"normal\"],\n      description: \"Mantencion rapida para dejarlo limpio por dentro y fuera.\",\n      includes: [\"Lavado exterior de carroceria\", \"Aspirado rapido del interior\"],\n      duration_minutes: 60\n    },\n    {\n      key: \"lavado_premium\",\n      name: \"Lavado premium\",\n      aliases: [\"lavado premium\", \"premium\", \"detallado\"],\n      description: \"Limpieza mas completa y detallada.\",\n      includes: [\"Lavado exterior completo\", \"Aspirado interior completo\", \"Limpieza de tablero y consola\"],\n      duration_minutes: 120\n    },\n    {\n      key: \"encerado_full\",\n      name: \"Encerado full\",\n      aliases: [\"encerado\", \"encerado full\", \"cera\"],\n      description: \"Proteccion y brillo para la pintura.\",\n      includes: [\"Lavado exterior previo\", \"Aplicacion de cera o sellador\", \"Pulido y realce de brillo\"],\n      duration_minutes: 180\n    }\n  ]\n};\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    user_id: userId || null,\n    organization_id: organizationId || null,\n    agent_name: agentName || null,\n    description: `Agente de detailing/lavado creado por onboarding`,\n    slug,\n    business_config: businessConfig,\n    channel: channelInput\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "name": "validate_and_build_request",
+        "id": "node-onboarding-validate"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? null : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (!input.valid) {\n  return [{ json: { ...input, create_agent_query: null } }];\n}\n\nconst query = `\nWITH membership AS (\n  SELECT EXISTS (\n    SELECT 1 FROM organization_members\n    WHERE user_id = ${sqlUuidOrNull(input.user_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS is_member\n),\nnew_agent AS (\n  INSERT INTO agents (organization_id, slug, name, role, is_active)\n  SELECT ${sqlUuidOrNull(input.organization_id)}, ${sqlText(input.slug)}, ${sqlText(input.agent_name)}, 'closer', true\n  FROM membership WHERE membership.is_member\n  RETURNING id, organization_id\n),\nnew_business_config AS (\n  INSERT INTO agent_business_config (organization_id, agent_id, version, is_active, config)\n  SELECT organization_id, id, 1, true, ${sqlJsonb(input.business_config)}\n  FROM new_agent\n  RETURNING id, agent_id\n),\nnew_pricing_version AS (\n  INSERT INTO pricing_versions (agent_id, name, is_active, valid_from)\n  SELECT id, 'onboarding_v1', true, now()\n  FROM new_agent\n  RETURNING id, agent_id\n),\nnew_prices AS (\n  INSERT INTO service_vehicle_prices (pricing_version_id, service_code, vehicle_type, base_price, is_active)\n  SELECT npv.id, v.service_code, v.vehicle_type, v.base_price, true\n  FROM new_pricing_version npv\n  CROSS JOIN (\n    VALUES\n      ('lavado_basico', 'sedan', 25000),\n      ('lavado_basico', 'suv', 30000),\n      ('lavado_basico', 'camioneta', 32000),\n      ('lavado_premium', 'sedan', 35000),\n      ('lavado_premium', 'suv', 40000),\n      ('lavado_premium', 'camioneta', 45000),\n      ('encerado_full', 'sedan', 60000),\n      ('encerado_full', 'suv', 70000),\n      ('encerado_full', 'camioneta', 80000)\n  ) AS v(service_code, vehicle_type, base_price)\n  RETURNING id\n)\nSELECT\n  (SELECT is_member FROM membership) AS is_member,\n  (SELECT id FROM new_agent) AS agent_id,\n  (SELECT organization_id FROM new_agent) AS organization_id,\n  (SELECT id FROM new_business_config) AS business_config_id,\n  (SELECT id FROM new_pricing_version) AS pricing_version_id,\n  (SELECT count(*) FROM new_prices) AS prices_created;\n`;\n\nreturn [{\n  json: {\n    ...input,\n    create_agent_query: query\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "name": "build_create_agent_query",
+        "id": "node-onboarding-build-query"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cond-valid-request",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          660,
+          0
+        ],
+        "name": "IF valid_request",
+        "id": "node-onboarding-if-valid"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.create_agent_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          880,
+          -100
+        ],
+        "name": "DB create_agent",
+        "id": "node-onboarding-db-create",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const upstream = $(\"build_create_agent_query\").first().json;\nconst dbResult = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nconst isMember = dbResult.is_member === true || dbResult.is_member === \"t\" || dbResult.is_member === \"true\";\nconst agentId = dbResult.agent_id || null;\n\nlet status = \"ok\";\nif (!isMember) status = \"forbidden\";\nelse if (!agentId) status = \"creation_failed\";\n\nconst channel = upstream.channel && typeof upstream.channel === \"object\" ? upstream.channel : null;\nlet channelInsertQuery = null;\n\nif (status === \"ok\" && channel && channel.channel && channel.provider && channel.external_channel_id) {\n  channelInsertQuery = `\nINSERT INTO agent_channels (organization_id, agent_id, channel, provider, external_channel_id, display_name, is_active)\nVALUES (\n  ${sqlUuidOrNull(dbResult.organization_id)},\n  ${sqlUuidOrNull(agentId)},\n  ${sqlText(channel.channel)},\n  ${sqlText(channel.provider)},\n  ${sqlText(channel.external_channel_id)},\n  ${sqlText(channel.display_name || upstream.agent_name)},\n  true\n)\nRETURNING id;\n`;\n}\n\nreturn [{\n  json: {\n    status,\n    agent_id: agentId,\n    organization_id: dbResult.organization_id || upstream.organization_id || null,\n    slug: upstream.slug || null,\n    agent_name: upstream.agent_name || null,\n    business_config_id: dbResult.business_config_id || null,\n    pricing_version_id: dbResult.pricing_version_id || null,\n    prices_created: dbResult.prices_created || 0,\n    channel_insert_query: channelInsertQuery\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -100
+        ],
+        "name": "interpret_create_result",
+        "id": "node-onboarding-interpret"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cond-should-insert-channel",
+                "leftValue": "={{ !!$json.channel_insert_query }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1320,
+          -100
+        ],
+        "name": "IF should_insert_channel",
+        "id": "node-onboarding-if-channel"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.channel_insert_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1540,
+          -200
+        ],
+        "name": "DB insert_channel",
+        "id": "node-onboarding-db-channel",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const base = $(\"interpret_create_result\").first().json;\nconst channelRow = $json || {};\n\nreturn [{\n  json: {\n    ...base,\n    channel_created: true,\n    channel_id: channelRow.id || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          -200
+        ],
+        "name": "attach_channel_created",
+        "id": "node-onboarding-attach-channel"
+      },
+      {
+        "parameters": {
+          "jsCode": "const base = $json || {};\n\nreturn [{\n  json: {\n    ...base,\n    channel_created: false,\n    channel_id: null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          0
+        ],
+        "name": "attach_no_channel",
+        "id": "node-onboarding-attach-no-channel"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nif (input.status === \"forbidden\") {\n  return [{\n    json: {\n      ok: false,\n      error: \"forbidden\",\n      message: \"El usuario no pertenece a esa organizacion.\",\n      agent_id: null\n    }\n  }];\n}\n\nif (input.status === \"creation_failed\") {\n  return [{\n    json: {\n      ok: false,\n      error: \"creation_failed\",\n      message: \"No se pudo crear el agente. Revisa el slug o intenta de nuevo.\",\n      agent_id: null\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ok: true,\n    agent_id: input.agent_id,\n    organization_id: input.organization_id,\n    slug: input.slug,\n    agent_name: input.agent_name,\n    business_config_id: input.business_config_id,\n    pricing_version_id: input.pricing_version_id,\n    prices_created: input.prices_created,\n    channel_created: input.channel_created || false,\n    channel_id: input.channel_id || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1980,
+          -100
+        ],
+        "name": "build_response",
+        "id": "node-onboarding-build-response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nreturn [{\n  json: {\n    ok: false,\n    error: input.error || \"invalid_request\",\n    agent_id: null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          100
+        ],
+        "name": "build_validation_error_response",
+        "id": "node-onboarding-validation-error"
+      }
+    ],
+    "connections": {
+      "WEBHOOK onboarding_post": {
+        "main": [
+          [
+            {
+              "node": "validate_and_build_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_and_build_request": {
+        "main": [
+          [
+            {
+              "node": "build_create_agent_query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_create_agent_query": {
+        "main": [
+          [
+            {
+              "node": "IF valid_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF valid_request": {
+        "main": [
+          [
+            {
+              "node": "DB create_agent",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_validation_error_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB create_agent": {
+        "main": [
+          [
+            {
+              "node": "interpret_create_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "interpret_create_result": {
+        "main": [
+          [
+            {
+              "node": "IF should_insert_channel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF should_insert_channel": {
+        "main": [
+          [
+            {
+              "node": "DB insert_channel",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "attach_no_channel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB insert_channel": {
+        "main": [
+          [
+            {
+              "node": "attach_channel_created",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "attach_channel_created": {
+        "main": [
+          [
+            {
+              "node": "build_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "attach_no_channel": {
+        "main": [
+          [
+            {
+              "node": "build_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-22T15:18:38.184Z",
+        "id": 1423,
+        "workflowId": "OnHysjH5lvf77zbJ",
+        "versionId": "67f04e68-a9a2-41bb-9cff-252264388554",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

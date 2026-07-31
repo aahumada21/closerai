@@ -1,0 +1,635 @@
+# Catalogo de variables de decision + cadena de reglas del bot (Ahumada Detailing closer).
+#
+# Que es esto: un mapa exacto de que variables determinan la respuesta del bot y que
+# accion resulta de cada combinacion, extraido leyendo directamente el codigo fuente
+# de los nodos de decision (no de memoria ni de docs previos). Sirve para:
+#   1. Referencia rapida al arreglar bugs: en vez de releer el JSON crudo del workflow,
+#      se busca aca la regla/condicion que gobierna el caso.
+#   2. Base para generar QA combinatorio en una fase futura (ver README.md de esta carpeta).
+#
+# Como se mantiene: cuando cambie `rules_evaluation` (3 rules_engine) o `action_router`
+# (6 action_executor), volver a extraer con el mismo metodo (ver "extraction_method" abajo)
+# y actualizar `meta.last_verified_against_source`.
+
+meta:
+  bot: "Ahumada Detailing - closer conversacional (lavado/detailing de autos)"
+  source_files:
+    rules_engine: "workflows/exports/uncategorized/3 - 3 rules_engine__id-e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5.json"
+    action_executor: "workflows/exports/uncategorized/6 - 6 action_executor__id-80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13.json"
+  purpose:
+    "3 rules_engine": >
+      El "cerebro rapido" del bot: recibe el contexto armado por 2 lead_loader y trata
+      de resolver la respuesta con reglas deterministas (sin LLM), evaluando ~54 reglas
+      en orden de prioridad hasta que una matchea. Si ninguna matchea, delega a
+      5 llm_decision. Es el camino que atiende la enorme mayoria de los mensajes,
+      porque es instantaneo y predecible comparado con llamar a un LLM.
+    "6 action_executor": >
+      Una vez que ya se decidio QUE accion tomar (por regla o por LLM), este workflow
+      la ejecuta de verdad: rutea a uno de los 28 sub-workflows 6.x segun la accion
+      (enviar un mensaje, crear una reserva, cobrar, derivar a humano, etc.) via el
+      Switch action_router, y al final persiste el resultado (6.24 persist_and_audit).
+  key_nodes:
+    rules_evaluation: "Code node dentro de rules_engine. Contiene ~54 funciones rule*(ctx) evaluadas en orden de prioridad (primer match gana). Ver rule_chain abajo."
+    action_router: "Switch node (mode=expression) dentro de action_executor. Mapea rule_result.action -> uno de 20 outputs, cada uno llama a un sub-workflow 6.x."
+  last_verified_against_source: "2026-07-18"
+  extraction_method: >
+    Se extrajo el jsCode real de los nodos (via JSON.parse del export .json, no grep sobre
+    el JSON crudo porque jsCode viene como string de una sola linea con \n escapados).
+    El orden de rule_chain sale del array literal `const rules = [...]` (evaluado top-to-bottom,
+    for...of con `break` en el primer match), NO del orden en que las funciones estan
+    definidas en el archivo.
+
+# ---------------------------------------------------------------------------
+# VARIABLES
+# ---------------------------------------------------------------------------
+variables:
+  stage:
+    source: "lead_state.stage (leido en rules_evaluation como leadState.stage)"
+    values:
+      - new_lead            # fallback por defecto en algunas funciones (leadState.stage || "new_lead")
+      - service_discovery   # estado activo real (asignado por varias reglas); coexiste con new_lead como default -- inconsistencia de nombres a tener presente, no "corregida" aqui
+      - qualified
+      - quoted
+      - closing
+      - booking_selection
+      - booking_confirmation
+      - collecting_address
+      - address_confirmation
+      - booked
+      - cancelling
+      - reschedule
+      - post_service
+      - human_handoff
+    note: >
+      new_lead y service_discovery se usan ambos como "estado inicial" segun la regla
+      (algunas funciones hacen `leadState.stage || "new_lead"`, otras asignan
+      `stage: "service_discovery"` explicitamente como salida). No son la misma cadena,
+      pero cumplen un rol equivalente. Verificar cual es el valor real que persiste
+      lead_state.stage en la practica antes de asumir uno solo al generar QA.
+
+  required_fields_by_stage:
+    source: "REQUIRED_FIELDS_BY_STAGE en rules_evaluation, con fallback LEGACY_REQUIRED_FIELDS_BY_STAGE; configurable via agent_rules.lead_required_fields (rule_key='lead_required_fields')"
+    default: [service_interest, district, vehicle_type]
+    by_stage:
+      new_lead: [service_interest, district, vehicle_type]
+      qualified: [service_interest, district, vehicle_type]
+      quoted: [service_interest, district, vehicle_type]
+      closing: [service_interest, district, vehicle_type]
+      booking_selection: [service_interest, district, vehicle_type]
+      booking_confirmation: [service_interest, district, vehicle_type, booking_date, booking_time]
+      collecting_address: [address]
+      address_confirmation: []
+      booked: []
+      cancelling: []
+      reschedule: []
+      post_service: []
+      human_handoff: []
+
+  payment_mode:
+    source: "agent_business_config.config (leido por ruleAskPaymentPreference)"
+    values: [postpago_only, prepago_only, prepago_required]
+    note: "Determina si offer_available_slots se ofrece directo (postpago_only) o si antes hay que preguntar/forzar preferencia de pago (prepago_only / prepago_required) via ask_payment_preference."
+
+  staff_selection_mode:
+    source: "agentBusinessConfig.config.staff_selection_mode"
+    values: [auto, ask_customer]
+    note: "Si hay mas de un staff activo y esta en ask_customer, offer_available_slots pasa primero por seleccion de persona (ruleStaffSelectionReplyProvided)."
+
+  flags:
+    - name: human_handoff
+      source: "lead_state.human_handoff (boolean)"
+      effect: "Si es true, ruleHumanHandoffLocked (prioridad 100, la mas alta) intercepta TODO antes que cualquier otra regla."
+    - name: vehicle_type_generic
+      source: "isGenericVehicleType() sobre vehicle_type detectado (ej: 'auto', 'vehiculo', 'automovil')"
+      effect: "Dispara re-pregunta de tipo de vehiculo especifico en vez de aceptar el valor generico."
+
+# ---------------------------------------------------------------------------
+# CATALOGO DE ACCIONES (salida de action_router, Switch node, mode=expression)
+# ---------------------------------------------------------------------------
+# El mapeo es literal: ({ ask_missing_data: 0, send_quote: 1, ... })[$json.decision.action]
+# Indice = output del Switch. Cada output llama a su sub-workflow 6.x.
+actions:
+  - action: ask_missing_data
+    switch_output: 0
+    subworkflow: "6.7 ask_missing_data"
+    purpose: "Pide al usuario un dato que falta para poder avanzar (servicio, vehiculo, comuna, direccion, etc.)."
+  - action: send_quote
+    switch_output: 1
+    subworkflow: "6.8 send_quote"
+    purpose: "Cotiza y envia el precio del servicio (lista completa o un servicio puntual)."
+  - action: answer_question
+    switch_output: 2
+    subworkflow: "6.9 answer_question"
+    purpose: "Responde algo generico/informativo que ya viene armado (FAQ, aclaracion, disclosure de que es un bot, etc.) -- el 'catch-all' de mensajeria."
+  - action: answer_objection
+    switch_output: 3
+    subworkflow: "6.19 answer_objection"
+    purpose: "Responde a una objecion del cliente (tipicamente 'lo voy a pensar') tratando de no dejar enfriar la conversacion."
+  - action: offer_booking
+    switch_output: 4
+    subworkflow: "6.20 offer_booking"
+    purpose: "Invita al cliente a agendar."
+    note: "no se ve emitido por rules_evaluation en esta version; probablemente lo emite 5 llm_decision cuando rules_engine delega al LLM"
+  - action: confirm_booking
+    switch_output: 5
+    subworkflow: "6.5 confirm_booking_executor"
+    purpose: "Confirma la reserva de punta a punta: crea el evento en Google Calendar y la fila en DB."
+  - action: schedule_followup
+    switch_output: 6
+    subworkflow: "6.21 schedule_followup"
+    purpose: "Agenda un followup automatico a futuro (ej. 'el cliente dijo que avisa despues')."
+  - action: handoff_human
+    switch_output: 7
+    subworkflow: "6.22 handoff_human"
+    purpose: "Deriva la conversacion a una persona del equipo, creando el caso de handoff correspondiente."
+  - action: offer_available_slots
+    switch_output: 8
+    subworkflow: "6.23 offer_available_slots"
+    purpose: "Ofrece horarios disponibles (lista varios o revalida uno especifico)."
+  - action: cancel_booking
+    switch_output: 9
+    subworkflow: "6.6 cancel_booking"
+    purpose: "Cancela la reserva activa del lead."
+  - action: reschedule_booking
+    switch_output: 10
+    subworkflow: "6.10 reschedule_booking"
+    purpose: "Reprograma la reserva activa a un nuevo horario."
+  - action: collect_address
+    switch_output: 11
+    subworkflow: "6.11 collect_address"
+    purpose: "Pide la direccion exacta donde se hara el servicio."
+  - action: confirm_address
+    switch_output: 12
+    subworkflow: "6.12 confirm_address"
+    purpose: "Valida/confirma la direccion recibida antes de avanzar a horario."
+  - action: send_pre_service_instructions
+    switch_output: 13
+    subworkflow: "6.13 send_pre_service_instruction"
+    purpose: "Envia el checklist de instrucciones previas al servicio para una reserva ya confirmada."
+    note: "no se ve emitido por rules_evaluation; probablemente disparado por un scheduler/followup, no por respuesta directa a mensaje del usuario"
+  - action: notify_on_the_way
+    switch_output: 14
+    subworkflow: "6.14 notify_on_the_way"
+    purpose: "Avisa que el staff esta en camino al servicio."
+    note: "idem: no emitido por rules_evaluation, probablemente trigger externo (staff marca 'en camino')"
+  - action: request_review
+    switch_output: 15
+    subworkflow: "6.15 request_review"
+    purpose: "Pide una resena/calificacion despues del servicio."
+  - action: request_referral
+    switch_output: 16
+    subworkflow: "6.16 request_referral"
+    purpose: "Pide al cliente que refiera a alguien mas."
+  - action: send_service_menu
+    switch_output: 17
+    subworkflow: "6.17 send_service_menu"
+    purpose: "Envia el menu de servicios del negocio."
+  - action: recommend_service
+    switch_output: 18
+    subworkflow: "6.18 recommend_service"
+    purpose: "Recomienda un servicio especifico segun lo que cuenta el cliente del estado de su auto."
+  - action: ask_payment_preference
+    switch_output: 19
+    subworkflow: "6.25 ask_payment_preference"
+    purpose: "Pregunta como el cliente prefiere pagar (link Flow ahora vs al terminar)."
+    note: "condicionalmente sigue a 6.26 payment_request cuando payment_preference=prepago"
+  - action: check_payment_status
+    switch_output: 20
+    subworkflow: "6.28 check_payment_status"
+    purpose: "Agregado 2026-07-24, a pedido del usuario. Cuando el cliente pregunta si ya se registro su pago ('ya pague', 'verifica mi pago', etc), consulta EN VIVO la API real de Flow.cl (payment/getStatusByFlowOrder) -- nunca responde solo con el payment_status guardado en la DB local. Si Flow dice que esta pagado pero la DB local todavia no lo refleja (self-heal), le pega a su propio webhook /webhook/flow-payment-confirmed (mismo que usa Flow.cl) para que 6.27 procese la confirmacion completa (mensaje + DB) antes de responder."
+
+known_gaps:
+  - issue: "[RESUELTO 2026-07-18] action 'answer_faq' (emitido por ruleMultiVehicleFaq, rule_multi_vehicle_faq) NO tenia entrada en el mapeo de action_router (solo tiene 0-19)."
+    impact: "El Switch evaluaba ({...})[$json.decision.action] -> undefined -> ningun output matcheaba -> dead-end silencioso para ese caso."
+    fix_applied: "En vez de agregar un output 21 al Switch, se cambio rule_multi_vehicle_faq para emitir action: 'answer_question' (linea ~5340 de rules_evaluation), igual que el resto de las reglas que responden FAQs (rule_business_faq_router, rule_coverage_question, etc.) -- consistente con el patron existente, sin tocar action_router."
+    file_modified: "workflows/exports/uncategorized/3 - 3 rules_engine__id-e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5.json"
+  - issue: "action 'ignore' (ruleEmptyMessage) nunca llega a action_router: se corta antes, en rules_engine mismo."
+    detail: "build_output calcula shouldStop = !shouldCallLlm && (!action || action==='ignore'); shouldCallActionExecutor excluye explicitamente 'ignore'. Ver routing_gates abajo."
+  - issue: "[Detectado 2026-07-21, no arreglado -- bajo impacto] Respuesta fuera de guion durante 'service_change_requires_cancel_rebook' (el bot pregunto si confirmar cancelar+reagendar) puede caer al fallback LLM y responder send_pre_service_instructions en vez de re-preguntar la confirmacion."
+    detail: "Ninguna regla de rules_engine cubre una respuesta que no sea afirmacion/cancelacion mientras intent_last==='service_change_requires_cancel_rebook' (ruleConfirmServiceChangeCancelAndRebook solo matchea isAffirmativeReply o looksLikeCancelConfirmationIntent). Ejemplo real: usuario repite el nombre del servicio ('El lavado premium') en vez de responder si/no -- cae al LLM, que interpreto la reserva como ya lista para preparacion y ofrecio instrucciones pre-servicio, ignorando el cambio de servicio pendiente de confirmar."
+    impact: "Bajo -- el usuario puede simplemente responder con la confirmacion explicita despues (funciona, ver escenario QA 5693400002) y no se pierde ni corrompe ningun dato. No se justifico arreglarlo esta sesion; queda como candidato a una regla explicita de re-prompt si se repite en produccion."
+  - issue: "[RESUELTO 2026-07-21] isAffirmativeReply() no toleraba puntuacion -- 'Si, dale' (con coma) no matcheaba ni el chequeo exacto (t==='dale') ni el chequeo de substring (t.includes('si dale'), roto por la coma en medio)."
+    detail: "normalizeText() nunca quita puntuacion (solo minusculas + sin tildes + espacios colapsados), asi que isAffirmativeReply operaba sobre texto CON comas/puntos intactos. Una respuesta natural y muy comun en espanol casual como 'Si, dale' devolvia false, rompiendo silenciosamente CUALQUIER regla que dependa de esta funcion (rule_affirmative_after_price_list_ask_service, rule_ask_payment_preference, rule_quote_accepted_offer_slots, rule_confirm_service_change_cancel_and_rebook, etc.) cuando el usuario escribe con coma. Confirmado via QA (escenario 5693500003, paso 2) + audit_logs mostrando que cayo a rule_missing_required_fields (el catch-all generico) en vez de la regla especifica esperada."
+    fix_applied: "isAffirmativeReply() ahora quita puntuacion comun (,.;!?) antes de hacer cualquier match, local a esta funcion (no toca normalizeText compartida por el resto del archivo). Validado con un test unitario aislado (extrayendo la funcion del jsCode real) antes de pushear, y con una regresion completa de las 18 escenarios/65 pasos existentes (0 fallos) despues de pushear -- cero regresiones."
+    file_modified: "workflows/exports/uncategorized/3 - 3 rules_engine__id-e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5.json"
+  - issue: "[Detectado 2026-07-21, no arreglado -- bajo impacto, pre-existente] isAffirmativeReply() tiene un falso positivo: 'no me interesa, gracias' devuelve true porque el chequeo t.includes('me interesa') no distingue una negacion previa ('no me interesa' contiene 'me interesa' como substring)."
+    detail: "Confirmado que este bug es INDEPENDIENTE del fix de puntuacion de arriba -- existia antes tambien (la substring 'me interesa' aparece igual con o sin comas alrededor). Arreglarlo bien requeriria revisar negaciones ('no', 'nunca', etc.) antes de CADA uno de los ~100 checks de substring de esta funcion, cambio mucho mas grande y riesgoso que el de puntuacion. No se toco esta sesion."
+    impact: "Bajo -- requiere que el usuario diga literalmente 'no me interesa' en un contexto donde isAffirmativeReply se evalua, y aun asi el peor caso es que el bot trate una negacion como afirmacion (avanza el flujo en vez de detenerse), no pierde datos ni rompe nada irreversible."
+  - issue: "[Descubierto 2026-07-24, no es un bug -- es documentacion de arquitectura] Agregar una accion NUEVA al sistema (ej. check_payment_status) requiere actualizar CUATRO listas hardcodeadas separadas, en 3 workflows distintos, o el pipeline revienta con errores confusos que no apuntan claramente al problema real."
+    detail: |
+      Las 4 listas (todas deben incluir el nombre exacto de la accion nueva):
+      1. `3 rules_engine` / nodo `build_output` / array `actionsThatBuildMessageInExecutor`
+         -- si la accion nueva arma su mensaje dinamicamente (no de antemano en la
+         regla), tiene que estar aca o revienta con "requires message but message is
+         empty" apenas la regla la devuelve.
+      2. `3 rules_engine` / nodo `build_rule_decision_payload` / el MISMO array
+         duplicado en un segundo nodo -- exactamente el mismo chequeo, codigo
+         copy-pasteado, hay que actualizar los dos.
+      3. `6 action_executor` / nodo `validate_action` / array `globalAllowedActions`
+         -- si la accion no esta aca, ese nodo devuelve `{error: true, errors, original}`
+         como item de salida, y como `error` es una key reservada en n8n para items de
+         Code node, el n8n_ENGINE MISMO revienta con "Invalid output format" / "output
+         item contains the reserved key error" -- un error totalmente opaco que no
+         menciona la accion nueva ni la lista real culpable.
+      4. `4 context_builder` / nodo `build_context_packet` / array `SUPPORTED_ACTIONS`
+         -- cuando la regla ya devolvio una action especifica (`ruleAction` truthy),
+         `buildAllowedActions()` simplemente hace
+         `SUPPORTED_ACTIONS.includes(ruleAction) ? [ruleAction] : []` -- si no esta,
+         `context_packet.allowed_actions` queda vacio y `validate_action` (punto 3)
+         tira "Missing or empty context_packet.allowed_actions" / "Action not allowed
+         in current state".
+      Ademas, hay una QUINTA lista (`build_action_requirements` en action_executor,
+      mapa `requiredByAction`) que NO revienta si falta la entrada (usa `|| []` como
+      fallback silencioso) -- opcional agregarla por prolijidad, no bloqueante.
+    fix_applied: "Se agregaron los 4 registros necesarios para 'check_payment_status'. Se documenta aca para que la proxima vez que se agregue una accion nueva, se sepa de entrada que hay que tocar estos 4 lugares en vez de descubrirlo error por error."
+    files_modified:
+      - "workflows/exports/uncategorized/3 - 3 rules_engine__id-e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5.json (build_output + build_rule_decision_payload)"
+      - "workflows/exports/uncategorized/6 - 6 action_executor__id-80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13.json (validate_action)"
+      - "workflows/exports/uncategorized/4 - 4 context_builder__id-5f5ef274-4b7a-4a1a-b463-ff22e5eae55e.json (build_context_packet)"
+  - issue: "[RESUELTO 2026-07-21] rule_multi_vehicle_faq (priority 85) estaba DESPUES de rule_unknown_faq (priority 75) en el array literal de evaluacion, al reves de lo que indica su priority declarada."
+    detail: "rule_unknown_faq matchea CUALQUIER pregunta no relacionada a booking en stage new_lead (basta un '?' al final o unas pocas palabras de pregunta) -- mucho mas amplio que rule_multi_vehicle_faq. Como el array es first-match-wins y unknown_faq estaba primero, una pregunta como '\''Pueden lavar dos autos al mismo tiempo?'\'' caia siempre en unknown_faq (mensaje generico 'habla con nuestro equipo') y rule_multi_vehicle_faq quedaba efectivamente inalcanzable para su fraseo mas natural (una pregunta). Confirmado via QA (escenario 5693500001, paso 2) + audit_logs mostrando rule_name: rule_unknown_faq para ese texto exacto."
+    fix_applied: "Se reordeno el array literal `const rules = [...]` en rules_evaluation para que ruleMultiVehicleFaq quede ANTES de ruleUnknownFAQ (sin tocar la logica interna de ninguna de las dos funciones). Re-verificado: la misma pregunta ahora dispara rule_multi_vehicle_faq correctamente."
+    file_modified: "workflows/exports/uncategorized/3 - 3 rules_engine__id-e88adaaf-dfed-46af-8f5f-4dd73f2cb5c5.json"
+
+routing_gates:
+  source: "Code node build_output, dentro de rules_engine, evaluado despues de rules_evaluation"
+  should_call_llm: "ruleResult.should_call_llm === true (solo ruleDefaultContinue lo pone en true; es el catch-all cuando ninguna regla matchea)"
+  should_call_action_executor: "should_call_llm === false AND ruleResult.action existe AND ruleResult.action !== 'ignore'"
+  should_stop: "should_call_llm === false AND (no hay action O action === 'ignore')  -> conversacion no genera respuesta (ej: mensaje vacio)"
+  actions_that_build_message_in_executor:
+    description: "Estas acciones NO requieren que rules_evaluation arme el texto final (ruleResult.message puede ir vacio); el mensaje se construye dentro del sub-workflow 6.x correspondiente. Para el resto, si should_call_action_executor=true y no hay message, build_output tira error."
+    values: [send_quote, offer_available_slots, confirm_booking, cancel_booking, reschedule_booking, confirm_address, send_service_menu, recommend_service, ask_payment_preference]
+
+# ---------------------------------------------------------------------------
+# CADENA DE REGLAS (orden real de evaluacion; primer match gana; sale del array
+# literal `const rules = [...]` en rules_evaluation, lineas 5556-5647 del jsCode)
+# ---------------------------------------------------------------------------
+# Cada item = una funcion rule*(ctx). Una funcion puede tener varias "branches"
+# (sub-casos internos, cada uno con su propio buildRuleResult). El orden entre
+# funciones es el de evaluacion; el orden entre branches de una misma funcion
+# es el orden en que aparecen sus `if` dentro del cuerpo (primer if que matchea).
+rule_chain:
+  - fn: ruleHumanHandoffLocked
+    priority: 100
+    branches:
+      - { rule_key: rule_human_handoff_locked, action: answer_question, trigger: "lead_state.human_handoff === true (stage human_handoff)" }
+    note: "Maxima prioridad: si el lead esta marcado para atencion humana, NINGUNA otra regla se evalua."
+    note2: "[Verificado 2026-07-21 via audit_logs real] La action final que llega al bot NO es 'answer_question': action_executor tiene un guard (reason 'action_executor_guard_handoff_lock') que fuerza action='handoff_human' cuando el lead esta en handoff_lock, sin importar lo que devuelva la regla. El campo action de esta regla en rules_evaluation.js es efectivamente informativo/no-terminal para este caso -- para saber el comportamiento real hay que revisar tambien action_executor, no solo rules_engine. Ver escenario QA 5693400008."
+
+  - fn: ruleExplicitHumanRequest
+    priority: 95
+    branches:
+      - { rule_key: rule_explicit_human_request, action: handoff_human, trigger: "user_requested_human (texto pide hablar con una persona)" }
+
+  - fn: ruleIsBot
+    priority: 95
+    branches:
+      - { rule_key: rule_is_bot_disclosure, action: ask_missing_data, trigger: "user_asking_if_bot (pregunta si es un bot/humano)" }
+    note: "action=ask_missing_data aqui es enganoso: el message es fijo (disclosure), no pide un campo especifico."
+
+  - fn: ruleComplaintHandoff
+    priority: 99
+    branches:
+      - { rule_key: rule_customer_complaint_handoff, action: answer_question, trigger: "customer_complaint_requires_human_handoff", state_update: { stage: human_handoff, last_bot_action: handoff_human, human_handoff: true } }
+    note: "action=answer_question pero el efecto real es handoff (state_update fuerza stage=human_handoff y human_handoff=true)."
+
+  - fn: ruleEmptyMessage
+    priority: 90
+    branches:
+      - { rule_key: rule_empty_message, action: ignore, trigger: "mensaje vacio y sin attachments" }
+    note: "unico camino que produce should_stop=true (no llega a action_executor)."
+
+  - fn: ruleShowMeSlotsAfterQuote
+    priority: 91
+    branches:
+      - { rule_key: rule_show_me_slots_after_quote, action: offer_available_slots, trigger: "user_asks_to_see_slots_after_quote", stage_out: booking_selection }
+
+  - fn: ruleConfirmServiceChangeCancelAndRebook
+    priority: 90
+    branches:
+      - { rule_key: rule_confirm_service_change_cancel_and_rebook, action: cancel_booking, trigger: "user_confirmed_service_change_cancel_and_rebook", stage_out: cancelling }
+    note: "va antes que ruleCancelBooking a proposito: el usuario puede confirmar diciendo literalmente 'cancela' dentro de un flujo de cambio de servicio."
+
+  - fn: ruleVehicleRuralClarificationReplyProvided
+    priority: 95
+    branches:
+      - { rule_key: rule_vehicle_rural_clarification_resolved, action: ask_missing_data, trigger: "vehicle_rural_clarification_resolved" }
+
+  - fn: ruleStaffSelectionReplyProvided
+    priority: 95
+    branches:
+      - { rule_key: rule_staff_selection_reply_not_recognized, action: answer_question, trigger: "respuesta a 'con quien prefieres' no reconocida", stage_out: booking_selection }
+      - { rule_key: rule_staff_selected_ready_for_slots, action: offer_available_slots, trigger: "staff_selected_ready_for_slots", stage_out: booking_selection }
+    note: "solo aplica si el negocio tiene staff_selection_mode=ask_customer y mas de un staff activo. [Verificado 2026-07-21 contra DB real] Para Ahumada Detailing HOY: agent_business_config.config.staff_selection_mode es NULL y la tabla agent_staff tiene 0 filas -- esta regla es codigo INALCANZABLE en produccion actualmente. No se le genero QA por esto (probaria una rama muerta); reconsiderar si el negocio llega a configurar mas de un staff."
+
+  - fn: ruleCancelTargetSelected
+    priority: 95
+    note: "[NUEVO 2026-07-25] Va ANTES que ruleCancelBooking en el array. Atrapa la respuesta a 'cual quieres cancelar?' (numero/ordinal) cuando intent_last==='cancel_target_selection_pending'. No hace nada (return null) si ese intent_last no esta activo, asi que es inofensiva el resto del tiempo."
+    branches:
+      - { rule_key: rule_cancel_target_selected, action: cancel_booking, trigger: "user_selected_cancel_target", stage_out: cancelling }
+
+  - fn: ruleCancelBooking
+    priority: 94
+    branches:
+      - { rule_key: rule_cancel_booking, action: cancel_booking, trigger: "user_requested_cancellation", stage_out: cancelling, note: "0 o 1 cita activa -- comportamiento sin cambios" }
+      - { rule_key: rule_cancel_booking_with_target, action: cancel_booking, trigger: "user_requested_cancellation_with_target", stage_out: cancelling, note: "2+ citas activas Y el mismo mensaje ya especifica cual (numero/ordinal), ej. 'cancela la 2'" }
+      - { rule_key: rule_cancel_booking_needs_target, action: answer_question, trigger: "user_requested_cancellation_needs_target", note: "2+ citas activas SIN especificar cual -- lista todas y pregunta, deja intent_last=cancel_target_selection_pending para que ruleCancelTargetSelected atrape la respuesta" }
+    known_gaps:
+      - issue: "[RESUELTO 2026-07-25] Bug real reportado por el usuario: con 2 reservas activas, pidio 'cancelar la 2' y se cancelo la 1 en su lugar -- rule_cancel_booking no tenia forma de apuntar a una reserva especifica, siempre cancelaba 'la' reserva que encontrara 6.6/check_appointment (LIMIT 1, la mas proxima). Nunca preguntaba cual, y tampoco entendia una referencia numerica aunque el cliente la diera."
+        fix_applied: "Nuevo campo state_update.target_appointment_id, threaded desde la regla -> action_executor/cancel_booking -> 6.6/normalize_cancel_booking_input -> 6.6/DB_Check_Active_Appointment_For_Cancel (query ahora acepta un 2do parametro opcional: si viene, filtra por ese id especifico; si no, mismo comportamiento LIMIT-1-mas-proxima de siempre, sin romper el caso de 1 sola reserva). Cuando hay 2+ activas y el mensaje no especifica cual, se lista y se pregunta (rule_cancel_booking_needs_target); la respuesta se resuelve via ruleCancelTargetSelected."
+      - issue: "[RESUELTO 2026-07-25, mismo dia] El fix de arriba no funciono en la primera prueba real: se cancelo OTRA reserva distinta a la pedida (el evento SI se borro de Google Calendar -- confirmado {success:true} -- pero era el evento equivocado). Causa: action_executor/cancel_booking buscaba target_appointment_id en incomingStateUpdate.target_appointment_id (=\$json.state_update, una copia 'saneada' que NO conserva campos custom) y en \$json.execution_context.target_appointment_id (que tampoco existe ahi) -- el valor real solo vivia en \$json.decision.state_update.target_appointment_id y \$json.execution_context.state_update.target_appointment_id (un nivel mas anidado de lo que se chequeaba)."
+        fix_applied: "cancel_booking ahora chequea decision.state_update.target_appointment_id y execution_context.state_update.target_appointment_id PRIMERO (las fuentes reales, confirmadas leyendo la ejecucion real en n8n), antes de los paths originales (que se dejan como fallback por si acaso)."
+
+  - fn: ruleRescheduleBooking
+    priority: 93
+    branches:
+      - { rule_key: rule_reschedule_booking, action: reschedule_booking, trigger: "user_requested_reschedule", stage_out: reschedule }
+    requires_stage_in: [booked, reschedule]
+
+  - fn: ruleCheckPaymentStatus
+    priority: 92
+    branches:
+      - { rule_key: rule_check_payment_status, action: check_payment_status, trigger: "user_requested_payment_status_verification (requiere leadState.flow_order_id presente)" }
+      - { rule_key: rule_check_payment_status_no_order, action: answer_question, trigger: "payment_status_checked_but_no_order_found (no hay flow_order_id)" }
+    note: "[Agregado 2026-07-24] Debe ir ANTES de ruleAlreadyBookedAcknowledgment en el array -- 'ya' (de 'ya pague') es uno de los confirmSignals de esa regla y la interceptaba primero cuando ruleCheckPaymentStatus estaba mas atras. Ver known_gaps para el detalle completo de las 4 listas de acciones hardcodeadas que hubo que actualizar en 3/4/6 para que la accion nueva no reventara el pipeline."
+
+  - fn: ruleAlreadyBookedAcknowledgment
+    priority: 96
+    branches:
+      - { rule_key: rule_already_booked_acknowledgment, action: answer_question, trigger: "booking_already_confirmed_acknowledgment" }
+    requires_stage_in: [booked]
+    known_gaps:
+      - issue: "[RESUELTO 2026-07-25] Bug real reportado por el usuario en su conversacion propia real: pidio agendar un 2do lavado para 'mi otro auto', el bot pidio corregir el tipo de vehiculo (SUV -> hatchback), el usuario confirmo con 'Si' -- y ESTA regla intercepto ese 'si' (matchea confirmSignals) como si fuera un acknowledgment de una reserva YA EXISTENTE, respondiendo 'Tu reserva ya quedo confirmada' cuando en realidad NUNCA se creo ninguna reserva para el segundo auto (no se ofrecieron horarios, no se guardo direccion, nada). Confirmado via audit_logs + tabla appointments (0 filas nuevas creadas) -- la regla literalmente le mintio al cliente."
+        fix_applied: "[AMPLIADO 2026-07-25, mismo dia] El guard inicial (solo intent_last==='vehicle_type_correction') resulto insuficiente -- el usuario reprodujo el MISMO bug por otro camino: pidio agendar el 2do auto, corrigio el vehiculo, y al llegar a 'Quieres que te mande los horarios para agendar?' (rule_send_quote_when_commercial_context_complete, que deja stage='quoted' y last_bot_action='send_quote_in_progress') respondio 'si' -- de nuevo interceptado con 'confirmado' falso. Guard reemplazado por uno general isMidNewQuoteFlow: bloquea si stage==='quoted' O last_bot_action es send_quote/send_quote_in_progress O intent_last es vehicle_type_correction/quote_ready -- el mismo criterio 'isAfterQuote' que ya usa ruleShowMeSlotsAfterQuote, asi el 'si' cae correctamente en esa regla (o mas abajo en la cadena) en vez de en el acknowledgment de reserva vieja."
+        related_fix: "De paso se cambio la fuente de la fecha mostrada: antes usaba lead_state.booking_date/booking_time (un solo valor, se detecto corrupto -- una decision del LLM en un turno no relacionado le habia inyectado booking_time='02:00' sin ninguna cita real a esa hora). Ahora usa memory.last_appointment.start_at (dato real de la tabla appointments) con fallback a los campos de lead_state solo si no hay cita real cargada."
+
+  - fn: ruleGreetingWithActiveBooking
+    priority: 88
+    branches:
+      - { rule_key: rule_greeting_with_active_booking, action: answer_question, trigger: "greeting_with_active_booking_no_pre_service_spam" }
+
+  - fn: ruleAcknowledgeAfterPreServiceInstructions
+    priority: 88
+    branches:
+      - { rule_key: rule_acknowledge_after_pre_service_instructions, action: answer_question, trigger: "acknowledgment_after_pre_service_instructions_no_repeat" }
+    requires_stage_in: [booked]
+
+  - fn: ruleCheckExistingAppointmentStatus
+    priority: 88
+    branches:
+      - { rule_key: rule_check_existing_appointment_has_one, action: answer_question, trigger: "user_asked_existing_appointment_status_has_one" }
+      - { rule_key: rule_check_existing_appointment_has_multiple, action: answer_question, trigger: "user_asked_existing_appointment_status_has_multiple" }
+      - { rule_key: rule_check_existing_appointment_has_none, action: answer_question, trigger: "user_asked_existing_appointment_status_has_none" }
+    known_gaps:
+      - issue: "[RESUELTO 2026-07-25] El usuario pidio explicitamente (tras encontrar el bug de 'otro auto'): si tiene 2 reservas activas, 'para cuando tengo reserva?' deberia listar las 2, no solo una. La causa de fondo era doble: (1) esta regla leia lead_state.booking_date/booking_time (un solo valor) en vez de la tabla appointments; (2) 2 lead_loader/db_load_active_appointment traia solo 1 fila (LIMIT 1), asi que aunque se arreglara la regla no habia de donde sacar la segunda cita."
+        fix_applied: "2 lead_loader: query cambiada a LIMIT 5 (antes LIMIT 1), code_build_output ahora expone memory.active_appointments (array, ademas de memory.last_appointment que se mantiene igual para las demas reglas que ya lo usaban). Esta regla ahora itera memory.active_appointments completo: si hay 1 sola, mismo mensaje de siempre; si hay 2+, las lista numeradas con fecha/hora real de cada una."
+      - issue: "[RESUELTO 2026-07-25, mismo dia] userAsksAboutExistingAppointment seguia sin reconocer variantes reales: 'que hora TENGA agendada?' (subjuntivo/typo en vez de 'tengo') no calzaba con ninguna frase exacta de la lista -- cayo en rule_availability_request (ofrecio horarios de agendar en vez de responder sobre la reserva)."
+        fix_applied: "Ademas de la lista de frases exactas (se mantiene), se agrego un chequeo combinatorio: palabra de posesion (tengo/tenga, EXCLUYENDO 'tengo que' para no confundir con intencion de agendar) + sustantivo de reserva (hora/cita/reserva/agendad/turno) en cualquier orden. Probado contra 13 casos incluyendo los que deberian seguir dando falso (ej. 'tengo que agendar una hora', 'a que hora tienen abierto') -- todos correctos, sin falsos positivos detectados."
+      - issue: "[RESUELTO 2026-07-26] 'cuales son mis reservas?' / 'mis reservas?' seguian sin calzar -- usan el posesivo 'mi/mis' en vez del verbo 'tengo/tenga', que era la unica palabra de posesion reconocida hasta ahora. Cayo en el LLM, que dio una respuesta confusa mezclando la reserva real con una seleccion de horario en curso."
+        fix_applied: "hasPossessionWord ahora tambien matchea /\\bmis?\\b/ (mi/mi como palabra completa, con limites de palabra para no matchear dentro de 'administrar') y /\\bcuales? son\\b/. Prueba de regresion con 21 casos (incluyendo 'administrar mi negocio', 'cancela mi reserva' -- este ultimo sigue yendo a ruleCancelBooking igual, que esta antes en el array) -- todos correctos."
+
+  - fn: ruleChangeServiceRequiresCancelRebook
+    priority: 89
+    branches:
+      - { rule_key: rule_change_service_ask_target, action: answer_question, trigger: "service_change_requested_but_target_service_missing" }
+      - { rule_key: rule_change_service_requires_cancel_rebook, action: answer_question, trigger: "service_change_requires_cancel_and_rebook" }
+
+  - fn: ruleServiceChangeTargetProvided
+    priority: 89
+    branches:
+      - { rule_key: rule_service_change_target_provided, action: answer_question, trigger: "service_change_target_provided_requires_cancel_and_rebook" }
+
+  - fn: ruleReferralIntent
+    priority: 91
+    branches:
+      - { rule_key: rule_referral_intent, action: request_referral, trigger: "client_wants_to_refer", stage_out: post_service }
+
+  - fn: rulePositivePostServiceFeedback
+    priority: 90
+    branches:
+      - { rule_key: rule_positive_post_service_feedback, action: request_review, trigger: "positive_post_service_feedback", stage_out: post_service }
+
+  - fn: ruleConfirmAddressIfWaitingAddress
+    priority: 92
+    requires_stage_in: [collecting_address]
+    branches:
+      - { rule_key: rule_abandon_address_collection, priority: 93, action: handoff_human, trigger: "user_abandoned_address_collection", stage_out: human_handoff }
+      - { rule_key: rule_address_collection_attempts_exhausted, priority: 93, action: handoff_human, trigger: "address_collection_attempts_exhausted", stage_out: human_handoff }
+      - { rule_key: rule_address_missing_number, priority: 88, action: ask_missing_data, trigger: "address_missing_number" }
+      - { rule_key: rule_confirm_address_invalid_reply, priority: 92, action: collect_address, trigger: "address_still_missing" }
+      - { rule_key: rule_confirm_address_not_clear, priority: 92, action: collect_address, trigger: "address_not_clear" }
+      - { rule_key: rule_confirm_address_without_pending_slot, priority: 92, action: offer_available_slots, trigger: "address_provided_without_selected_slot", stage_out: booking_selection }
+      - { rule_key: rule_confirm_address_if_waiting_address, priority: 92, action: confirm_address, trigger: "user_provided_service_address", stage_out: address_confirmation }
+
+  - fn: ruleReturningCustomerReactivation
+    priority: 89
+    branches:
+      - { rule_key: rule_returning_customer_send_quote, action: send_quote, trigger: "returning_customer_ready_to_quote", stage_out: qualified }
+      - { rule_key: rule_returning_customer_collect_service, action: answer_question, trigger: "returning_customer_needs_service_selection", stage_out: service_discovery }
+    note: "[Verificado 2026-07-21] Ambas ramas probadas via QA (escenario 5693500001... 5693500002), 2/2 PASS -- no dependen de config de negocio, solo de userReturningCustomerIntent (frase de 'cliente que vuelve' + intencion comercial en el mismo mensaje)."
+
+  - fn: rulePriceWithCompleteContextImmediate
+    priority: 87
+    branches:
+      - { rule_key: rule_price_with_complete_context_immediate, action: send_quote, trigger: "price_request_with_complete_context", stage_out: qualified }
+
+  - fn: ruleServiceMenuRequest
+    priority: 88
+    branches:
+      - { rule_key: rule_service_menu_request_with_known_vehicle_district, priority: 88, action: send_quote, trigger: "service_menu_requested_but_vehicle_and_district_already_known", stage_out: qualified }
+      - { rule_key: rule_service_menu_request, priority: 87, action: send_service_menu, trigger: "user_requested_service_menu", stage_out: service_discovery }
+
+  - fn: ruleServiceDetails
+    priority: 85
+    branches:
+      - { rule_key: rule_service_details, action: answer_question, trigger: "service_details_requested_from_business_config" }
+
+  - fn: ruleWeekdayAvailabilityQuestion
+    priority: 86
+    branches:
+      - { rule_key: rule_weekday_availability_question, action: answer_question, trigger: "weekday_availability_question" }
+
+  - fn: ruleInlineCompleteBookingRequest
+    priority: 89
+    branches:
+      - { rule_key: rule_inline_complete_booking_request, action: send_quote, trigger: "inline_complete_booking_request (mensaje trae todos los datos de una)", requires_stage_in: [quoted] }
+
+  - fn: rulePaymentPreferenceSelected
+    priority: 91
+    requires_stage_in: [booking_selection]
+    branches:
+      - { rule_key: rule_payment_preference_unclear, action: ask_payment_preference, trigger: "payment_preference_response_unclear (primer sub-caso)" }
+      - { rule_key: "(sin nombre explicito)", action: offer_available_slots, trigger: "preferencia de pago reconocida -> continua a slots" }
+
+  - fn: ruleAskPaymentPreference
+    priority: 91
+    requires_stage_in: [booking_selection, quoted]
+    branches:
+      - { rule_key: rule_payment_mode_postpago_only, action: offer_available_slots, trigger: "payment_mode_postpago_only_auto_select (negocio solo acepta postpago -> no pregunta)" }
+      - { rule_key: rule_payment_mode_prepago_only, action: offer_available_slots, trigger: "payment_mode_prepago_only_auto_select" }
+      - { rule_key: rule_payment_mode_prepago_required, action: offer_available_slots, trigger: "payment_mode_prepago_required_auto_select" }
+      - { rule_key: rule_ask_payment_pref_inline_detected, action: offer_available_slots, trigger: "user_accepted_and_stated_payment_preference_inline" }
+      - { rule_key: rule_ask_payment_preference, action: ask_payment_preference, trigger: "user_accepted_quote_payment_preference_unknown" }
+    note: "variable clave: payment_mode del negocio. Ver variables.payment_mode arriba."
+
+  - fn: ruleImplicitAffirmationWithPayment
+    priority: 91
+    requires_stage_in: [quoted]
+    branches:
+      - { rule_key: rule_implicit_affirmation_with_payment, action: offer_available_slots, trigger: "implicit_affirmation_with_payment_preference", stage_out: booking_selection }
+
+  - fn: ruleBusinessFaqRouter
+    priority: 84
+    branches:
+      - { rule_key: "rule_business_faq_router (reason dinamico: business_faq_{topic})", action: answer_question, trigger: "pregunta de FAQ de negocio reconocida por topico (getBusinessFaqTopic); excluye explicitamente frases de 'mas barato/economico' para no pisar ruleCheaperAlternativeRequest" }
+
+  - fn: ruleCoverageQuestion
+    priority: 84
+    branches:
+      - { rule_key: rule_coverage_question, action: answer_question, trigger: "userAsksCoverage (pregunta si el servicio cubre su comuna)" }
+
+  - fn: ruleRecommendServiceRequest
+    priority: 88
+    branches:
+      - { rule_key: rule_recommend_service_request, action: recommend_service, trigger: "user_requested_service_recommendation", stage_out: service_discovery }
+
+  - fn: ruleQuoteRequest
+    priority: 91
+    branches:
+      - { rule_key: rule_quote_request_missing_context, action: ask_missing_data, trigger: "quote_requested_but_required_context_is_missing", stage_out: qualified }
+      - { rule_key: rule_quote_request, action: send_quote, trigger: "user_requested_quote_with_complete_commercial_context", stage_out: qualified }
+
+  - fn: ruleScheduleFollowupAfterQuote
+    priority: 86
+    branches:
+      - { rule_key: rule_schedule_followup_after_quote, action: schedule_followup, trigger: "client_will_reply_later_after_quote" }
+
+  - fn: ruleObjectionWillThink
+    priority: 83
+    branches:
+      - { rule_key: rule_objection_will_think, action: answer_objection, trigger: "client_will_think", stage_out: closing }
+
+  - fn: ruleManualSlotAvailabilityCheck
+    priority: 91
+    requires_stage_in: [booking_selection]
+    branches:
+      - { rule_key: rule_manual_slot_availability_check_missing_context, action: ask_missing_data, trigger: "manual_slot_requested_but_commercial_context_missing" }
+      - { rule_key: rule_manual_slot_availability_check, action: offer_available_slots, trigger: "manual_slot_requested_check_calendar_before_collecting_address" }
+
+  - fn: ruleCheaperAlternativeRequest
+    priority: 87
+    branches:
+      - { rule_key: rule_cheaper_alternative_request, action: send_quote, trigger: "user_asks_for_cheaper_alternative" }
+
+  - fn: ruleDeclineOfferedSlots
+    priority: 91
+    requires_stage_in: [booking_selection, reschedule]
+    branches:
+      - { rule_key: rule_decline_offered_slots, action: answer_objection, trigger: "user_declined_offered_slots", stage_out: closing }
+
+  - fn: ruleSelectOfferedSlot
+    priority: 90
+    requires_stage_in: [booking_selection, reschedule]
+    branches:
+      - { rule_key: rule_ambiguous_booking_day_selected, action: answer_question, trigger: "ambiguous_booking_day_selected" }
+      - { rule_key: rule_booking_day_matches_but_time_does_not, action: answer_question, trigger: "booking_day_matches_but_time_does_not" }
+      - { rule_key: rule_invalid_booking_option_selected, action: answer_question, trigger: "invalid_booking_option_selected" }
+      - { rule_key: rule_select_reschedule_slot, action: reschedule_booking, trigger: "user_selected_reschedule_slot_option", stage_out: reschedule }
+      - { rule_key: rule_select_slot_collect_address, action: collect_address, trigger: "slot seleccionado, falta direccion", stage_out: collecting_address }
+      - { rule_key: rule_select_slot_confirm_booking, action: confirm_booking, trigger: "slot seleccionado, contexto completo", stage_out: booking_confirmation }
+
+  - fn: ruleQuoteAcceptedOfferSlots
+    priority: 90
+    requires_stage_in: [booking_selection]
+    branches:
+      - { rule_key: rule_quote_accepted_offer_slots, action: offer_available_slots, trigger: "user_accepted_quote_after_price_message" }
+
+  - fn: ruleAffirmativeAfterPriceListAskService
+    priority: 87
+    branches:
+      - { rule_key: rule_affirmative_after_price_list_ask_service, action: ask_missing_data, trigger: "affirmative_after_price_inquiry_continue_context" }
+    note: "[Verificado 2026-07-21, escenario QA 5693500003] Encontro y arreglo un bug real: ver known_gaps -- isAffirmativeReply no toleraba puntuacion ('Si, dale' con coma no matcheaba), lo que hacia esta regla inalcanzable con esa frase natural."
+
+  - fn: ruleServiceSelectedAfterPriceList
+    priority: 87
+    branches:
+      - { rule_key: rule_service_selected_after_price_list, action: offer_available_slots, trigger: "service_selected_after_price_list_ready_for_slots", stage_out: booking_selection }
+    note: "[Verificado 2026-07-21, escenario QA 5693500003] PASS."
+
+  - fn: ruleConfirmBookingFromUserConfirmation
+    priority: 86
+    requires_stage_in: [booked, booking_confirmation]
+    branches:
+      - { rule_key: rule_confirm_booking_missing_data, action: ask_missing_data, trigger: "user_confirmed_booking_but_required_booking_data_is_missing", stage_out: collecting_address }
+      - { rule_key: rule_confirm_booking_collect_address, action: collect_address, trigger: "user_confirmed_booking_but_address_is_missing", stage_out: collecting_address }
+      - { rule_key: rule_confirm_booking_from_user_confirmation, action: confirm_booking, trigger: "user_confirmed_booking_with_complete_context", stage_out: booking_confirmation }
+
+  - fn: ruleAvailabilityRequest
+    priority: 88
+    requires_stage_in: [booking_selection]
+    branches:
+      - { rule_key: rule_availability_request_missing_context, action: ask_missing_data, trigger: "availability_requested_but_required_context_is_missing" }
+      - { rule_key: rule_availability_request_missing_context, action: ask_missing_data, trigger: "availability_requested_for_another_vehicle" }
+      - { rule_key: rule_availability_request, action: offer_available_slots, trigger: "user_requested_available_slots" }
+    known_gaps:
+      - issue: "[RESUELTO 2026-07-25] Bug real reportado por el usuario en conversacion propia real: pidio agendar un segundo lavado para 'mi otro auto' (dos autos distintos) y el bot reutilizo silenciosamente el vehicle_type del PRIMER auto (SUV) para la segunda reserva, sin preguntar. Confirmado via audit_logs: rule_availability_request (dispara con la palabra 'agendar') solo chequeaba isMissingField('vehicle_type',...) -- si ya estaba seteado de la reserva anterior, lo daba por bueno sin importar que el cliente dijera explicitamente 'otro auto' / '2 autos'."
+        fix_applied: "Nueva funcion mentionsAnotherVehicle(text) detecta frases como 'otro auto/carro/vehiculo/coche', 'segundo auto', '2 autos', 'dos autos' (y variantes carro/vehiculo/coche). Si el mensaje las contiene, se fuerza vehicle_type a missing (dispara ask_missing_data pidiendolo de nuevo) Y se limpia de verdad vehicle_type/confirmed_vehicle_type/mentioned_vehicle_type via fields_to_clear (mismo patron que rule_cancel_booking), para que no quede pegado el valor viejo si el cliente tarda en responder."
+        scope_note: "Solo se aplico a ruleAvailabilityRequest (la regla que realmente disparo en el caso real, confirmado via audit_logs). ruleShowMeSlotsAfterQuote tiene el mismo patron de reuso de vehicle_type pero requiere stage='quoted', que no aplica al escenario de 'ya reserve el primero, ahora el otro auto' (ahi el stage ya es booked/booked_pending) -- no se toco por no ser el camino real, pero queda como gap conocido si un cliente dice 'otro auto' ANTES de la primera reserva."
+
+  - fn: ruleReQuoteOnChangedCommercialFieldBeforeBooking
+    priority: 89
+    branches:
+      - { rule_key: rule_vehicle_change_needs_confirmation, action: ask_missing_data, trigger: "vehicle_change_needs_confirmation", stage_out: qualified }
+      - { rule_key: rule_commercial_field_changed_missing_other_data, action: ask_missing_data, trigger: "commercial_field_changed_missing_other_data", stage_out: qualified }
+      - { rule_key: rule_commercial_field_changed_requote, action: send_quote, trigger: "commercial_field_changed_requote", stage_out: qualified }
+
+  - fn: ruleSendQuoteWhenCommercialContextComplete
+    priority: 84
+    branches:
+      - { rule_key: rule_send_quote_when_commercial_context_complete, action: send_quote, trigger: "commercial_context_complete_send_quote", stage_out: qualified }
+
+  - fn: ruleRecommendPremiumWhenVeryDirty
+    priority: 81
+    branches:
+      - { rule_key: rule_recommend_premium_when_very_dirty, action: ask_missing_data, trigger: "userSignalsVeryDirty (auto muy sucio) -> recomienda premium y pide 1 dato" }
+
+  - fn: ruleVehicleRuralNeedsClarification
+    priority: 86
+    branches:
+      - { rule_key: rule_vehicle_rural_needs_clarification, action: ask_missing_data, trigger: "vehicle_rural_needs_clarification" }
+
+  - fn: ruleAddressCorrectionDuringConfirmation
+    priority: 88
+    requires_stage_in: [booking_confirmation]
+    branches:
+      - { rule_key: rule_address_correction_during_confirmation, action: ask_missing_data, trigger: "user_corrected_address_during_booking_confirmation" }
+
+  - fn: ruleAttachmentNotSupported
+    priority: 82
+    branches:
+      - { rule_key: rule_attachment_not_supported, action: answer_question, trigger: "attachment_received_cannot_view (hasAttachments true, sin texto util)" }
+
+  - fn: ruleMultiVehicleFaq
+    priority: 85
+    branches:
+      - { rule_key: rule_multi_vehicle_faq, action: answer_question, trigger: "multi_vehicle_capacity_faq" }
+    note: "[RESUELTO 2026-07-18] action cambiada de 'answer_faq' a 'answer_question' -- ver known_gaps. [RESUELTO 2026-07-21] tambien se reordeno ANTES de ruleUnknownFAQ en el array -- ver known_gaps."
+
+  - fn: ruleUnknownFAQ
+    priority: 75
+    requires_stage_in: [new_lead]
+    branches:
+      - { rule_key: rule_unknown_faq, action: ask_missing_data, trigger: "unknown_faq_question (solo en stage new_lead)" }
+
+  - fn: ruleMissingRequiredFields
+    priority: 92
+    branches:
+      - { rule_key: rule_send_price_list_when_vehicle_and_district_ready, priority: 92, action: send_quote, trigger: "vehicle_and_district_received_for_price_list", stage_out: qualified }
+      - { rule_key: "(fallback missing fields)", priority: "priceIntent ? 91 : 80", action: ask_missing_data, trigger: "campo requerido faltante para el stage actual (getRequiredFields(stage)); prioridad mas alta si ademas hay intent de precio" }
+    note: "ultima red antes de rule_default_continue; cubre el caso generico 'falta un dato obligatorio del stage'."
+
+  - fn: ruleDefaultContinue
+    priority: 0
+    branches:
+      - { rule_key: rule_default_continue, action: null, resolution_type: send_to_llm, trigger: "ninguna regla anterior matcheo -> se delega la interpretacion a 5 llm_decision" }
+    note: "catch-all final. El LLM puede resolver a acciones que rules_engine no emite directamente, ej. offer_booking (ver known_gaps/actions notas)."

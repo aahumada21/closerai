@@ -1,0 +1,331 @@
+﻿{
+    "updatedAt":  "2026-06-02T13:11:12.425Z",
+    "createdAt":  "2026-06-02T13:11:12.425Z",
+    "id":  "m8dDQM5RVoQ0q2lC",
+    "name":  "whatsapp_webhook_meta",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "path":  "whatsapp-meta",
+                                         "httpMethod":  "GET",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -900,
+                                       -220
+                                   ],
+                      "id":  "webhook-verify-get",
+                      "name":  "WEBHOOK verify_get",
+                      "webhookId":  "4180c13e-d345-4aa3-a1d4-c92ba9908f40"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const query = $json.query || {};\nconst expected = String($env.META_VERIFY_TOKEN || \u0027\u0027);\nconst mode = String(query[\u0027hub.mode\u0027] || \u0027\u0027);\nconst token = String(query[\u0027hub.verify_token\u0027] || \u0027\u0027);\nconst challenge = String(query[\u0027hub.challenge\u0027] || \u0027\u0027);\nconst ok = mode === \u0027subscribe\u0027 \u0026\u0026 expected.length \u003e 0 \u0026\u0026 token === expected;\nreturn [{ json: { response_code: ok ? 200 : 403, response_body: ok ? challenge : \u0027Invalid verify token\u0027 } }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -620,
+                                       -220
+                                   ],
+                      "id":  "code-verify-token",
+                      "name":  "CODE verify_token"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "={{ $json.response_body }}",
+                                         "options":  {
+                                                         "responseCode":  "={{ $json.response_code }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       -340,
+                                       -220
+                                   ],
+                      "id":  "respond-meta-challenge",
+                      "name":  "RESPOND meta_challenge"
+                  },
+                  {
+                      "parameters":  {
+                                         "path":  "whatsapp-meta",
+                                         "httpMethod":  "POST",
+                                         "responseMode":  "onReceived",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -900,
+                                       120
+                                   ],
+                      "id":  "webhook-events-post",
+                      "name":  "WEBHOOK events_post",
+                      "webhookId":  "8a1fe041-12b2-41a5-98af-1522351c0d92"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "function toIso(ts) {\n  if (!ts) return new Date().toISOString();\n  const num = Number(ts);\n  if (Number.isFinite(num)) return new Date(num * 1000).toISOString();\n  return new Date().toISOString();\n}\nfunction cleanText(value) {\n  return String(value || \u0027\u0027).replace(/[\\u0000-\\u001f\\u007f]/g, \u0027 \u0027).replace(/\\s+/g, \u0027 \u0027).trim();\n}\nfunction messageText(msg) {\n  if (msg.text \u0026\u0026 msg.text.body) return msg.text.body;\n  if (msg.button) return msg.button.text || msg.button.payload || \u0027\u0027;\n  if (msg.interactive) {\n    const i = msg.interactive;\n    return i.button_reply?.title || i.button_reply?.id || i.list_reply?.title || i.list_reply?.id || \u0027\u0027;\n  }\n  if (msg.image) return msg.image.caption || \u0027\u0027;\n  if (msg.document) return msg.document.caption || msg.document.filename || \u0027\u0027;\n  return \u0027\u0027;\n}\nconst body = $json.body || $json;\nconst receivedAt = new Date().toISOString();\nconst outputs = [];\nfor (const entry of body.entry || []) {\n  const wabaId = String(entry.id || \u0027\u0027);\n  for (const change of entry.changes || []) {\n    const value = change.value || {};\n    const metadata = value.metadata || {};\n    const phoneNumberId = String(metadata.phone_number_id || \u0027\u0027);\n    const displayPhoneNumber = String(metadata.display_phone_number || \u0027\u0027);\n    const contactsByWaId = {};\n    for (const contact of value.contacts || []) {\n      contactsByWaId[String(contact.wa_id || \u0027\u0027)] = contact.profile?.name || \u0027\u0027;\n    }\n    for (const msg of value.messages || []) {\n      const from = String(msg.from || \u0027\u0027);\n      const type = [\u0027text\u0027,\u0027image\u0027,\u0027audio\u0027,\u0027document\u0027,\u0027interactive\u0027,\u0027button\u0027].includes(msg.type) ? msg.type : \u0027unknown\u0027;\n      const messageId = String(msg.id || \u0027\u0027);\n      const normalized = {\n        event_type: \u0027message\u0027,\n        channel: \u0027whatsapp\u0027,\n        waba_id: wabaId,\n        phone_number_id: phoneNumberId,\n        display_phone_number: displayPhoneNumber,\n        lead_id: \u0027wa_\u0027 + from,\n        from,\n        name: String(contactsByWaId[from] || \u0027\u0027),\n        message_id: messageId,\n        timestamp: toIso(msg.timestamp),\n        message_type: type,\n        text: cleanText(messageText(msg)),\n        raw: msg\n      };\n      normalized.idempotency_key = \u0027wa_msg_\u0027 + (messageId || (phoneNumberId + \u0027_\u0027 + from + \u0027_\u0027 + String(msg.timestamp || \u00270\u0027)));\n      const audit = { event_received_at: receivedAt, event_type: \u0027message\u0027, phone_number_id: phoneNumberId, message_id: messageId, lead_id: normalized.lead_id, normalized_ok: true, error: null };\n      outputs.push({ json: { source: \u0027meta_whatsapp_cloud_api\u0027, normalized_event: normalized, routing: { phone_number_id: phoneNumberId, environment: \u0027production\u0027 }, audit } });\n    }\n    for (const status of value.statuses || []) {\n      const messageId = String(status.id || \u0027\u0027);\n      const normalized = {\n        event_type: \u0027status\u0027,\n        channel: \u0027whatsapp\u0027,\n        phone_number_id: phoneNumberId,\n        message_id: messageId,\n        status: String(status.status || \u0027unknown\u0027),\n        timestamp: toIso(status.timestamp),\n        recipient_id: String(status.recipient_id || \u0027\u0027),\n        raw: status\n      };\n      normalized.idempotency_key = \u0027wa_status_\u0027 + (messageId || (phoneNumberId + \u0027_\u0027 + normalized.recipient_id + \u0027_\u0027 + String(status.timestamp || \u00270\u0027)));\n      const audit = { event_received_at: receivedAt, event_type: \u0027status\u0027, phone_number_id: phoneNumberId, message_id: messageId, lead_id: null, normalized_ok: true, error: null };\n      outputs.push({ json: { source: \u0027meta_whatsapp_cloud_api\u0027, normalized_event: normalized, routing: { phone_number_id: phoneNumberId, environment: \u0027production\u0027 }, audit } });\n    }\n    if ((!value.messages || value.messages.length === 0) \u0026\u0026 (!value.statuses || value.statuses.length === 0)) {\n      const normalized = { event_type: \u0027other\u0027, channel: \u0027whatsapp\u0027, waba_id: wabaId, phone_number_id: phoneNumberId, display_phone_number: displayPhoneNumber, raw: value };\n      normalized.idempotency_key = \u0027wa_other_\u0027 + phoneNumberId + \u0027_\u0027 + receivedAt;\n      const audit = { event_received_at: receivedAt, event_type: \u0027other\u0027, phone_number_id: phoneNumberId, message_id: null, lead_id: null, normalized_ok: true, error: null };\n      outputs.push({ json: { source: \u0027meta_whatsapp_cloud_api\u0027, normalized_event: normalized, routing: { phone_number_id: phoneNumberId, environment: \u0027production\u0027 }, audit } });\n    }\n  }\n}\nif (outputs.length === 0) {\n  const normalized = { event_type: \u0027other\u0027, channel: \u0027whatsapp\u0027, phone_number_id: \u0027\u0027, raw: body, idempotency_key: \u0027wa_other_empty_\u0027 + receivedAt };\n  const audit = { event_received_at: receivedAt, event_type: \u0027other\u0027, phone_number_id: \u0027\u0027, message_id: null, lead_id: null, normalized_ok: false, error: \u0027empty_payload\u0027 };\n  outputs.push({ json: { source: \u0027meta_whatsapp_cloud_api\u0027, normalized_event: normalized, routing: { phone_number_id: \u0027\u0027, environment: \u0027production\u0027 }, audit } });\n}\nreturn outputs;"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -620,
+                                       120
+                                   ],
+                      "id":  "code-normalize-meta-event",
+                      "name":  "CODE normalize_meta_event"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH cfg AS (\n  SELECT phone_number_id, waba_id, display_phone_number, business_name, environment, is_active, default_agent\n  FROM public.whatsapp_numbers\n  WHERE phone_number_id = \u0027{{ String($json.routing.phone_number_id || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027\n  LIMIT 1\n)\nSELECT\n  \u0027{{ JSON.stringify($json.normalized_event || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS normalized_event,\n  \u0027{{ JSON.stringify($json.routing || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS routing,\n  \u0027{{ JSON.stringify($json.audit || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS audit,\n  COALESCE((SELECT environment FROM cfg), \u0027production\u0027) AS environment,\n  COALESCE((SELECT is_active FROM cfg), true) AS is_active,\n  (SELECT default_agent FROM cfg) AS default_agent,\n  (SELECT business_name FROM cfg) AS business_name;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -330,
+                                       120
+                                   ],
+                      "id":  "db-load-number-config",
+                      "name":  "DB load_number_config"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH payload AS (\n  SELECT\n    \u0027{{ JSON.stringify($json.normalized_event || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS event,\n    \u0027{{ JSON.stringify($json.audit || {}).replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::jsonb AS audit,\n    \u0027{{ String($json.environment || \"production\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS environment,\n    {{ $json.is_active ? \u0027true\u0027 : \u0027false\u0027 }}::boolean AS is_active,\n    \u0027{{ String($json.default_agent || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS default_agent,\n    \u0027{{ String($json.business_name || \"\").replace(/\u0027/g, \"\u0027\u0027\") }}\u0027::text AS business_name\n), ins AS (\n  INSERT INTO public.whatsapp_webhook_logs (\n    idempotency_key, event_type, phone_number_id, message_id, lead_id, normalized_ok, error, normalized_event, raw, event_received_at\n  )\n  SELECT\n    COALESCE(event-\u003e\u003e\u0027idempotency_key\u0027, \u0027wa_missing_\u0027 || gen_random_uuid()::text),\n    COALESCE(event-\u003e\u003e\u0027event_type\u0027, \u0027unknown\u0027),\n    NULLIF(event-\u003e\u003e\u0027phone_number_id\u0027, \u0027\u0027),\n    NULLIF(event-\u003e\u003e\u0027message_id\u0027, \u0027\u0027),\n    NULLIF(event-\u003e\u003e\u0027lead_id\u0027, \u0027\u0027),\n    COALESCE((audit-\u003e\u003e\u0027normalized_ok\u0027)::boolean, true),\n    NULLIF(audit-\u003e\u003e\u0027error\u0027, \u0027\u0027),\n    event,\n    COALESCE(event-\u003e\u0027raw\u0027, \u0027{}\u0027::jsonb),\n    NOW()\n  FROM payload\n  ON CONFLICT (idempotency_key) DO UPDATE SET\n    event_received_at = EXCLUDED.event_received_at,\n    normalized_event = EXCLUDED.normalized_event,\n    raw = EXCLUDED.raw\n  RETURNING *\n)\nSELECT\n  event AS normalized_event,\n  jsonb_build_object(\u0027phone_number_id\u0027, event-\u003e\u003e\u0027phone_number_id\u0027, \u0027environment\u0027, environment) AS routing,\n  environment, is_active, NULLIF(default_agent, \u0027\u0027) AS default_agent, NULLIF(business_name, \u0027\u0027) AS business_name,\n  (event-\u003e\u003e\u0027event_type\u0027) AS event_type,\n  (SELECT id FROM ins LIMIT 1) AS log_id;",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.6,
+                      "position":  [
+                                       -40,
+                                       120
+                                   ],
+                      "id":  "db-log-normalized-event",
+                      "name":  "DB log_normalized_event"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "is-message",
+                                                                                   "leftValue":  "={{ $json.event_type }}",
+                                                                                   "rightValue":  "message",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               },
+                                                                               {
+                                                                                   "id":  "is-active",
+                                                                                   "leftValue":  "={{ $json.is_active }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       250,
+                                       120
+                                   ],
+                      "id":  "if-message-active",
+                      "name":  "IF message_and_active"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const event = $json.normalized_event || {};\nconst routing = $json.routing || {};\nreturn [{ json: {\n  source: \u0027meta_whatsapp_cloud_api\u0027,\n  normalized_event: event,\n  routing: {\n    phone_number_id: String(event.phone_number_id || routing.phone_number_id || \u0027\u0027),\n    environment: String($json.environment || routing.environment || \u0027production\u0027),\n    default_agent: $json.default_agent || null,\n    business_name: $json.business_name || null\n  }\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       520,
+                                       20
+                                   ],
+                      "id":  "code-build-router-payload",
+                      "name":  "CODE build_router_payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "whatsapp_inbound_router",
+                                                            "mode":  "name",
+                                                            "cachedResultName":  "whatsapp_inbound_router"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       790,
+                                       20
+                                   ],
+                      "id":  "wf-whatsapp-inbound-router",
+                      "name":  "WF whatsapp_inbound_router",
+                      "disabled":  true
+                  }
+              ],
+    "connections":  {
+                        "WEBHOOK verify_get":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "CODE verify_token",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "CODE verify_token":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "RESPOND meta_challenge",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "WEBHOOK events_post":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "CODE normalize_meta_event",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "CODE normalize_meta_event":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "DB load_number_config",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "DB load_number_config":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "DB log_normalized_event",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "DB log_normalized_event":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "IF message_and_active",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "IF message_and_active":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "CODE build_router_payload",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ],
+                                                                   [
+
+                                                                   ]
+                                                               ]
+                                                  },
+                        "CODE build_router_payload":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "WF whatsapp_inbound_router",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      }
+                    },
+    "settings":  {
+
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  null,
+    "versionId":  "72ddce1a-2b33-472b-a7bc-e245537b232f",
+    "activeVersionId":  null,
+    "versionCounter":  1,
+    "triggerCount":  0,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-06-02T13:11:12.438Z",
+                       "createdAt":  "2026-06-02T13:11:12.438Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "m8dDQM5RVoQ0q2lC",
+                       "projectId":  "J8CtSM5GdhbsP4gj",
+                       "project":  {
+                                       "updatedAt":  "2026-04-05T17:01:22.376Z",
+                                       "createdAt":  "2026-04-05T16:21:40.594Z",
+                                       "id":  "J8CtSM5GdhbsP4gj",
+                                       "name":  "Agustín Ahumada \u003cagustin.ahumada@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "parentFolder":  null,
+    "activeVersion":  null
+}

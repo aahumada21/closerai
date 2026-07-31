@@ -1,0 +1,157 @@
+{
+  "name": "QA Summary Every 5 Min",
+  "nodes": [
+    {
+      "id": "schedule-trigger-1",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "query-qa-results",
+      "name": "Query QA last 5 min",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  count(*) AS total_completados,\n  count(*) FILTER (WHERE llm_passed = true) AS total_pasados,\n  count(*) FILTER (WHERE llm_passed = false AND llm_notes NOT LIKE '%No se pudo interpretar%') AS total_fallidos,\n  max(created_at) AS ultimo_resultado\nFROM qa_test_results\nWHERE created_at > NOW() - INTERVAL '5 minutes'\n  AND llm_passed IS NOT NULL;",
+        "options": {}
+      }
+    },
+    {
+      "id": "check-if-has-results",
+      "name": "IF hay resultados",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-total",
+              "leftValue": "={{ Number($json.total_completados) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "build-message",
+      "name": "Build WA message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 240],
+      "parameters": {
+        "jsCode": "const total = Number($json.total_completados || 0);\nconst pasados = Number($json.total_pasados || 0);\nconst fallidos = Number($json.total_fallidos || 0);\nconst pct = total > 0 ? Math.round((pasados/total)*100) : 0;\nconst hora = new Date().toISOString().substring(11,16);\n\nconst msg = `QA Resumen (${hora} UTC):\\n` +\n  `✅ Completados: ${total}\\n` +\n  `🟢 Pasados: ${pasados} (${pct}%)\\n` +\n  `🔴 Fallidos: ${fallidos}\\n` +\n  `━━━━━━━━━━━━`;\n\nreturn [{ phone: '56930977617', message: msg }];"
+      }
+    },
+    {
+      "id": "send-wa",
+      "name": "Send WA Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_API_URL }}/webhook/qa-notify-whatsapp",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Query QA last 5 min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query QA last 5 min": {
+      "main": [
+        [
+          {
+            "node": "IF hay resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF hay resultados": {
+      "main": [
+        [
+          {
+            "node": "Build WA message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build WA message": {
+      "main": [
+        [
+          {
+            "node": "Send WA Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+}

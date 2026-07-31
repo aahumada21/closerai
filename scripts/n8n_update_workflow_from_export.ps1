@@ -1,10 +1,29 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$ExportPath
+  [string]$ExportPath,
+
+  [switch]$SkipPreflight,
+  [switch]$SkipMojibakeFix
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not $SkipPreflight) {
+  if (-not $SkipMojibakeFix) {
+    $sanitizer = Join-Path $PSScriptRoot "fix_mojibake_workflow_exports.ps1"
+    if (Test-Path $sanitizer) {
+      & powershell -ExecutionPolicy Bypass -File $sanitizer -Paths $ExportPath | Out-Host
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+  }
+
+  $preflight = Join-Path $PSScriptRoot "check_workflow_exports.ps1"
+  if (Test-Path $preflight) {
+    & powershell -ExecutionPolicy Bypass -File $preflight -Paths $ExportPath | Out-Host
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  }
+}
 
 function Require-Env([string]$Name) {
   $value = [Environment]::GetEnvironmentVariable($Name)

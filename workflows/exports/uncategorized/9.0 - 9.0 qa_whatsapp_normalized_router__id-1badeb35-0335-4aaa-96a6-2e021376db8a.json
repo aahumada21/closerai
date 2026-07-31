@@ -1,0 +1,670 @@
+{
+  "updatedAt": "2026-06-09T18:32:33.219Z",
+  "createdAt": "2026-05-22T22:29:40.772Z",
+  "id": "1badeb35-0335-4aaa-96a6-2e021376db8a",
+  "name": "9.0 qa_whatsapp_normalized_router",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qa-whatsapp-normalized",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "bf1f5744-f0bd-4c8b-b4de-340fa0f75ffa",
+      "name": "Webhook",
+      "webhookId": "f3c11849-cdf6-4b0f-acea-e5caf6f53b19"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\n\nconst phone = String(\n  body.lead?.phone ||\n  body.lead?.external_id ||\n  body.lead_id ||\n  \"\"\n).trim();\n\nif (!phone) {\n  throw new Error(\"QA payload missing lead.phone\");\n}\n\nconst text = String(body.text || \"\").trim();\n\nif (!text) {\n  throw new Error(\"QA payload missing text\");\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      event: {\n        channel: body.channel || \"whatsapp\",\n        message_id: body.message_id || `qa_${Date.now()}`,\n        timestamp: body.timestamp || now,\n        text,\n        message_type: body.message_type || \"text\",\n        attachments: Array.isArray(body.attachments) ? body.attachments : [],\n        source_metadata: {\n          ...(body.source_metadata || {}),\n          test_mode: true,\n          raw_type: \"qa_normalized\"\n        }\n      },\n      lead: {\n        name: body.lead?.name || \"Cliente QA\",\n        phone,\n        external_id: phone,\n        channel: body.lead?.channel || body.channel || \"whatsapp\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        0
+      ],
+      "id": "08986389-310b-443e-8d23-8e25198ab4ba",
+      "name": "normalize_qa_payload"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH target_lead AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = '{{ ($json.lead.channel || \"whatsapp\").replace(/'/g, \"''\") }}'\n    AND external_id = '{{ ($json.lead.external_id || \"\").replace(/'/g, \"''\") }}'\n  LIMIT 1\n),\ncreated_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  SELECT\n    '{{ ($json.lead.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.external_id || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.name || \"Cliente QA\").replace(/'/g, \"''\") }}',\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM target_lead)\n  RETURNING id\n),\nfinal_lead AS (\n  SELECT id FROM target_lead\n  UNION ALL\n  SELECT id FROM created_lead\n  LIMIT 1\n),\ncreated_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    'new_lead',\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    '[]'::jsonb,\n    NULL,\n    'qualify_lead',\n    false,\n    NOW()\n  FROM final_lead\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM public.lead_state s\n    WHERE s.lead_id::text = (SELECT id::text FROM final_lead)\n  )\n),\ninserted_message AS (\n  INSERT INTO public.messages (\n    lead_id,\n    direction,\n    channel,\n    message_type,\n    content,\n    provider_message_id,\n    provider_status,\n    status,\n    created_at\n  )\n  SELECT\n    id,\n    'inbound',\n    '{{ ($json.event.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.message_type || \"text\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.text || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.message_id || \"\").replace(/'/g, \"''\") }}',\n    'received',\n    'received',\n    NOW()\n  FROM final_lead\n  RETURNING id, lead_id, content, created_at\n)\nSELECT\n  (SELECT id FROM final_lead) AS lead_id,\n  (SELECT id FROM inserted_message) AS message_db_id,\n  '{{ JSON.stringify($json.event).replace(/'/g, \"''\") }}'::jsonb AS event,\n  '{{ JSON.stringify($json.lead).replace(/'/g, \"''\") }}'::jsonb AS lead;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4bdc2eaf-d1fc-440c-ac51-f55816a3e4c6",
+      "name": "insert_inbound_message",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $(\"normalize_qa_payload\").item.json;\nconst db = $json;\n\nconst phone = String(\n  normalized.lead?.phone ||\n  normalized.lead?.external_id ||\n  \"\"\n).trim();\n\nconst body = $json.body || {};\nconst event = normalized.event || {};\nconst sourceMetadata = event.source_metadata || {};\n\nreturn [\n  {\n    json: {\n      channel: normalized.event.channel || \"whatsapp\",\n      lead_id: phone,\n      message_id: normalized.event.message_id,\n      timestamp: normalized.event.timestamp,\n      text: normalized.event.text,\n      message_type: normalized.event.message_type || \"text\",\n      attachments: normalized.event.attachments || [],\n      contact: {\n        wa_id: phone,\n        name: normalized.lead?.name || \"Cliente QA\"\n      },\n      source_metadata: {\n        ...sourceMetadata,\n        test_mode: true,\n        raw_type: \"qa_normalized\",\n        qa_router: true,\n        qa_db_lead_id: db.lead_id,\n        qa_message_db_id: db.message_db_id\n      },\n      routing: body.routing || null,\n      organization: body.organization || null,\n      agent: body.agent || null,\n      channel_config: body.channel_config || null,\n      whatsapp_number: body.whatsapp_number || null\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "bbe0695d-d04c-4f09-8165-5c67a0109e0e",
+      "name": "build_commercial_payload"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "cachedResultName": "2 lead_loader"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1760,
+        -80
+      ],
+      "id": "6ba6319f-6184-4189-ad49-5ab843b6a470",
+      "name": "Call '2 lead_loader'"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (\n  SELECT\n    NULLIF('{{ String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"\").replace(/'/g, \"''\") }}', '')::text AS phone_number_id,\n    COALESCE(NULLIF('{{ String($json.source_metadata?.provider || $json.routing?.provider || \"\").replace(/'/g, \"''\") }}', ''), 'meta_whatsapp_cloud_api')::text AS provider,\n    NULLIF('{{ String($json.source_metadata?.display_phone_number || \"\").replace(/'/g, \"''\") }}', '')::text AS display_phone_number\n), resolved AS (\n  SELECT\n    o.id AS organization_id,\n    o.slug AS organization_slug,\n    o.name AS organization_name,\n    o.timezone,\n    o.locale,\n    a.id AS agent_id,\n    a.slug AS agent_slug,\n    a.name AS agent_name,\n    a.role AS agent_role,\n    a.personality,\n    a.model_config,\n    a.policies,\n    ac.id AS channel_config_id,\n    ac.channel,\n    ac.provider,\n    ac.external_channel_id,\n    ac.display_name,\n    ac.config AS channel_config\n  FROM input i\n  JOIN public.agent_channels ac\n    ON ac.provider = i.provider\n   AND ac.external_channel_id = i.phone_number_id\n   AND ac.is_active = true\n  JOIN public.agents a\n    ON a.id = ac.agent_id\n   AND a.is_active = true\n  JOIN public.organizations o\n    ON o.id = ac.organization_id\n   AND o.is_active = true\n  LIMIT 1\n)\nSELECT\n  CASE\n    WHEN r.agent_id IS NOT NULL THEN true\n    ELSE false\n  END AS should_process,\n  CASE\n    WHEN i.phone_number_id IS NULL THEN true\n    ELSE false\n  END AS legacy_mode,\n  CASE\n    WHEN r.agent_id IS NOT NULL THEN NULL\n    WHEN i.phone_number_id IS NULL THEN 'missing_phone_number_id'\n    ELSE 'agent_channel_not_found_or_inactive'\n  END AS error_code,\n  i.phone_number_id,\n  CASE WHEN r.organization_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.organization_id,\n    'slug', r.organization_slug,\n    'name', r.organization_name,\n    'timezone', r.timezone,\n    'locale', r.locale\n  ) END AS organization,\n  CASE WHEN r.agent_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.agent_id,\n    'slug', r.agent_slug,\n    'name', r.agent_name,\n    'role', r.agent_role,\n    'personality', r.personality,\n    'model_config', r.model_config,\n    'policies', r.policies\n  ) END AS agent,\n  CASE WHEN r.agent_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.channel_config_id,\n    'channel', r.channel,\n    'provider', r.provider,\n    'external_channel_id', r.external_channel_id,\n    'display_name', r.display_name,\n    'config', r.channel_config,\n    'resolution_source', 'agent_channels'\n  ) END AS channel_config,\n  jsonb_build_object(\n    'channel', 'whatsapp',\n    'provider', i.provider,\n    'phone_number_id', i.phone_number_id,\n    'organization_id', r.organization_id,\n    'agent_id', r.agent_id,\n    'environment', COALESCE(r.channel_config->>'environment', 'production'),\n    'resolution_source', CASE WHEN r.agent_id IS NULL THEN NULL ELSE 'agent_channels' END\n  ) AS routing\nFROM input i\nLEFT JOIN resolved r ON true;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1080,
+        0
+      ],
+      "id": "1d776245-eef1-4d17-80ef-80b33cd62479",
+      "name": "resolve_agent_channel_for_qa",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $(\"build_commercial_payload\").item.json;\nconst row = $json || {};\n\nfunction asObject(value, fallback = null) {\n  if (!value) return fallback;\n  if (typeof value === \"object\" && !Array.isArray(value)) return value;\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === \"object\" && !Array.isArray(parsed) ? parsed : fallback;\n    } catch {\n      return fallback;\n    }\n  }\n  return fallback;\n}\n\nfunction asBool(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  return false;\n}\n\nconst shouldProcess = asBool(row.should_process);\nconst routing = asObject(row.routing, payload.routing || {}) || {};\nconst organization = asObject(row.organization, payload.organization || null);\nconst agent = asObject(row.agent, payload.agent || null);\nconst channelConfig = asObject(row.channel_config, payload.channel_config || null);\n\nreturn [{\n  json: {\n    ...payload,\n    organization,\n    agent,\n    channel_config: channelConfig,\n    should_process: shouldProcess,\n    not_processed_reason: shouldProcess ? null : (row.error_code || \"agent_channel_not_found_or_inactive\"),\n    routing: {\n      ...(payload.routing || {}),\n      ...routing,\n      organization_id: routing.organization_id || organization?.id || null,\n      agent_id: routing.agent_id || agent?.id || null\n    },\n    source_metadata: {\n      ...(payload.source_metadata || {}),\n      agent_resolution: row.legacy_mode === true || String(row.legacy_mode).toLowerCase() === \"true\" ? \"legacy\" : \"agent_channels\",\n      agent_resolution_error: row.error_code || null\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "8d708f8e-5209-4a32-8b2e-db76da3f0067",
+      "name": "attach_agent_context_or_stop"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "qa-should-process",
+              "leftValue": "={{ $json.should_process }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "b7ff12b2-9d23-4b18-b478-889cd175a0f7",
+      "name": "IF should_process"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    ok: true,\n    processed: false,\n    reason: $json.not_processed_reason || \"agent_channel_not_found_or_inactive\",\n    source: \"qa_whatsapp_normalized_router\",\n    message: \"QA event not processed because no active agent channel was found.\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        160
+      ],
+      "id": "b1b98f6a-59a2-46e2-9137-f6f134ec2fed",
+      "name": "return_not_processed"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  idempotency_key,\n  inbound_message_id,\n  created_at\n)\nVALUES (\n  'qa_whatsapp_normalized_router',\n  NULLIF('{{ String($json.source_metadata?.qa_db_lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n  NULL,\n  '{{ String($json.text || \"\").replace(/'/g, \"''\") }}',\n  '[]'::jsonb,\n  jsonb_build_object(\n    'action', 'not_processed',\n    'source', 'channel_config_resolver',\n    'reason', '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'confidence', 1\n  ),\n  jsonb_build_object(\n    'event_type', 'discarded_inbound_event',\n    'reason', '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'phone_number_id', NULLIF('{{ String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"\").replace(/'/g, \"''\") }}', ''),\n    'provider', '{{ String($json.source_metadata?.provider || $json.routing?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}',\n    'message_id', '{{ String($json.message_id || \"\").replace(/'/g, \"''\") }}',\n    'lead_id', NULLIF('{{ String($json.source_metadata?.qa_db_lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n    'agent_resolution_error', '{{ String($json.source_metadata?.agent_resolution_error || $json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'should_process', false,\n    'source', '9.0 qa_whatsapp_normalized_router'\n  ),\n  NULL,\n  '{{ (\"qa_discard__\" + String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"unknown\") + \"__\" + String($json.message_id || Date.now())).replace(/'/g, \"''\") }}',\n  '{{ String($json.message_id || \"\").replace(/'/g, \"''\") }}',\n  NOW()\n)\nRETURNING\n  true AS ok,\n  false AS processed,\n  '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}' AS reason,\n  'qa_whatsapp_normalized_router' AS source,\n  'QA event not processed because no active agent channel was found.' AS message;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -40,
+        220
+      ],
+      "id": "272fd700-99da-45f9-8379-81edb5c16578",
+      "name": "audit_not_processed",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "normalize_qa_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_qa_payload": {
+      "main": [
+        [
+          {
+            "node": "insert_inbound_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert_inbound_message": {
+      "main": [
+        [
+          {
+            "node": "build_commercial_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_commercial_payload": {
+      "main": [
+        [
+          {
+            "node": "resolve_agent_channel_for_qa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '2 lead_loader'": {
+      "main": [
+        []
+      ]
+    },
+    "resolve_agent_channel_for_qa": {
+      "main": [
+        [
+          {
+            "node": "attach_agent_context_or_stop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_agent_context_or_stop": {
+      "main": [
+        [
+          {
+            "node": "IF should_process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF should_process": {
+      "main": [
+        [
+          {
+            "node": "Call '2 lead_loader'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "audit_not_processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_not_processed": {
+      "main": [
+        []
+      ]
+    },
+    "audit_not_processed": {
+      "main": [
+        [
+          {
+            "node": "return_not_processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "50fe4fd5-462c-485c-81f1-f0e20bf4c2dc",
+  "activeVersionId": "50fe4fd5-462c-485c-81f1-f0e20bf4c2dc",
+  "versionCounter": 40,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "1badeb35-0335-4aaa-96a6-2e021376db8a",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-09T18:32:33.274Z",
+    "createdAt": "2026-06-09T18:32:33.274Z",
+    "versionId": "50fe4fd5-462c-485c-81f1-f0e20bf4c2dc",
+    "workflowId": "1badeb35-0335-4aaa-96a6-2e021376db8a",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "qa-whatsapp-normalized",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "bf1f5744-f0bd-4c8b-b4de-340fa0f75ffa",
+        "name": "Webhook",
+        "webhookId": "f3c11849-cdf6-4b0f-acea-e5caf6f53b19"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\n\nconst phone = String(\n  body.lead?.phone ||\n  body.lead?.external_id ||\n  body.lead_id ||\n  \"\"\n).trim();\n\nif (!phone) {\n  throw new Error(\"QA payload missing lead.phone\");\n}\n\nconst text = String(body.text || \"\").trim();\n\nif (!text) {\n  throw new Error(\"QA payload missing text\");\n}\n\nconst now = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      event: {\n        channel: body.channel || \"whatsapp\",\n        message_id: body.message_id || `qa_${Date.now()}`,\n        timestamp: body.timestamp || now,\n        text,\n        message_type: body.message_type || \"text\",\n        attachments: Array.isArray(body.attachments) ? body.attachments : [],\n        source_metadata: {\n          ...(body.source_metadata || {}),\n          test_mode: true,\n          raw_type: \"qa_normalized\"\n        }\n      },\n      lead: {\n        name: body.lead?.name || \"Cliente QA\",\n        phone,\n        external_id: phone,\n        channel: body.lead?.channel || body.channel || \"whatsapp\"\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          176,
+          0
+        ],
+        "id": "08986389-310b-443e-8d23-8e25198ab4ba",
+        "name": "normalize_qa_payload"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH target_lead AS (\n  SELECT id\n  FROM public.leads\n  WHERE channel = '{{ ($json.lead.channel || \"whatsapp\").replace(/'/g, \"''\") }}'\n    AND external_id = '{{ ($json.lead.external_id || \"\").replace(/'/g, \"''\") }}'\n  LIMIT 1\n),\ncreated_lead AS (\n  INSERT INTO public.leads (\n    channel,\n    external_id,\n    phone,\n    name,\n    created_at,\n    updated_at\n  )\n  SELECT\n    '{{ ($json.lead.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.external_id || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.lead.name || \"Cliente QA\").replace(/'/g, \"''\") }}',\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM target_lead)\n  RETURNING id\n),\nfinal_lead AS (\n  SELECT id FROM target_lead\n  UNION ALL\n  SELECT id FROM created_lead\n  LIMIT 1\n),\ncreated_state AS (\n  INSERT INTO public.lead_state (\n    lead_id,\n    stage,\n    intent_last,\n    interest_score,\n    service_interest,\n    vehicle_type,\n    district,\n    missing_fields,\n    last_bot_action,\n    next_goal,\n    human_handoff,\n    updated_at\n  )\n  SELECT\n    id,\n    'new_lead',\n    NULL,\n    0,\n    NULL,\n    NULL,\n    NULL,\n    '[]'::jsonb,\n    NULL,\n    'qualify_lead',\n    false,\n    NOW()\n  FROM final_lead\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM public.lead_state s\n    WHERE s.lead_id::text = (SELECT id::text FROM final_lead)\n  )\n),\ninserted_message AS (\n  INSERT INTO public.messages (\n    lead_id,\n    direction,\n    channel,\n    message_type,\n    content,\n    provider_message_id,\n    provider_status,\n    status,\n    created_at\n  )\n  SELECT\n    id,\n    'inbound',\n    '{{ ($json.event.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.message_type || \"text\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.text || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.event.message_id || \"\").replace(/'/g, \"''\") }}',\n    'received',\n    'received',\n    NOW()\n  FROM final_lead\n  RETURNING id, lead_id, content, created_at\n)\nSELECT\n  (SELECT id FROM final_lead) AS lead_id,\n  (SELECT id FROM inserted_message) AS message_db_id,\n  '{{ JSON.stringify($json.event).replace(/'/g, \"''\") }}'::jsonb AS event,\n  '{{ JSON.stringify($json.lead).replace(/'/g, \"''\") }}'::jsonb AS lead;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          416,
+          0
+        ],
+        "id": "4bdc2eaf-d1fc-440c-ac51-f55816a3e4c6",
+        "name": "insert_inbound_message",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const normalized = $(\"normalize_qa_payload\").item.json;\nconst db = $json;\n\nconst phone = String(\n  normalized.lead?.phone ||\n  normalized.lead?.external_id ||\n  \"\"\n).trim();\n\nconst body = $json.body || {};\nconst event = normalized.event || {};\nconst sourceMetadata = event.source_metadata || {};\n\nreturn [\n  {\n    json: {\n      channel: normalized.event.channel || \"whatsapp\",\n      lead_id: phone,\n      message_id: normalized.event.message_id,\n      timestamp: normalized.event.timestamp,\n      text: normalized.event.text,\n      message_type: normalized.event.message_type || \"text\",\n      attachments: normalized.event.attachments || [],\n      contact: {\n        wa_id: phone,\n        name: normalized.lead?.name || \"Cliente QA\"\n      },\n      source_metadata: {\n        ...sourceMetadata,\n        test_mode: true,\n        raw_type: \"qa_normalized\",\n        qa_router: true,\n        qa_db_lead_id: db.lead_id,\n        qa_message_db_id: db.message_db_id\n      },\n      routing: body.routing || null,\n      organization: body.organization || null,\n      agent: body.agent || null,\n      channel_config: body.channel_config || null,\n      whatsapp_number: body.whatsapp_number || null\n    }\n  }\n];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          624,
+          0
+        ],
+        "id": "bbe0695d-d04c-4f09-8165-5c67a0109e0e",
+        "name": "build_commercial_payload"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+            "cachedResultName": "2 lead_loader"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          1760,
+          -80
+        ],
+        "id": "6ba6319f-6184-4189-ad49-5ab843b6a470",
+        "name": "Call '2 lead_loader'"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (\n  SELECT\n    NULLIF('{{ String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"\").replace(/'/g, \"''\") }}', '')::text AS phone_number_id,\n    COALESCE(NULLIF('{{ String($json.source_metadata?.provider || $json.routing?.provider || \"\").replace(/'/g, \"''\") }}', ''), 'meta_whatsapp_cloud_api')::text AS provider,\n    NULLIF('{{ String($json.source_metadata?.display_phone_number || \"\").replace(/'/g, \"''\") }}', '')::text AS display_phone_number\n), resolved AS (\n  SELECT\n    o.id AS organization_id,\n    o.slug AS organization_slug,\n    o.name AS organization_name,\n    o.timezone,\n    o.locale,\n    a.id AS agent_id,\n    a.slug AS agent_slug,\n    a.name AS agent_name,\n    a.role AS agent_role,\n    a.personality,\n    a.model_config,\n    a.policies,\n    ac.id AS channel_config_id,\n    ac.channel,\n    ac.provider,\n    ac.external_channel_id,\n    ac.display_name,\n    ac.config AS channel_config\n  FROM input i\n  JOIN public.agent_channels ac\n    ON ac.provider = i.provider\n   AND ac.external_channel_id = i.phone_number_id\n   AND ac.is_active = true\n  JOIN public.agents a\n    ON a.id = ac.agent_id\n   AND a.is_active = true\n  JOIN public.organizations o\n    ON o.id = ac.organization_id\n   AND o.is_active = true\n  LIMIT 1\n)\nSELECT\n  CASE\n    WHEN r.agent_id IS NOT NULL THEN true\n    ELSE false\n  END AS should_process,\n  CASE\n    WHEN i.phone_number_id IS NULL THEN true\n    ELSE false\n  END AS legacy_mode,\n  CASE\n    WHEN r.agent_id IS NOT NULL THEN NULL\n    WHEN i.phone_number_id IS NULL THEN 'missing_phone_number_id'\n    ELSE 'agent_channel_not_found_or_inactive'\n  END AS error_code,\n  i.phone_number_id,\n  CASE WHEN r.organization_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.organization_id,\n    'slug', r.organization_slug,\n    'name', r.organization_name,\n    'timezone', r.timezone,\n    'locale', r.locale\n  ) END AS organization,\n  CASE WHEN r.agent_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.agent_id,\n    'slug', r.agent_slug,\n    'name', r.agent_name,\n    'role', r.agent_role,\n    'personality', r.personality,\n    'model_config', r.model_config,\n    'policies', r.policies\n  ) END AS agent,\n  CASE WHEN r.agent_id IS NULL THEN NULL ELSE jsonb_build_object(\n    'id', r.channel_config_id,\n    'channel', r.channel,\n    'provider', r.provider,\n    'external_channel_id', r.external_channel_id,\n    'display_name', r.display_name,\n    'config', r.channel_config,\n    'resolution_source', 'agent_channels'\n  ) END AS channel_config,\n  jsonb_build_object(\n    'channel', 'whatsapp',\n    'provider', i.provider,\n    'phone_number_id', i.phone_number_id,\n    'organization_id', r.organization_id,\n    'agent_id', r.agent_id,\n    'environment', COALESCE(r.channel_config->>'environment', 'production'),\n    'resolution_source', CASE WHEN r.agent_id IS NULL THEN NULL ELSE 'agent_channels' END\n  ) AS routing\nFROM input i\nLEFT JOIN resolved r ON true;\n",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1080,
+          0
+        ],
+        "id": "1d776245-eef1-4d17-80ef-80b33cd62479",
+        "name": "resolve_agent_channel_for_qa",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const payload = $(\"build_commercial_payload\").item.json;\nconst row = $json || {};\n\nfunction asObject(value, fallback = null) {\n  if (!value) return fallback;\n  if (typeof value === \"object\" && !Array.isArray(value)) return value;\n  if (typeof value === \"string\") {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === \"object\" && !Array.isArray(parsed) ? parsed : fallback;\n    } catch {\n      return fallback;\n    }\n  }\n  return fallback;\n}\n\nfunction asBool(value) {\n  if (value === true) return true;\n  if (value === false) return false;\n  if (String(value).toLowerCase() === \"true\") return true;\n  return false;\n}\n\nconst shouldProcess = asBool(row.should_process);\nconst routing = asObject(row.routing, payload.routing || {}) || {};\nconst organization = asObject(row.organization, payload.organization || null);\nconst agent = asObject(row.agent, payload.agent || null);\nconst channelConfig = asObject(row.channel_config, payload.channel_config || null);\n\nreturn [{\n  json: {\n    ...payload,\n    organization,\n    agent,\n    channel_config: channelConfig,\n    should_process: shouldProcess,\n    not_processed_reason: shouldProcess ? null : (row.error_code || \"agent_channel_not_found_or_inactive\"),\n    routing: {\n      ...(payload.routing || {}),\n      ...routing,\n      organization_id: routing.organization_id || organization?.id || null,\n      agent_id: routing.agent_id || agent?.id || null\n    },\n    source_metadata: {\n      ...(payload.source_metadata || {}),\n      agent_resolution: row.legacy_mode === true || String(row.legacy_mode).toLowerCase() === \"true\" ? \"legacy\" : \"agent_channels\",\n      agent_resolution_error: row.error_code || null\n    }\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          0
+        ],
+        "id": "8d708f8e-5209-4a32-8b2e-db76da3f0067",
+        "name": "attach_agent_context_or_stop"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "qa-should-process",
+                "leftValue": "={{ $json.should_process }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1520,
+          0
+        ],
+        "id": "b7ff12b2-9d23-4b18-b478-889cd175a0f7",
+        "name": "IF should_process"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{\n  json: {\n    ok: true,\n    processed: false,\n    reason: $json.not_processed_reason || \"agent_channel_not_found_or_inactive\",\n    source: \"qa_whatsapp_normalized_router\",\n    message: \"QA event not processed because no active agent channel was found.\"\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          160
+        ],
+        "id": "b1b98f6a-59a2-46e2-9137-f6f134ec2fed",
+        "name": "return_not_processed"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.audit_logs (\n  flow_name,\n  lead_id,\n  channel,\n  stage_before,\n  latest_user_message,\n  allowed_actions,\n  decision,\n  meta,\n  llm,\n  idempotency_key,\n  inbound_message_id,\n  created_at\n)\nVALUES (\n  'qa_whatsapp_normalized_router',\n  NULLIF('{{ String($json.source_metadata?.qa_db_lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.channel || \"whatsapp\").replace(/'/g, \"''\") }}',\n  NULL,\n  '{{ String($json.text || \"\").replace(/'/g, \"''\") }}',\n  '[]'::jsonb,\n  jsonb_build_object(\n    'action', 'not_processed',\n    'source', 'channel_config_resolver',\n    'reason', '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'confidence', 1\n  ),\n  jsonb_build_object(\n    'event_type', 'discarded_inbound_event',\n    'reason', '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'phone_number_id', NULLIF('{{ String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"\").replace(/'/g, \"''\") }}', ''),\n    'provider', '{{ String($json.source_metadata?.provider || $json.routing?.provider || \"meta_whatsapp_cloud_api\").replace(/'/g, \"''\") }}',\n    'message_id', '{{ String($json.message_id || \"\").replace(/'/g, \"''\") }}',\n    'lead_id', NULLIF('{{ String($json.source_metadata?.qa_db_lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n    'agent_resolution_error', '{{ String($json.source_metadata?.agent_resolution_error || $json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}',\n    'should_process', false,\n    'source', '9.0 qa_whatsapp_normalized_router'\n  ),\n  NULL,\n  '{{ (\"qa_discard__\" + String($json.source_metadata?.phone_number_id || $json.routing?.phone_number_id || \"unknown\") + \"__\" + String($json.message_id || Date.now())).replace(/'/g, \"''\") }}',\n  '{{ String($json.message_id || \"\").replace(/'/g, \"''\") }}',\n  NOW()\n)\nRETURNING\n  true AS ok,\n  false AS processed,\n  '{{ String($json.not_processed_reason || \"agent_channel_not_found_or_inactive\").replace(/'/g, \"''\") }}' AS reason,\n  'qa_whatsapp_normalized_router' AS source,\n  'QA event not processed because no active agent channel was found.' AS message;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          -40,
+          220
+        ],
+        "id": "272fd700-99da-45f9-8379-81edb5c16578",
+        "name": "audit_not_processed",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "normalize_qa_payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_qa_payload": {
+        "main": [
+          [
+            {
+              "node": "insert_inbound_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "insert_inbound_message": {
+        "main": [
+          [
+            {
+              "node": "build_commercial_payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_commercial_payload": {
+        "main": [
+          [
+            {
+              "node": "resolve_agent_channel_for_qa",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call '2 lead_loader'": {
+        "main": [
+          []
+        ]
+      },
+      "resolve_agent_channel_for_qa": {
+        "main": [
+          [
+            {
+              "node": "attach_agent_context_or_stop",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "attach_agent_context_or_stop": {
+        "main": [
+          [
+            {
+              "node": "IF should_process",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF should_process": {
+        "main": [
+          [
+            {
+              "node": "Call '2 lead_loader'",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "audit_not_processed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "return_not_processed": {
+        "main": [
+          []
+        ]
+      },
+      "audit_not_processed": {
+        "main": [
+          [
+            {
+              "node": "return_not_processed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-09T18:32:33.901Z",
+        "id": 1145,
+        "workflowId": "1badeb35-0335-4aaa-96a6-2e021376db8a",
+        "versionId": "50fe4fd5-462c-485c-81f1-f0e20bf4c2dc",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-09T18:32:33.799Z",
+        "id": 1144,
+        "workflowId": "1badeb35-0335-4aaa-96a6-2e021376db8a",
+        "versionId": "50fe4fd5-462c-485c-81f1-f0e20bf4c2dc",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

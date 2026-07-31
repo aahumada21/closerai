@@ -1,0 +1,227 @@
+# Posibilidades de los flujos de followup/handoff post-servicio y de la
+# infraestructura de testing (runners de QA 9.x, incluidos a pedido explicito
+# del usuario aunque no son comportamiento cara-al-cliente del bot).
+#
+# Mismo metodo y mismo criterio que bot_decision_tree.yaml: solo puntos de
+# decision reales (condicion -> resultados posibles). NO se describe que hace
+# cada workflow en prosa (pasada futura, ver README.md).
+
+meta:
+  last_verified_against_source: "2026-07-18"
+  extraction_method: "Igual que bot_decision_tree.yaml (ver su campo meta.extraction_method)."
+
+known_gaps:
+  - issue: "[RESUELTO 2026-07-18] 8.0 human_handof / assign_handoff_owner: el chequeo de texto 'reclamo' se evaluaba ANTES que el chequeo de stage in [closing,quoted], y como no habia early-return, un lead en esos stages que ademas escribia algo con 'reclamo' terminaba con assigned_team='ventas' (el chequeo de stage pisaba el de reclamo), no 'soporte'."
+    fix_applied: "El segundo if se convirtio en 'else if' -- reclamo ahora gana siempre, sin importar el stage."
+    file_modified: "workflows/exports/uncategorized/8.0 - 8.0 human_handof__id-2360b175-88ae-483d-8551-b2aa36c1c625.json"
+
+flows:
+  - workflow: "7 followup_scheduler"
+    file: "workflows/exports/uncategorized/7 - 7 followup_scheduler__id-9269385d-9ee4-4c85-9351-77f8e9aa872e.json"
+    purpose: >
+      Job periodico (no dispara por mensaje entrante) que procesa los followups
+      agendados (por 6.21 schedule_followup u otros) cuya fecha ya llego: filtra los
+      que ya no aplican (lead se fue a handoff, ya reservo, respondio hace poco, fuera
+      de horario habil), arma el mensaje segun el tipo de followup, y lo envia.
+    note: "El sub-flujo con la cadena de branches mas rica de este grupo: lock anti-carrera, luego un gate de elegibilidad en cascada con 9 razones de skip distintas."
+    branch_points:
+      - node: "IF_Has_Items"
+        type: if
+        condition: "$items().length > 0 (DB_Get_Due_Followups devolvio filas)"
+        outcomes:
+          - "true -> entra a Loop Over Items"
+          - "false -> sin followups vencidos, la corrida termina en silencio"
+      - node: "DB_Lock_Followup / IF_Lock_Acquired"
+        type: if
+        condition: "!!$json.followup_id (UPDATE followups SET status='processing' WHERE id=... AND status='pending' RETURNING ...; vacio = el lock se lo gano otra corrida concurrente)"
+        outcomes:
+          - "true -> sigue a evaluar elegibilidad"
+          - "false -> vuelve a Loop Over Items (se salta este item, ya lo tomo otra corrida)"
+      - node: "Code_Evaluate_Eligibility (cascada, primer chequeo que falla gana)"
+        type: code_branch
+        condition: "ifs encadenados, cada uno guardado por `if (shouldSend)`"
+        outcomes:
+          - "scheduled_for ausente/invalido -> fail('missing_or_invalid_scheduled_for')"
+          - "hora actual (America/Santiago) fuera de [9,21) -> requeue('outside_allowed_hours')"
+          - "row.opt_out === true -> cancel('lead_opted_out')"
+          - "row.human_handoff === true -> cancel('human_handoff_active')"
+          - "followup_type en [quote_no_reply_24h, quote_no_reply_48h, interest_nudge_6h] Y stage==='booked' -> cancel('lead_already_booked')"
+          - "... Y appointment_id presente -> cancel('appointment_exists')"
+          - "... Y lastInboundAt posterior a followupCreatedAt -> cancel('lead_replied_after_followup_created')"
+          - "followup_type en [appointment_reminder_1d, appointment_reminder_1h] Y !appointment_id -> cancel('missing_appointment_for_reminder')"
+          - "... Y appointment_status no en [confirmed, booked] -> cancel('appointment_not_active')"
+          - "followup_type === post_service_review_24h Y stage==='human_handoff' -> cancel('human_handoff_active')"
+          - "followup_type en [quote_no_reply_24h/48h, interest_nudge_6h, generic_followup] Y lastInboundAt dentro de 180min -> cancel('recent_inbound_reply')"
+          - "nada matcheo -> should_send=true"
+      - node: "IF_Should_Send"
+        type: if
+        condition: "$json.should_send === true"
+        outcomes:
+          - "true -> Code_Build_Message (template por followup_type) -> send_outbound_message"
+          - "false -> nodo 'If (outside hours)'"
+      - node: "If (outside hours)"
+        type: if
+        condition: "$json.skip_reason === 'outside_allowed_hours'"
+        outcomes:
+          - "true -> DB_Requeue_Outside_Hours (vuelve a pending, se reintenta en la proxima corrida)"
+          - "false -> DB_Cancel_Followup (status=cancelled o failed segun lo calculado antes)"
+      - node: "IF_Send_Success"
+        type: if
+        condition: "$json.success === true (resultado de send_outbound_message)"
+        outcomes:
+          - "true -> DB_Update_Followup_Completed -> audit + insert de mensaje -> Set_Result_Executed"
+          - "false -> DB_Update_Followup_Failed -> audit de fallo -> Set_Result_Error"
+      - node: "Loop Over Items"
+        type: code_branch
+        condition: "splitInBatches: terminado vs quedan items"
+        outcomes:
+          - "terminado -> Code_Build_Output (resumen: executed_followups/skipped/errors)"
+          - "quedan items -> siguiente iteracion de followup"
+
+  - workflow: "8.0 human_handof"
+    file: "workflows/exports/uncategorized/8.0 - 8.0 human_handof__id-2360b175-88ae-483d-8551-b2aa36c1c625.json"
+    purpose: "Crea el caso de derivacion a humano: decide a que equipo (soporte vs ventas) y con que prioridad, notifica, y marca el lead_state para que el bot deje de responder automaticamente mientras dure el handoff. Lo llama 6.22 handoff_human."
+    note: "Sin nodos IF/Switch -- las unicas decisiones reales son el gate de validacion por throw y la logica secuencial de sobreescritura en assign_handoff_owner."
+    branch_points:
+      - node: "validate_handoff_input"
+        type: code_branch
+        condition: "resolucion de leadId falla (sin lead_id/execution_context.lead_id/lead.id/state.lead_id/metadata.lead_id) O resolucion de reason falla"
+        outcomes:
+          - "throw Error('Missing lead_id') -> ejecucion falla, no se crea handoff_case"
+          - "throw Error('Missing handoff reason') -> ejecucion falla"
+          - "ambos presentes -> sigue a assign_handoff_owner"
+      - node: "assign_handoff_owner [RESUELTO 2026-07-18]"
+        type: code_branch
+        condition: "texto de reason incluye 'reclamo' (case-insensitive) -> sino, state.stage in ('closing','quoted') (ahora como else-if, ver known_gaps)"
+        outcomes:
+          - "reason incluye 'reclamo' -> assigned_team='soporte', priority='high' (gana siempre, sin importar el stage)"
+          - "sin reclamo Y state.stage in [closing, quoted] -> assigned_team='ventas'"
+          - "ninguno de los dos -> defaults: assigned_team='ventas', priority='normal'"
+
+  - workflow: "8.1 reactivate_bot_after_handoff"
+    file: "workflows/exports/uncategorized/8.1 - 8.1 reactivate_bot_after_handoff__id-0d6e1092-a477-4935-8607-10fa8e6947f0.json"
+    purpose: "Reactiva al bot despues de un handoff humano: cierra el/los handoff_case abiertos del lead y apaga la bandera human_handoff en lead_state para que el bot vuelva a responder automaticamente. Se dispara manualmente (staff marca el caso como resuelto), no por mensaje del cliente."
+    note: "Tampoco tiene nodos IF/Switch; Merge solo une dos ramas paralelas de update en DB."
+    branch_points:
+      - node: "validate_reactivation_input"
+        type: code_branch
+        condition: "!input.lead_id || !uuidRegex.test(input.lead_id)"
+        outcomes:
+          - "true -> throw Error('Invalid or missing lead_id: ...') -> ejecucion falla"
+          - "false -> continua (resume_stage default 'closing', next_goal default 'continue_conversation' si no vienen)"
+      - node: "build_reactivation_output (ternarios sobre resultados de DB, sin nodo IF)"
+        type: code_branch
+        condition: "estado de DB_Close_Open_Handoff_Cases / DB_Reactivate_Lead_State"
+        outcomes:
+          - "bot_reactivated=true si state.human_handoff===false, sino false"
+          - "closedCase.id presente -> nota 'handoff_case_resolved', sino 'no_open_handoff_case_found'"
+          - "state.lead_id presente -> nota 'lead_state_reactivated', sino 'lead_state_not_found'"
+          - "state.human_handoff===false -> nota 'bot_can_reply_again', sino 'bot_reactivation_not_confirmed'"
+
+  - workflow: "9.0 qa_whatsapp_normalized_router"
+    file: "workflows/exports/uncategorized/9.0 - 9.0 qa_whatsapp_normalized_router__id-1badeb35-0335-4aaa-96a6-2e021376db8a.json"
+    purpose: "Entrada equivalente a 1 whatsapp_inbound_adapter pero para mensajes SIMULADOS de QA: normaliza el payload de prueba, resuelve el agente/canal, y si corresponde inyecta el mensaje en el pipeline real via 2 lead_loader -- asi el bot no distingue un mensaje de QA de uno real una vez que entra."
+    branch_points:
+      - node: "normalize_qa_payload"
+        type: code_branch
+        condition: "resolucion de phone falla (body.lead.phone / lead.external_id / lead_id todos vacios) O text vacio"
+        outcomes:
+          - "throw Error('QA payload missing lead.phone') -> ejecucion falla"
+          - "throw Error('QA payload missing text') -> ejecucion falla"
+          - "ambos presentes -> continua"
+      - node: "attach_agent_context_or_stop"
+        type: code_branch
+        condition: "asBool(row.should_process) de resolve_agent_channel_for_qa; por separado row.legacy_mode"
+        outcomes:
+          - "should_process=false -> not_processed_reason = row.error_code || 'agent_channel_not_found_or_inactive'"
+          - "should_process=true -> not_processed_reason=null"
+          - "row.legacy_mode true(-ish) -> source_metadata.agent_resolution='legacy', sino 'agent_channels' (solo metadata, no cambia el ruteo)"
+      - node: "IF should_process"
+        type: if
+        condition: "$json.should_process"
+        outcomes:
+          - "true -> llama a '2 lead_loader' (el mensaje simulado de QA entra al pipeline real del bot)"
+          - "false -> audit_not_processed -> return_not_processed ({ok:true, processed:false, reason})"
+
+  - workflow: "9.1 qa_conversation_test_runner"
+    file: "workflows/exports/uncategorized/9.1 - 9.1 qa_conversation_test_runner__id-e52fdb10-dbcb-4f10-97f2-ef6248ca2982.json"
+    purpose: "Orquestador del batch de QA: carga los escenarios habilitados (de la tabla temp o la definitiva), corre uno por uno via 9.1.1, y al terminar arma y envia el resumen final (cuantos pasaron/fallaron) por WhatsApp."
+    branch_points:
+      - node: "qa_mode (Set)"
+        type: code_branch
+        condition: "$json.body?.use_temp ?? true"
+        outcomes:
+          - "body sin use_temp -> default true (modo tabla temp/scratch)"
+          - "body.use_temp explicito -> se usa ese valor"
+      - node: "IF use_temp"
+        type: if
+        condition: "$json.use_temp"
+        outcomes:
+          - "true -> load_qa_scenarios_from_temp (SELECT de public.qa_test_scenarios_temp)"
+          - "false -> load_qa_scenarios_from_db (SELECT de public.qa_test_scenarios)"
+      - node: "load_qa_scenarios_from_temp / _from_db (WHERE de la query)"
+        type: code_branch
+        condition: "'{{$json.scenario_key}}' vacio vs no vacio"
+        outcomes:
+          - "scenario_key vacio -> carga TODOS los escenarios habilitados (modo batch); en la tabla temp ademas filtrado por scenario_key LIKE '{{temp_prefix}}%' (default '56990')"
+          - "scenario_key no vacio -> carga solo ese escenario (modo single-scenario), sin filtro de prefijo"
+      - node: "prepare_loaded_scenarios"
+        type: code_branch
+        condition: "String(scenario.id).startsWith('56990')"
+        outcomes:
+          - "scenario_key parece numero de telefono QA real (56990...) -> se usa tal cual como numero de test"
+          - "sino -> telefono sintetico generado como 56901{runStamp}{numeroDeEscenario}"
+      - node: "loop_scenarios"
+        type: code_branch
+        condition: "splitInBatches: terminado vs quedan escenarios"
+        outcomes:
+          - "terminado -> DB_qa_done_summary (passed/total via qa_test_results WHERE run_id LIKE run_prefix%) -> build_qa_notify_message -> WB_Send_Notify (resumen por WhatsApp a un numero fijo)"
+          - "quedan escenarios -> llama a '9.1.1 qa_run_single_conversation' para el siguiente"
+
+  - workflow: "9.1.1 qa_run_single_conversation"
+    file: "workflows/exports/uncategorized/9.1 - 9.1.1 qa_run_single_conversation__id-34092303-cb4a-4fd2-800e-ac16f650fc52.json"
+    purpose: "Ejecuta UN escenario de QA completo: envia cada step de la conversacion (via 9.0), espera y busca la respuesta real del bot (con reintentos), valida cada step contra sus expectativas deterministas, y si el escenario tiene expected_outcome ademas le pide a un LLM que juzgue la transcripcion completa."
+    file_note: "El prefijo del nombre de archivo dice '9.1' pero el nombre interno del workflow es '9.1.1 qa_run_single_conversation' -- es el archivo correcto para 9.1.1, no confundir con el 9.1 real (id e52fdb10)."
+    branch_points:
+      - node: "loop_steps"
+        type: code_branch
+        condition: "splitInBatches: terminado (todos los steps del escenario enviados) vs quedan steps"
+        outcomes:
+          - "terminado -> collect_scenario_info (arranca el chequeo a nivel escenario)"
+          - "quedan steps -> build_inbound_payload para el siguiente"
+      - node: "If outbound_found_1 -> [Wait 2 ->] IF outbound_found_2 -> [Wait 3 ->] get_outbound_attempt_3"
+        type: if
+        condition: "!!qa_message_id && (audit.idempotency_key incluye qa_message_id O audit.inbound_message_id===qa_message_id) -- polling con reintentos, hasta 3 intentos"
+        outcomes:
+          - "intento 1 encuentra audit -> sigue de inmediato a validate_step_result"
+          - "intento 1 no encuentra nada -> Wait 2 -> get_outbound_attempt_2 (intento 2)"
+          - "intento 2 encuentra audit -> sigue"
+          - "intento 2 no encuentra nada -> Wait 3 -> get_outbound_attempt_3 -> sigue sin condicion (ultimo intento, se usa lo que haya o nada)"
+      - node: "validate_step_result"
+        type: code_branch
+        condition: "expect.should_process===false (expectedNoProcess) vs step normal, mas chequeos por cada campo expect.*"
+        outcomes:
+          - "expectedNoProcess=true: agrega errores si (se encontro respuesta del bot y no es un replay viejo) O el estado cambio O (se encontro audit y no se clasifica como discard) -- afirma que no paso nada"
+          - "expectedNoProcess=false: agrega errores si el webhookBody indica error, no hay texto de respuesta, la respuesta es el stub literal de ack ('Workflow was started'), no se encontro audit correlacionado, o (sin respuesta Y sin last_bot_action Y sin cambio de estado)"
+          - "sub-chequeo isDiscardAudit/isPreviousAuditReplay: el audit es anterior al envio de este step (replay viejo) O flow_name='qa_whatsapp_normalized_router' con decision.action='not_processed'/should_process=false -> ese audit se excluye de contar como 'algo se proceso'"
+          - "cada campo opcional expect.* presente y no cumplido agrega su propio error (last_bot_action_any, decision_action_any, stage_any, next_goal_any, tool_name_any, must_have_agent, must_have_organization, expected_agent_id, expected_organization_id, response_includes, response_includes_any, response_not_includes)"
+          - "passed = errors.length === 0 (veredicto deterministico por step)"
+      - node: "IF has_expected_outcome"
+        type: if
+        condition: "!!scenario.expected_outcome"
+        outcomes:
+          - "true -> build_transcript_query -> get_transcript -> build_llm_judge_prompt -> call_openai_judge -> parse_llm_verdict -> apply_llm_verdict (el LLM juzga la transcripcion COMPLETA contra expected_outcome, sobreescribe passed/llm_passed de todo el escenario)"
+          - "false -> no corre juez LLM; el resultado del escenario depende solo de los chequeos deterministas expect ya escritos por validate_step_result"
+      - node: "parse_llm_verdict"
+        type: code_branch
+        condition: "JSON.parse(response.choices[0].message.content) envuelto en try/catch; chequeo de tipo de verdict.passed"
+        outcomes:
+          - "parseo exitoso Y verdict.passed es boolean -> llm_passed = verdict.passed"
+          - "parseo falla O verdict.passed no es boolean -> llm_passed=false (default fail-closed), notes='No se pudo interpretar la respuesta del evaluador OpenAI.'"
+    note: >
+      Confirma la mecanica que se pregunto explicitamente: single-scenario vs batch se
+      decide solo por si scenario_key viene vacio en el WHERE de la query (no es un flag
+      dedicado); expected_outcome (juez LLM, a nivel escenario) y expect (deterministico,
+      por step) NO son mutuamente excluyentes -- expect siempre corre por step, y
+      expected_outcome, si esta presente, agrega un segundo veredicto que sobreescribe
+      el resultado final del escenario.

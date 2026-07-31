@@ -1,0 +1,829 @@
+# Posibilidades internas de los 24 sub-workflows que "6 action_executor" invoca
+# (uno por cada accion del catalogo `actions` en bot_decision_tree.yaml).
+#
+# Mismo metodo y mismo criterio que bot_decision_tree.yaml: solo puntos de
+# decision reales (condicion -> resultados posibles). NO se describe que hace
+# cada workflow en prosa (pasada futura, ver README.md).
+
+meta:
+  last_verified_against_source: "2026-07-18"
+  extraction_method: "Igual que bot_decision_tree.yaml (ver su campo meta.extraction_method)."
+
+known_gaps:
+  - issue: "[RESUELTO 2026-07-18] 6.26 payment_request: el nodo HTTP 'POST flow/payment/create' tiene 2 salidas (exito/error). La rama de error armaba build_payment_error (mensaje 'Hubo un problema al generar el link de pago...') pero ese nodo NO TENIA CONEXION DE SALIDA en el grafo exportado -- el mensaje de error se construia pero nunca se enviaba a nadie."
+    fix_applied: "build_payment_error se reescribio para tomar el contexto real desde build_flow_signature (channel/phone) en vez de confiar en el shape del output de error del HTTP node, y se agrego un nodo nuevo 'Call 6.1 send_payment_error_message' (clon de 'Call 6.1 send_payment_message', mismo workflowId de 6.1) conectado a build_payment_error -- deliberadamente un nodo separado (no el compartido) para no arrastrar la rama de error por insert_payment_message/update_lead_state_payment_pending, que son bookkeeping exclusivo del camino de exito."
+    file_modified: "workflows/exports/uncategorized/6.26 - 6.26 payment_request__id-wlAAdOqo3vD7O18n.json"
+  - issue: "[RESUELTO 2026-07-18] 6.27 payment_confirmed_webhook: no habia guard de idempotencia. update_payment_confirmed no filtraba WHERE payment_status<>'paid', y find_lead_by_order no excluia leads ya pagados."
+    fix_applied: "find_lead_by_order ahora tambien trae ls.payment_status; se agrego un nodo IF nuevo ('IF already_paid') justo despues que corta a una respuesta terminal ('respond_already_processed', {status:'ok', already_processed:true}) sin re-enviar mensajes ni re-crear la reserva si el pago ya estaba marcado 'paid'. Ademas, como defensa adicional, update_payment_confirmed ahora tiene 'AND payment_status IS DISTINCT FROM \\'paid\\'' en el WHERE."
+    file_modified: "workflows/exports/uncategorized/6.27 - 6.27 payment_confirmed_webhook__id-qogNrpBx2qu6LwYF.json"
+  - issue: "[RESUELTO 2026-07-23] 6.27 payment_confirmed_webhook estaba COMPLETAMENTE ROTO desde siempre -- 3 bugs encadenados en el mismo flujo, encontrados recien al probar un pago real de punta a punta contra Flow.cl sandbox por primera vez (nunca antes se habia probado el webhook de confirmacion con un pago genuinamente completado, solo con el status 'not_paid'). Confirmado con la API real de Flow.cl produccion (getStatusByFlowOrder) que las 24 ordenes historicas en lead_state.flow_order_id tienen status=1 (nunca pagadas) y payer=contacto@aahumada.com (email de fallback, no un cliente real) -- son todas de la sesion QA Payment Suite del 13-14 julio, ningun cliente real quedo con un pago sin confirmar, pero el bug en si aplicaba igual a produccion que a sandbox (mismo codigo, solo cambian las credenciales de entorno)."
+    detail: |
+      Bug 1 -- find_lead_by_order: la query SQL tenia una expresion de n8n corrupta,
+      literalmente `WHERE ls.flow_order_id = '{{ \.commerceOrder }}'` (backslash suelto,
+      sintaxis invalida, n8n tiraba "invalid syntax" y la ejecucion moria ahi mismo,
+      SIEMPRE, para cualquier pago real). Ademas, incluso arreglando solo la sintaxis, el
+      campo era el equivocado: la columna flow_order_id guarda flowOrder (numerico, ej.
+      8712139 -- confirmado leyendo 6.26/build_payment_message:
+      `flowOrderId = String(flowResp.flowOrder || "")`), no commerceOrder.
+      Bug 2 -- build_confirmation_msg: pasaba el mensaje a "Call 6.1 send_confirmation"
+      con channel/phone/message anidados solo dentro de execution_context, pero
+      6.1/validate_outbound_input lee esos 3 campos al nivel raiz de $json
+      (`if (!input.channel) throw new Error('Missing channel')`) -- fallaba con
+      "Missing channel" siempre. build_payment_message (el equivalente en 6.26, que si
+      funciona) ya pone esos campos en la raiz ademas de anidarlos.
+      Bug 3 -- build_confirmation_msg (mismo nodo, causa distinta): leia su input via
+      `$input.all()`/`$json`, pero su unico nodo previo real es update_payment_confirmed
+      -- un UPDATE sin RETURNING, asi que n8n reemplaza $json con el resultado minimo del
+      UPDATE, perdiendo lead_id/phone/channel que find_lead_by_order habia juntado
+      nodos antes. Con el bug 2 ya arreglado, esto se manifestaba como "Missing phone".
+      Bug 4 (menor, no bloqueante) -- a diferencia de 6.26 (que tiene insert_payment_message),
+      esta rama de 6.27 nunca insertaba el mensaje "Pago confirmado!" en la tabla
+      `messages` -- el mensaje SI se enviaba de verdad por WhatsApp (confirmado
+      provider_status:"accepted" de Meta) pero no quedaba en el historial de conversacion.
+    fix_applied: |
+      Bug 1: query corregida a `WHERE ls.flow_order_id = '{{ $json.flowOrder }}'`.
+      Bug 2: build_confirmation_msg ahora arma `{ channel, phone, message: msg,
+      execution_context: {...} }` con esos 3 campos tambien en la raiz.
+      Bug 3: build_confirmation_msg ahora lee `$("find_lead_by_order").first().json`
+      directo (mismo patron ya usado en 6.26/build_payment_message via
+      `$("build_flow_signature").first().json`) en vez de confiar en el output del nodo
+      Postgres inmediatamente anterior.
+      Bug 4: nodo nuevo `insert_confirmation_message` (clon exacto del patron de
+      insert_payment_message de 6.26), insertado entre "Call 6.1 send_confirmation" y
+      "respond_ok".
+      Validado end-to-end con 2 pagos reales completados contra Flow.cl SANDBOX (tarjeta
+      de prueba oficial 4051 8856 0044 6623): link generado -> pago -> webhook de
+      confirmacion -> mensaje "Pago confirmado!" recibido y persistido -> reintento del
+      mismo webhook devuelve already_processed:true sin duplicar el mensaje.
+    file_modified: "workflows/exports/uncategorized/6.27 - 6.27 payment_confirmed_webhook__id-qogNrpBx2qu6LwYF.json"
+  - issue: "[RESUELTO 2026-07-24] 6.27: el nodo 'HTTP: GET flow getStatus' no tenia manejo de errores -- si Flow.cl respondia con un error (ej. 400 'Transaction not found', que puede pasar por cualquier problema transitorio de red/timing, no solo tokens invalidos) el nodo lanzaba una excepcion no controlada, tumbando TODA la ejecucion y haciendo que el webhook le devolviera HTTP 500 a Flow.cl en vez de 200."
+    detail: "Descubierto por un email real de alerta de Flow.cl ('Alerta: Problema de integracion', asunto tipico cuando Flow no recibe HTTP 200 de vuelta) reenviado por el usuario -- coincidia exactamente con la orden 8713187 y el horario en que se estaba debuggeando el bug #2 de esta misma seccion (el de find_lead_by_order), confirmando ademas que ese bug SI afecto un intento real de confirmacion de Flow.cl, no solo pruebas manuales. Reproducido aparte con un token invalido de prueba: efectivamente devolvia HTTP 500."
+    fix_applied: "Se seteo onError='continueRegularOutput' en el nodo HTTP -- ahora, si Flow.cl responde con un error, la ejecucion sigue en vez de crashear, y como el JSON de error no tiene un campo 'status'===2, cae naturalmente por la rama existente y segura 'IF payment_confirmed' -> 'respond_not_paid' (que no depende de ningun campo del response, siempre devuelve el mismo `{status:'not_paid',...}` fijo) -- resultando en HTTP 200 con un mensaje coherente en vez de un crash. Se aplico el mismo fix al nodo equivalente en 6.28 check_payment_status por el mismo motivo. Verificado con curl -i: antes HTTP 500, despues HTTP 200."
+    file_modified:
+      - "workflows/exports/uncategorized/6.27 - 6.27 payment_confirmed_webhook__id-qogNrpBx2qu6LwYF.json"
+      - "workflows/exports/uncategorized/6.28 - 6.28 check_payment_status__id-bRPFQVB8uOwaTUyp.json"
+  - issue: "[RESUELTO 2026-07-23] payment_preference nunca se seteaba para 'Dale, quiero agendar' (y probablemente otras variantes) en negocios con payment_mode=prepago_only/postpago_only/prepago_required -- por lo que 6.26 (generar link de pago) nunca se llegaba a disparar en el flujo normal de reserva, ni siquiera cuando el negocio esta configurado para prepago."
+    detail: "rule_show_me_slots_after_quote (en rules_engine) SI tiene el cuidado de deferir a rule_ask_payment_preference cuando payment_mode==='both' (linea ~1883), pero NO hace nada equivalente para los modos de auto-seleccion (prepago_only/postpago_only/prepago_required) -- simplemente sigue a offer_available_slots sin setear payment_preference. Como esta es la regla que dispara para la frase mas comun de agendar despues de una cotizacion, TODA la semana de pruebas de base/inconsistencia/errores (que usan literalmente 'Dale, quiero agendar') nunca genero ni una sola orden real de pago, aunque la reserva se confirmara bien -- confirmado root-causeando un escenario QA de pagos que llego hasta confirm_booking pero lead_state.payment_preference/flow_order_id quedaron vacios."
+    fix_applied: "En vez de parchar cada regla individual que pudiera llegar a offer_available_slots sin pasar por el auto-select de pago (fragil, dificil de garantizar exhaustividad), se agrego una red de seguridad en el UNICO punto donde realmente se decide si 6.26 se llama: extract_booking_confirm_result (en action_executor, justo antes del nodo IF payment_preference_prepago). Si payment_preference llega vacio, se deriva de payment_mode (mismo criterio que usa rule_ask_payment_preference para sus ramas de auto-seleccion): prepago_only/prepago_required -> 'prepago', postpago_only -> 'postpago'. Para payment_mode='both' se deja vacio a proposito (ahi si se requiere una eleccion explicita del cliente)."
+    file_modified: "workflows/exports/uncategorized/6 - 6 action_executor__id-80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13.json"
+  - issue: "[RESUELTO 2026-07-18] 8.0 human_handof / assign_handoff_owner: el chequeo de 'reclamo' en el texto se evaluaba ANTES que el chequeo de stage in [closing,quoted]; como no habia early-return, un lead en stage closing/quoted que ademas escribia algo con 'reclamo' terminaba con assigned_team='ventas' (el chequeo de stage pisaba el de reclamo), no 'soporte'."
+    fix_applied: "El segundo if se convirtio en 'else if', asi que reclamo siempre gana sin importar el stage -- mismo patron de 'primer match gana' que se usa en rules_engine."
+    file_modified: "workflows/exports/uncategorized/8.0 - 8.0 human_handof__id-2360b175-88ae-483d-8551-b2aa36c1c625.json"
+
+flows:
+  - workflow: "6.0 resolve_pricing_from_db"
+    file: "workflows/exports/uncategorized/6.0 - 6.0 resolve_pricing_from_db__id-72b60f14-db90-436e-b48c-02b96dd4f946.json"
+    purpose: "Dado servicio+vehiculo+comuna (o solo vehiculo+comuna para lista completa), calcula el precio real consultando la version de tarifas activa del negocio en la DB (precio base + recargo por comuna)."
+    branch_points:
+      - node: "normalize_pricing_keys"
+        type: code_branch
+        condition: "!agentId / (!vehicle || !district) tras canonicalizar"
+        outcomes:
+          - "throw Error('Missing pricing inputs: agent_id is required')"
+          - "throw Error('Missing pricing inputs: vehicle=..., district=...')"
+          - "pasa -> price_list_requested = !service (no se resolvio un service_code)"
+      - node: "normalize_pricing_keys (price_list_requested)"
+        type: code_branch
+        condition: "!service"
+        outcomes:
+          - "true -> modo lista de precios"
+          - "false -> modo cotizacion unica"
+      - node: "build_pricing_result"
+        type: code_branch
+        condition: "price_list_requested === true"
+        outcomes:
+          - "modo lista: success/pricing_found = (priceList.length > 0)"
+          - "modo unico: success=true/pricing_found=true siempre, arma quote{base_price,surcharge,price}"
+      - node: "IF pricing_found"
+        type: if
+        condition: "pricing_found===true && (Number(final_price)>0 || (price_list_requested===true && price_list.length>0))"
+        outcomes:
+          - "true -> build_pricing_result"
+          - "false -> build_pricing_not_found (error_code: pricing_rule_not_found)"
+
+  - workflow: "6.1 send_outbound_message"
+    file: "workflows/exports/uncategorized/6.1 - 6.1 send_outbound_message__id-a0d615e2-41de-4f01-bb5a-2a5bee00d803.json"
+    purpose: "Punto unico de salida de mensajes del bot: valida el mensaje, rutea segun canal (WhatsApp real via Cloud API, o simulado para n8n_chat/webchat) y normaliza la respuesta del proveedor. Todo lo que el bot 'dice' pasa por aca."
+    branch_points:
+      - node: "validate_outbound_input"
+        type: code_branch
+        condition: "chequeos secuenciales sobre channel/phone/message"
+        outcomes:
+          - "throw Error('Missing channel')"
+          - "throw Error('Unsupported channel: ' + channel) -- permitidos: whatsapp, n8n_chat, webchat"
+          - "throw Error('Missing phone')"
+          - "throw Error('Invalid message')"
+          - "throw Error('Phone must be Chile format (56...)') -- solo canal whatsapp"
+          - "throw Error('Invalid message after mojibake fix')"
+          - "pasa -> {phone, message} normalizados"
+      - node: "channel_router (switch)"
+        type: switch
+        condition: "({whatsapp:0, n8n_chat:1, webchat:2})[$json.channel] ?? -1"
+        outcomes:
+          - "whatsapp -> output 0 (WB Send, llamada real a WhatsApp Cloud API)"
+          - "n8n_chat -> output 1 (build_n8n_chat_response, simulated_delivery:true, no envia de verdad)"
+          - "webchat -> output 2 (build_webchat_response, simulated_delivery:true, no envia de verdad)"
+          - "canal no reconocido -> -1, sin salida (dead end, en la practica inalcanzable porque validate_outbound_input ya filtro el allowlist)"
+      - node: "normalize_provider_response"
+        type: code_branch
+        condition: "providerResponse.error !== undefined (solo camino whatsapp)"
+        outcomes:
+          - "sin error -> success=true, message_sent=true, provider_status='accepted'"
+          - "con error -> success=false, message_sent=false, provider_status='failed'"
+
+  - workflow: "6.2 check_calendar_slot"
+    file: "workflows/exports/uncategorized/6.2 - 6.2 check_calendar_slot__id-9b16489e-ce39-4213-ab5d-270d035fa1e0.json"
+    purpose: "Verifica si un horario puntual (fecha+hora exacta) esta realmente libre en Google Calendar antes de confirmarlo -- lo llaman 6.5, 6.10 y 6.23 cada vez que hay que revalidar un slot especifico."
+    branch_points:
+      - node: "build_slot_range"
+        type: code_branch
+        condition: "booking_date/booking_time/slot_id faltantes; duration_minutes invalido; parseo DateTime invalido"
+        outcomes:
+          - "throw Error('Faltan datos requeridos: booking_date, booking_time o slot_id')"
+          - "throw Error('duration_minutes invalido')"
+          - "throw Error('Fecha/hora invalida: ...')"
+          - "pasa -> slot_start_at/slot_end_at calculados"
+      - node: "IF oauth_connected"
+        type: if
+        condition: "$json.oauth_connected === true"
+        outcomes:
+          - "true -> get_events_oauth (httpRequest, token OAuth) -> split_oauth_events"
+          - "false -> nodo credencial Google Calendar por defecto"
+      - node: "split_oauth_events"
+        type: code_branch
+        condition: "response.items.length === 0 (solo camino oauth)"
+        outcomes:
+          - "vacio -> emite un evento sintetico nulo (mantiene viva la ejecucion de n8n)"
+          - "no vacio -> mapea cada evento real"
+      - node: "normalize_slot_check"
+        type: code_branch
+        condition: "filtra eventos con summary que contiene 'cliente qa' (artefactos de test), luego hasEvents = realEvents.length > 0"
+        outcomes:
+          - "slot_available=true -- no hay eventos en conflicto"
+          - "slot_available=false -- conflicting_events_count > 0"
+
+  - workflow: "6.3 create_calendar_booking"
+    file: "workflows/exports/uncategorized/6.3 - 6.3 create_calendar_booking__id-a3ec1c2d-0a59-46b1-a404-7a990234f3dc.json"
+    purpose: "Crea el evento real en Google Calendar para una reserva ya confirmada (llamado exclusivamente por 6.5 confirm_booking_executor)."
+    branch_points:
+      - node: "build_calendar_event_payload"
+        type: code_branch
+        condition: "slot_start_at/slot_end_at/service_interest/lead_id faltantes; fechas ISO invalidas; end<=start"
+        outcomes:
+          - "throw Error('Faltan datos requeridos: slot_start_at, slot_end_at, service_interest o lead_id')"
+          - "throw Error('slot_start_at o slot_end_at tienen formato invalido')"
+          - "throw Error('slot_end_at debe ser mayor que slot_start_at')"
+          - "pasa -> arma summary/description/location del evento"
+      - node: "IF oauth_connected"
+        type: if
+        condition: "$json.oauth_connected === true"
+        outcomes:
+          - "true -> create_event_oauth (httpRequest, token OAuth)"
+          - "false -> nodo credencial Google Calendar por defecto"
+    note: "sin branch por fallo de creacion dentro de este sub-workflow -- el exito/fallo lo evalua el LLAMADOR (6.5, IF calendar_creation_failed)."
+
+  - workflow: "6.4 list_available_slots"
+    file: "workflows/exports/uncategorized/6.4 - 6.4 list_available_slots__id-1e882e96-85ef-4afa-8619-8a7bf5f52376.json"
+    purpose: "Genera los horarios candidatos segun el schedule del negocio/staff y los filtra contra los eventos ya ocupados (DB de reservas + Google Calendar), devolviendo la lista final de slots realmente disponibles."
+    branch_points:
+      - node: "normalize_availability_input"
+        type: code_branch
+        condition: "!leadId"
+        outcomes:
+          - "throw Error('Missing lead_id')"
+          - "pasa"
+      - node: "generate_candidate_slots (origen del horario)"
+        type: code_branch
+        condition: "input.schedule es array con >=1 regla que pasa isValidScheduleRule()"
+        outcomes:
+          - "schedule de negocio/staff valido -> se usa"
+          - "sin schedule valido -> fallback a DEFAULT_SCHEDULE (martes+jueves 09:00, domingo 09:00-15:00 cada 6h)"
+      - node: "generate_candidate_slots (candidatos encontrados)"
+        type: code_branch
+        condition: "candidates.length === 0 tras escanear la ventana startOffsetDays..+daysAhead+14"
+        outcomes:
+          - "sin candidatos futuros -> candidate_slots: []"
+          - "encontrados -> candidate_slots poblado (tope maxSlots+10 durante el escaneo)"
+      - node: "IF oauth_connected"
+        type: if
+        condition: "$json.oauth_connected === true"
+        outcomes:
+          - "true -> get_busy_events_oauth (httpRequest) -> split_oauth_busy_events"
+          - "false -> nodo por defecto de eventos ocupados"
+      - node: "split_oauth_busy_events"
+        type: code_branch
+        condition: "response.items.length === 0 (solo camino oauth)"
+        outcomes:
+          - "vacio -> evento sintetico nulo"
+          - "no vacio -> mapea eventos reales"
+      - node: "filter_available_slots"
+        type: code_branch
+        condition: "excluye eventos 'cliente qa' (DB y calendario), luego filtra candidate_slots cuyo [start,end) se solapa con algun evento ocupado restante (DB appointments_db O google_calendar)"
+        outcomes:
+          - "availableSlots no vacio (hasta max_slots) -- se ofrecen al cliente"
+          - "availableSlots vacio -- todos los candidatos chocan; slots:[] pero success:true igual (el llamador/6.23 decide el mensaje para el caso vacio)"
+
+  - workflow: "6.5 confirm_booking_executor"
+    file: "workflows/exports/uncategorized/6.5 - 6.5 confirm_booking_executor__id-c4f365f3-8df3-49b1-8c88-8f4849fe1dd9.json"
+    purpose: "Orquesta la confirmacion final de una reserva de punta a punta: exige direccion confirmada, evita duplicados concurrentes con un lock, revalida que el horario elegido siga libre, crea el evento en Google Calendar, inserta la fila en DB, y maneja cada punto de fallo posible en esa cadena (slot tomado, error de calendario, error de insert)."
+    note: "El sub-flujo con mas ramas de todo action_executor -- concentra casi todo el riesgo operacional de la reserva."
+    branch_points:
+      - node: "normalize_confirm_booking_input"
+        type: code_branch
+        condition: "lead_id/channel/booking_date/booking_time faltantes tras resolver desde execution_context/context_packet/decision.state_update"
+        outcomes:
+          - "throw Error('Missing execution_context.lead_id')"
+          - "throw Error('Missing execution_context.channel')"
+          - "throw Error('Missing execution_context.booking_date')"
+          - "throw Error('Missing execution_context.booking_time')"
+          - "pasa"
+      - node: "IF lock_acquired"
+        type: if
+        condition: "!!$json.lock_lead_id (resultado de acquire_booking_lock, insert tipo advisory-lock en Postgres)"
+        outcomes:
+          - "true -> sigue a guard_booking_requires_address (flujo principal)"
+          - "false -> build_booking_already_in_progress -- 'Tu reserva ya quedo registrada...' (llamada concurrente duplicada bloqueada, sin escrituras a DB)"
+      - node: "guard_booking_requires_address / route_address_guard (switch de 3 vias)"
+        type: code_branch + switch
+        condition: "!serviceAddress -> 'collect_address'; sino !addressConfirmed -> 'confirm_address'; sino -> 'continue_booking'"
+        outcomes:
+          - "collect_address -> build_collect_address_result -- pide direccion exacta, stage=collecting_address, retorna de inmediato"
+          - "confirm_address -> build_confirm_address_result -- pide confirmar direccion en archivo, stage=address_confirmation, retorna de inmediato"
+          - "continue_booking -> sigue a check_appointment (chequeo de reserva existente en DB)"
+      - node: "IF appointment_exists"
+        type: if
+        condition: "!!$json.id (check_appointment, query Postgres de reserva activa existente)"
+        outcomes:
+          - "true -> build_existing_appointment_result -- 'Ya tienes una reserva activa...', retorna sin crear nada nuevo"
+          - "false -> llama a '6.2 check_calendar_slot' para verificar que el horario elegido sigue libre"
+        known_gaps:
+          - issue: "[RESUELTO 2026-07-25] Bug real reportado por el usuario: cliente con una reserva activa (auto 1, SUV) intento agendar un SEGUNDO lavado para 'mi otro auto' (hatchback) en un horario DISTINTO. check_appointment original solo chequeaba 'existe ALGUNA cita activa para este lead_id', sin comparar contra el horario que se esta confirmando ahora -- encontro la reserva del auto 1 y la trato como si fuera la MISMA reserva, devolviendo 'Ya tienes una reserva activa...' y NUNCA creando la fila de appointments/evento de calendario para el auto 2, aunque el cliente pago de verdad el link de Flow generado para esa 2da reserva (confirmado: notes=['active_appointment_exists'], db_records_created=['messages'] -- sin 'appointments')."
+            fix_applied: "Query de check_appointment ahora exige ademas 'AND start_at = (booking_date+booking_time convertido a America/Santiago)' -- es decir, solo se considera 'ya existe' si hay una cita activa para ESE MISMO horario especifico que se esta confirmando (protege contra doble-submit del mismo slot), no para cualquier cita del lead en cualquier horario. Esto permite que un mismo lead tenga multiples reservas activas simultaneas para horarios distintos (ej. 2 autos, 2 turnos)."
+      - node: "IF slot_available"
+        type: if
+        condition: "$json.slot_available (resultado de 6.2 check_calendar_slot)"
+        outcomes:
+          - "true -> llama a '6.3 create_calendar_booking' (crea el evento en GCal)"
+          - "false -> build_slot_unavailable_result -- 'Ese horario ya no esta disponible', reofrece hasta 3 alternativas de booking_options excluyendo la elegida, stage vuelve a booking_selection"
+      - node: "IF calendar_creation_failed"
+        type: if
+        condition: "!!$json.error || (!calendar_event?.id && !$json.id)"
+        outcomes:
+          - "true -> build_calendar_creation_failed_result -- error generico 'No pude confirmar la reserva...'"
+          - "false -> merge_calendar_result_with_context -> build_real_appointment_payload -> insert_appointment (insert en DB)"
+      - node: "IF appointment_insert_failed"
+        type: if
+        condition: "!!$json.error (resultado del insert_appointment en Postgres)"
+        outcomes:
+          - "true -> build_appointment_insert_failed_result -- 'La reserva en agenda se creo, pero hubo un problema al registrarla internamente' (estado de fallo parcial: existe evento GCal pero no fila en DB)"
+          - "false -> build_booking_confirmation_message (mensaje final de exito, stage=booked) -> encadena a 6.13 send_pre_service_instruction, combina mensajes, crea DB_Create_Appointment_Followups"
+
+  - workflow: "6.6 cancel_booking"
+    file: "workflows/exports/uncategorized/6.6 - 6.6 cancel_booking__id-776d144a-7bf8-472c-9d6a-1bbc711872ea.json"
+    purpose: "Cancela la reserva activa de un lead: borra el evento de Google Calendar, marca la fila como cancelled en DB, cancela followups pendientes, y opcionalmente re-ofrece horarios de una si es parte de un flujo de cambio-de-servicio (cancelar+reagendar)."
+    branch_points:
+      - node: "normalize_cancel_booking_input"
+        type: code_branch
+        condition: "!lead_id tras resolver desde execution_context/context_packet.lead.id"
+        outcomes:
+          - "throw Error('Missing lead_id in cancel_booking')"
+          - "pasa"
+      - node: "IF active_appointment_exists"
+        type: if
+        condition: "!!$json.id (DB_Check_Active_Appointment_For_Cancel)"
+        outcomes:
+          - "false -> build_cancel_no_active_result -- 'No encontre una reserva activa a tu nombre...', sin mutaciones, next_goal=offer_booking"
+          - "true -> borra evento GCal, marca appointment como cancelled, cancela followups, luego build_cancel_booking_result"
+      - node: "IF auto_offer_slots_after_cancel"
+        type: if
+        condition: "execution_context?.auto_offer_slots_after_cancel === true"
+        outcomes:
+          - "true -> llama a '6.23 offer_available_slots', antepone 'Listo, cancele tu reserva anterior.' al mensaje de horarios (flujo de cambio-de-servicio: cancelar+reagendar)"
+          - "false -> build_cancel_booking_result directo -- confirmacion simple de cancelacion, stage='cancelled'"
+      - node: "normalize_cancel_booking_result"
+        type: code_branch
+        condition: "outcome derivado de active_appointment_found/appointment===null, mas presencia de combined_cancel_message"
+        outcomes:
+          - "outcome=no_active_appointment -- next_goal='clarify_or_book'"
+          - "outcome=active_appointment_found sin combined_cancel_message -- stage='qualified', limpia booking_date/time/slot_id/booking_options/availability_confirmed, next_goal='reactivation'"
+          - "outcome=active_appointment_found con combined_cancel_message (camino auto-offer) -- no reescribe stage/campos, solo normaliza missing_fields"
+
+  - workflow: "6.7 ask_missing_data"
+    file: "workflows/exports/uncategorized/6.7 - 6.7 ask_missing_data__id-6c5dad2d-492a-4ce1-966f-e36147b43100.json"
+    purpose: "Envia al usuario el mensaje que pide un dato faltante especifico -- el texto ya viene armado por rules_engine o llm_decision, este sub-flujo solo lo despacha via 6.1."
+    branch_points: []
+    note: >
+      Sin puntos de decision reales -- message_to_send siempre es execution_context.message
+      (armado aguas arriba por rules_engine/llm_decision), pasado sin condicion. El unico
+      condicional interno es una cadena de fallback de 3 niveles para elegir missing_fields
+      del state_update; afecta solo el registro de estado, no el mensaje ni el camino del bot.
+
+  - workflow: "6.8 send_quote"
+    file: "workflows/exports/uncategorized/6.8 - 6.8 send_quote__id-48860882-12ae-40c1-be93-c9778cade549.json"
+    purpose: "Cotiza el servicio llamando a 6.0 resolve_pricing_from_db y envia el mensaje de precio correspondiente (lista completa de servicios o cotizacion puntual). Si el pricing falla, deriva a humano en vez de reintentar."
+    branch_points:
+      - node: "IF pricing_found1"
+        type: if
+        condition: "$json.pricing_found===true || ($json.success===true && (quote?.base_price || price_list.length>0)) -- resultado de la sub-llamada a '6.0 resolve_pricing_from_db'"
+        outcomes:
+          - "true -> build_quote_message"
+          - "false -> build_pricing_unavailable_result -- fuerza stage='human_handoff', human_handoff=true (fallo de pricing deriva a humano en vez de reintentar)"
+      - node: "build_quote_message"
+        type: code_branch
+        condition: "price_list es array con length>0"
+        outcomes:
+          - "modo lista de precios -- lista cada servicio+precio para el vehiculo/comuna, stage='quoted', next_goal='choose_service_or_book'"
+          - "modo cotizacion unica -- mensaje de un servicio con CTA de reserva, stage='quoted', next_goal='book_appointment'; throw Error('Missing resolved quote') si no hay ni price_list ni quote.price"
+
+  - workflow: "6.9 answer_question"
+    file: "workflows/exports/uncategorized/6.9 - 6.9 answer_question__id-ce882890-6ea3-4784-879d-b1e1b4f8c5e9.json"
+    purpose: "Envia una respuesta generica/informativa ya armada aguas arriba (rules_engine o el LLM) -- es el 'catch-all' de mensajeria para todo lo que no encaja en una accion mas especifica (FAQs, aclaraciones, disclosures, etc.)."
+    file_note: "Hay un archivo duplicado con id efe50346-2d38-4d11-8cd0-3694db16a8e3 que NO tiene entrada en workflows.inventory.json (huerfano, ni siquiera inactivo) -- se ignoro; este id (ce882890) es el que 6 action_executor realmente llama."
+    branch_points: []
+    note: "Sin puntos de decision reales -- pass-through lineal. message_to_send siempre es execution_context.message; state_update.missing_fields solo se traspasa (chequeo Array.isArray, sin bifurcacion de comportamiento)."
+
+  - workflow: "6.10 reschedule_booking"
+    file: "workflows/exports/uncategorized/6.10 - 6.10 reschedule_booking__id-ece2fbb8-75d2-4496-9f6d-5bcb5abcdb40.json"
+    purpose: "Reprograma la reserva activa de un lead: si no vino un horario nuevo explicito, lista alternativas via 6.4; si vino uno, lo revalida via 6.2 y actualiza el evento existente en Google Calendar."
+    branch_points:
+      - node: "normalize_reschedule_input"
+        type: code_branch
+        condition: "genericRescheduleRequest (decision.reason==='user_requested_reschedule' O next_goal==='collect_new_slot' O intent_last==='reschedule_booking_requested') Y !hasExplicitNewSlot (sin booking_date+time ya dados)"
+        outcomes:
+          - "shouldListNewSlots=true: fuerza booking_date/time/slot_id a null, next_goal='collect_selected_slot' -> obliga a listar horarios"
+          - "shouldListNewSlots=false: mantiene booking_date/time/slot_id existentes (ya vino un horario nuevo explicito) -> va directo a chequear disponibilidad"
+      - node: "IF active_appointment_exists"
+        type: if
+        condition: "!!$json.active_appointment?.id"
+        outcomes:
+          - "true -> sigue a chequear has_new_slot / listar horarios / actualizar calendario"
+          - "false -> build_reschedule_no_active_message -- 'No encontre una reserva activa para reprogramar...', next_goal='offer_booking'"
+      - node: "IF has_new_slot"
+        type: if
+        condition: "!!$json.booking_date && !!$json.booking_time"
+        outcomes:
+          - "true -> salta el listado, va directo a '6.2 check_calendar_slot'"
+          - "false -> llama a '6.4 list_available_slots' -> build_reschedule_slots_message"
+      - node: "build_reschedule_slots_message"
+        type: code_branch
+        condition: "slots.length === 0 (devuelto por 6.4)"
+        outcomes:
+          - "0 slots: mensaje 'no encontre horarios disponibles...', next_goal='manual_availability_review', last_bot_action='reschedule_no_slots_found'"
+          - ">0 slots: lista numerada de opciones, next_goal='collect_selected_slot', last_bot_action='offer_reschedule_slots'"
+      - node: "IF slot_available"
+        type: if
+        condition: "$json.slot_available === true || $json.availability_confirmed === true"
+        outcomes:
+          - "true -> sigue a Google Calendar Update Event (se reprograma)"
+          - "false -> build_reschedule_slot_unavailable_message -- 'Ese horario ya no esta disponible...', next_goal='collect_new_slot'"
+      - node: "normalize_reschedule_booking_result"
+        type: code_branch
+        condition: "clasificacion derivada del last_bot_action / presencia de message+booking_options: isSlotListResponse | isSlotUnavailable | isNoActive | isSuccess"
+        outcomes:
+          - "isSlotListResponse -> outcome='reschedule_slots_offered'"
+          - "isSlotUnavailable -> outcome='reschedule_slot_unavailable'"
+          - "isNoActive -> outcome='no_active_appointment'"
+          - "isSuccess -> outcome='reschedule_confirmed'"
+          - "ninguno matchea -> fallback a data.outcome/execution_result.outcome/result.outcome o 'reschedule_processed'"
+
+  - workflow: "6.11 collect_address"
+    file: "workflows/exports/uncategorized/6.11 - 6.11 collect_address__id-0c7ab410-ad24-4d54-8a30-0e28b00d3651.json"
+    purpose: "Pide al usuario la direccion exacta donde se realizara el servicio (mencionando la comuna si ya se conoce)."
+    branch_points:
+      - node: "build_collect_address_result"
+        type: code_branch
+        condition: "comuna conocida vs desconocida (district/execution_context.district/context_packet.state.district)"
+        outcomes:
+          - "comuna conocida: mensaje menciona la comuna por nombre"
+          - "comuna desconocida: mensaje generico sin mencionarla"
+    note: "Nodo Code lineal por lo demas -- siempre stage='collecting_address', missing_fields=['address']. La logica mas rica (handoff por intentos agotados, chequeo de numero faltante) vive en rules_engine (ruleConfirmAddressIfWaitingAddress), no aca."
+
+  - workflow: "6.12 confirm_address"
+    file: "workflows/exports/uncategorized/6.12 - 6.12 confirm_address__id-65759df4-4c07-45f3-88f5-e972faf3304f.json"
+    purpose: "Valida la direccion recibida (largo minimo plausible, comuna presente) y, si esta completa, avanza a confirmar el horario elegido o a pedir que se elija uno."
+    branch_points:
+      - node: "confirm_address_logic"
+        type: code_branch
+        condition: "!normalizedAddress || normalizedAddress.length < 8 (direccion ausente o demasiado corta para ser plausible)"
+        outcomes:
+          - "true: re-pide direccion exacta, stage sigue 'collecting_address', last_bot_action='collect_address'"
+          - "false: sigue al chequeo de comuna"
+      - node: "confirm_address_logic"
+        type: code_branch
+        condition: "(direccion valida) && !district"
+        outcomes:
+          - "true: pide confirmar la comuna, stage='collecting_address', missing_fields=['district']"
+          - "false: sigue a la rama de confirmacion final"
+      - node: "confirm_address_logic"
+        type: code_branch
+        condition: "(direccion valida) && (comuna presente) -> sub-rama sobre bookingDate && bookingTime"
+        outcomes:
+          - "bookingDate && bookingTime presentes: pide confirmar la reserva para esa fecha/hora, next_goal='confirm_booking'"
+          - "bookingDate/bookingTime ausentes: 'ahora necesito que elijas un horario disponible', next_goal='send_available_slots'"
+
+  - workflow: "6.13 send_pre_service_instruction"
+    file: "workflows/exports/uncategorized/6.13 - 6.13 send_pre_service_instruction__id-a9a040b3-31c0-459b-9c5e-aead2f7b9d28.json"
+    purpose: "Envia el checklist de instrucciones previas al servicio (que dejar listo, accesos, etc.) para la reserva activa de un lead."
+    branch_points:
+      - node: "Build Pre Service Instructions Result"
+        type: code_branch
+        condition: "!appointment.id (DB Get Active Appointment sin resultado)"
+        outcomes:
+          - "sin reserva activa: 'Por ahora no encontre una reserva activa asociada...', next_goal='manual_booking_review'"
+          - "reserva activa encontrada: checklist completo de pre-servicio con fecha/servicio/vehiculo formateados, stage='booked'"
+
+  - workflow: "6.14 notify_on_the_way"
+    file: "workflows/exports/uncategorized/6.14 - 6.14 notify_on_the_way__id-213c2fee-a79a-479d-9210-3792201fa1b2.json"
+    purpose: "Avisa al cliente que el staff esta en camino al servicio, con tiempo estimado de llegada si esta disponible."
+    branch_points:
+      - node: "build_notify_on_the_way_result"
+        type: code_branch
+        condition: "etaMinutes presente (data.eta_minutes / execution_context.eta_minutes / decision.eta_minutes)"
+        outcomes:
+          - "eta conocida: mensaje incluye 'Llego aproximadamente en {etaMinutes} minutos'"
+          - "eta desconocida: mensaje generico sin ETA"
+    note: "Lineal por lo demas; siempre last_bot_action='notify_on_the_way', next_goal='complete_service'."
+
+  - workflow: "6.15 request_review"
+    file: "workflows/exports/uncategorized/6.15 - 6.15 request_review__id-5f3cb9ae-9ff3-47ef-a7b9-40bc47c14b49.json"
+    purpose: "Pide al cliente una resena/calificacion despues del servicio, incluyendo el link directo si esta disponible."
+    branch_points:
+      - node: "build_request_review_result"
+        type: code_branch
+        condition: "reviewUrl presente"
+        outcomes:
+          - "presente: mensaje incluye el link de resena"
+          - "ausente: mensaje de agradecimiento sin link"
+      - node: "build_request_review_result (guard)"
+        type: code_branch
+        condition: "!leadId o !phone"
+        outcomes:
+          - "falta lead_id: throw Error('Missing lead_id in request_review') (error de ejecucion, no se envia mensaje)"
+          - "falta phone: throw Error('Missing phone in request_review')"
+    note: "Lineal por lo demas; siempre stage='post_service', next_goal='request_referral'."
+
+  - workflow: "6.16 request_referral"
+    file: "workflows/exports/uncategorized/6.16 - 6.16 request_referral__id-6c7c781d-08ff-41b8-ae57-33b4ad456249.json"
+    purpose: "Pide al cliente que refiera a alguien mas al negocio, con un pitch custom o uno por defecto."
+    branch_points:
+      - node: "normalize_input (guard)"
+        type: code_branch
+        condition: "!lead_id o !phone"
+        outcomes:
+          - "falta lead_id: throw Error('Missing lead_id in request_referral')"
+          - "falta phone: throw Error('Missing phone in request_referral')"
+      - node: "build_referral_message"
+        type: code_branch
+        condition: "customMessage presente y no vacio (referral_message de decision) vs no"
+        outcomes:
+          - "mensaje custom provisto: se usa tal cual (trimeado)"
+          - "sin mensaje custom: pitch de referido por defecto"
+    note: "Siempre stage='post_service', last_bot_action='request_referral'."
+
+  - workflow: "6.17 send_service_menu"
+    file: "workflows/exports/uncategorized/6.17 - 6.17 send_service_menu__id-e974cd1e-5cf1-4634-9e86-9628cab0c1a5.json"
+    purpose: "Envia el menu de servicios del negocio (custom desde agent_business_config o el default de 3 servicios de Ahumada), pidiendo vehiculo+comuna si el negocio requiere ese contexto para cotizar."
+    branch_points:
+      - node: "normalize_service_menu_input (guard)"
+        type: code_branch
+        condition: "!leadId o !channel"
+        outcomes:
+          - "falta lead_id: throw Error('Missing lead_id in send_service_menu')"
+          - "falta channel: throw Error('Missing channel in send_service_menu')"
+      - node: "build_service_menu_result"
+        type: code_branch
+        condition: "business.services (de agent_business_config) tiene length>0 vs vacio"
+        outcomes:
+          - "servicios custom configurados: menu armado desde business.services"
+          - "sin servicios configurados: fallback a defaultAhumadaServices hardcodeado (lavado_basico, lavado_premium, encerado_full)"
+      - node: "build_service_menu_result (requiresPricingContext)"
+        type: code_branch
+        condition: "business.pricing_policy?.requires_service_vehicle_district !== false"
+        outcomes:
+          - "true: cierre pide vehiculo+comuna explicitamente; missing_fields los incluye si faltan; next_goal='collect_vehicle_and_district'"
+          - "false: cierre solo pregunta que servicio interesa; next_goal='collect_service_interest'; missing_fields vacio siempre"
+
+  - workflow: "6.18 recommend_service"
+    file: "workflows/exports/uncategorized/6.18 - 6.18 recommend_service__id-dd796016-14dd-4845-8d96-84722bcf7bc5.json"
+    purpose: "Recomienda un servicio especifico (basico/profundo/premium) clasificando por palabras clave el ultimo mensaje del usuario (que tan sucio esta el auto, si pide algo economico, etc.), pidiendo vehiculo+comuna primero si faltan."
+    branch_points:
+      - node: "normalize_recommend_service_input (guard)"
+        type: code_branch
+        condition: "!leadId o !channel"
+        outcomes:
+          - "falta lead_id: throw Error('Missing lead_id in recommend_service')"
+          - "falta channel: throw Error('Missing channel in recommend_service')"
+      - node: "build_recommend_service_result"
+        type: code_branch
+        condition: "missingFields.length > 0 (vehicle_type y/o district desconocidos)"
+        outcomes:
+          - "faltan datos: pide vehiculo+comuna antes de recomendar, stage='service_discovery'; salta la inferencia de servicio"
+          - "ambos conocidos: sigue a inferRecommendedService (clasificador de keywords)"
+      - node: "build_recommend_service_result / inferRecommendedService (3 vias + default, primer match gana)"
+        type: code_branch
+        condition: "latest_user_message normalizado matcheado contra listas premiumSignals / deepSignals / basicSignals, en ese orden"
+        outcomes:
+          - "premiumSignals ('premium','completo','muy sucio','manchas','olor',...) -> recomienda lavado_premium"
+          - "deepSignals ('profundo','bien limpio','sucio','interior','aspirado',...) -> recomienda lavado_profundo"
+          - "basicSignals ('barato','economico','rapido','simple','basico',...) -> recomienda lavado_esencial"
+          - "ningun signal matchea -> fallback por defecto recomienda lavado_profundo"
+        note: "cada outcome produce un mensaje distinto con su razon canned; stage='qualified', next_goal='quote_or_offer_slots'."
+
+  - workflow: "6.19 answer_objection"
+    file: "workflows/exports/uncategorized/6.19 - 6.19 answer_objection__id-1823781d-ffb8-4c74-8729-6877a3cdc83e.json"
+    purpose: "Responde a una objecion del cliente -- tipicamente 'lo voy a pensar' -- reforzando el mensaje del LLM con un template mas robusto si le falta el cierre esperado (ofrecer horarios/agendar), para no dejar la conversacion enfriarse."
+    branch_points:
+      - node: "answer_objection"
+        type: code_branch
+        condition: "isWillThink: latest_user_message normalizado contiene 'lo voy a pensar' / 'lo pensare' / 'lo pensar' / 'despues veo' / 'despues te aviso' / 'lo veo'"
+        outcomes:
+          - "isWillThink=true Y (messageToSend vacio O no tiene los cierres esperados) -> pisa con template robusto (strongWillThink: ofrece enviar horarios/agendar)"
+          - "isWillThink=true Y el mensaje del LLM ya tiene los cierres esperados (contiene 'perfecto'+'cualquier cosa'+'te puedo ayudar'/'te ayudo'+'horario(s)') -> mantiene el mensaje del LLM tal cual"
+          - "isWillThink=false Y messageToSend vacio -> usa genericFallback"
+          - "isWillThink=false Y messageToSend presente -> mantiene el mensaje del LLM tal cual"
+    note: "Siempre stage='closing', next_goal='book_appointment' sin importar la rama."
+
+  - workflow: "6.20 offer_booking"
+    file: "workflows/exports/uncategorized/6.20 - 6.20 offer_booking__id-1b5873b4-fe9b-4a9e-b207-1ee23790b51c.json"
+    purpose: "Envia el mensaje (armado aguas arriba, tipicamente por el LLM) que invita al cliente a agendar. Solo se emite desde 5 llm_decision -- ninguna regla de rules_engine la dispara directamente."
+    branch_points: []
+    note: "Pass-through lineal puro (normalize_input -> offer_booking). Ningun condicional afecta mensaje/estado; siempre stage=closing, next_goal=book_appointment, message=execution_context.message tal cual."
+
+  - workflow: "6.21 schedule_followup"
+    file: "workflows/exports/uncategorized/6.21 - 6.21 schedule_followup__id-9a8541cd-8c27-4aa1-9d93-4a2a290bfe74.json"
+    purpose: "Agenda un followup automatico a futuro (ej. 'el cliente dijo que despues avisa') para que 7 followup_scheduler lo retome mas adelante."
+    branch_points: []
+    note: "Lineal; solo cadenas de fallback || para message/followup_type/scheduled_for por defecto (seleccion de valor default, no rutas distintas)."
+
+  - workflow: "6.22 handoff_human"
+    file: "workflows/exports/uncategorized/6.22 - 6.22 handoff_human__id-0520cc38-8cfa-4188-a91a-b2ec332fed9c.json"
+    purpose: "Deriva la conversacion a un humano: si ya estaba en handoff, solo recuerda que sigue derivada; si no, crea el caso via 8.0 human_handof y avisa al cliente que un humano va a seguir."
+    branch_points:
+      - node: "handoff_human"
+        type: code_branch
+        condition: "alreadyInHandoff (state.human_handoff===true O $json.handoff===true O meta.handoff.human_handoff===true O last_bot_action==='human_handoff_already_active')"
+        outcomes:
+          - "handoff_locked=true: mensaje 'Tu reclamo ya esta derivado al equipo...'; db_operations=[messages,lead_state]; next_goal='wait_human_response'"
+          - "handoff_locked=false: mensaje de derivacion (custom o generico); db_operations incluye handoff_cases; crea handoff_case nuevo; next_goal='human_takeover'"
+      - node: "IF handoff_locked"
+        type: if
+        condition: "$json.handoff_locked === true"
+        outcomes:
+          - "true -> nota 'handoff_lock_active'"
+          - "false -> nota 'handoff_case_created' (via 8.0 human_handoff)"
+      - node: "normalize_handoff_result"
+        type: code_branch
+        condition: "handoffLocked (espeja la rama anterior tras el retorno de 8.0)"
+        outcomes:
+          - "locked: db_operations solo [messages, lead_state]"
+          - "no locked: db_operations agrega 'handoff_cases'"
+
+  - workflow: "6.23 offer_available_slots"
+    file: "workflows/exports/uncategorized/6.23 - 6.23 offer_available_slots__id-135d7590-2dab-4032-a3c8-ba36a0ef33d7.json"
+    purpose: "Punto central para ofrecer horarios al cliente: lista varias opciones (via 6.4) o revalida una especifica (via 6.2), agregando una nota sobre el metodo de pago cuando corresponde."
+    branch_points:
+      - node: "offer_available_slots"
+        type: code_branch
+        condition: "isSpecificSlotCheck: next_goal==='check_specific_slot_availability' O (booking_date && booking_time presentes Y availability_confirmed !== true)"
+        outcomes:
+          - "true: check_type='specific_slot'; next_goal='check_specific_slot_availability'"
+          - "false: check_type='list_slots'; next_goal='show_available_slots'"
+      - node: "offer_available_slots (getAvailabilityConfig, switch)"
+        type: code_branch
+        condition: "valor de availability_window"
+        outcomes:
+          - "this_week -> 7 dias, offset 0, max 3 slots"
+          - "next_week -> 7 dias, offset 7, max 5 slots"
+          - "next_14_days -> 14 dias, offset 0, max 6 slots"
+          - "next_30_days -> 30 dias, offset 0, max 8 slots"
+          - "default -> igual que this_week"
+      - node: "IF specific_slot_requested"
+        type: if
+        condition: "availability_request.check_type === 'specific_slot'"
+        outcomes:
+          - "true -> llama a '6.2 check_calendar_slot' -> build_specific_slot_result"
+          - "false -> build_available_slots_message (lista varios horarios)"
+      - node: "build_available_slots_message"
+        type: code_branch
+        condition: "slots.length === 0"
+        outcomes:
+          - "true: 'Por ahora no encontre horarios disponibles...'; next_goal='manual_availability_review'; booking_options=[]"
+          - "false: lista numerada, next_goal='collect_selected_slot'"
+      - node: "build_available_slots_message (prefijo de nota de pago)"
+        type: code_branch
+        condition: "payment_preference === 'prepago' | 'postpago' | otro"
+        outcomes:
+          - "prepago -> antepone 'Perfecto! Al confirmar tu turno te mando el link de pago por Flow.'"
+          - "postpago -> antepone 'Perfecto! Queda anotado pago al terminar (efectivo o transferencia).'"
+          - "ninguno -> sin prefijo"
+      - node: "build_available_slots_message (wasSpecificSlotUnavailable)"
+        type: code_branch
+        condition: "$json.unavailable_specific_slot === true O intent_last === 'manual_slot_unavailable'"
+        outcomes:
+          - "true -> intro 'Ese horario no aparece disponible. Tengo estas opciones cercanas...'"
+          - "false -> intro '{notaPrepago}Tengo estos horarios disponibles...'"
+      - node: "IF specific_slot_available"
+        type: if
+        condition: "state_update.availability_confirmed === true"
+        outcomes:
+          - "true -> finalize_specific_slot_available_result (pass-through)"
+          - "false -> fin implicito de esa rama (sin nodo conectado en este export)"
+      - node: "build_specific_slot_result"
+        type: code_branch
+        condition: "available (result.available===true O is_available===true O slot_available===true, de 6.2 check_calendar_slot)"
+        outcomes:
+          - "true: 'Perfecto, {slot} esta disponible. Para dejarlo reservado, me compartes la direccion...'; stage='collecting_address'; availability_confirmed=true"
+          - "false: unavailable_specific_slot=true; stage sigue 'booking_selection'; next_goal='show_nearby_available_slots'; availability_window resetea a 'this_week'"
+
+  - workflow: "6.24 persist_and_audit"
+    file: "workflows/exports/uncategorized/6.24 - 6.24 persist_and_audit__id-e91c0748-bfd9-47e9-9a8c-9e6c2947b5f5.json"
+    purpose: "Paso final comun a (casi) toda accion ejecutada: aplica los defaults de estado (stage/next_goal/last_bot_action) segun que accion corrio, y persiste el resultado para auditoria. Caso especial para send_quote: marca la cotizacion como enviada o fallida segun si el mensaje realmente salio."
+    file_note: "Hay un duplicado obsoleto con id-5kcYOeYHLlcAFtf9 (distinto set de nodos); este id (e91c0748) es el que action_router realmente llama."
+    branch_points:
+      - node: "finalize_send_quote_state"
+        type: code_branch
+        condition: "action !== 'send_quote'"
+        outcomes:
+          - "true (no es send_quote) -> pasa los datos sin cambios"
+          - "false (es send_quote) -> sigue a la rama anidada sobre el estado de entrega"
+      - node: "finalize_send_quote_state (anidado, solo si action==send_quote)"
+        type: code_branch
+        condition: "ok: message_sent===true O success===true O status en ('sent','accepted') O provider_status en ('sent','accepted') O provider_message_id presente"
+        outcomes:
+          - "ok=true: stage='quoted', last_bot_action='send_quote', next_goal='book_appointment'"
+          - "ok=false: stage sin cambios, last_bot_action='send_quote_failed', next_goal='retry_quote'"
+      - node: "is_send_quote_with_quote"
+        type: if
+        condition: "action==='send_quote' && quote_was_created===true && !!quote_db_id"
+        outcomes:
+          - "true -> corre update_quote_status (Postgres)"
+          - "false -> salta directo a finalize_send_quote_state"
+      - node: "IF_quote_message_sent"
+        type: if
+        condition: "message_sent===true O success===true O status/provider_status en ('sent','accepted') O provider_message_id presente"
+        outcomes:
+          - "true -> DB_Create_Quote_Followups (agenda un followup)"
+          - "false -> se omite"
+      - node: "normalize_final_state_update (tabla de 16 acciones)"
+        type: code_branch
+        condition: "action -> lookup en defaultsByAction"
+        outcomes:
+          - "cada una de las 16 acciones soportadas aplica un default distinto de stage/next_goal/last_bot_action/missing_fields (usado como base, sobreescrito por campos explicitos ya presentes)"
+          - "accion no reconocida -> no se aplican defaults, solo sobreviven los campos explicitos ya saneados"
+
+  - workflow: "6.25 ask_payment_preference"
+    file: "workflows/exports/uncategorized/6.25 - 6.25 ask_payment_preference__id-Ffnu4AoqCDEnxNJp.json"
+    purpose: "Pregunta como el cliente prefiere pagar (link Flow ahora vs al terminar el servicio), incluyendo el precio ya cotizado si esta disponible."
+    branch_points:
+      - node: "ask_payment_preference"
+        type: code_branch
+        condition: "price presente (ctx.quoted_price || state.quoted_price)"
+        outcomes:
+          - "con precio -> mensaje incluye sufijo ' — $X CLP'"
+          - "sin precio -> mensaje sin el sufijo de precio"
+    note: "Lineal por lo demas: siempre el mismo menu 'Como preferes pagar? Ahora con link Flow / Al terminar'; next_goal='collect_payment_preference' siempre."
+
+  - workflow: "6.26 payment_request"
+    file: "workflows/exports/uncategorized/6.26 - 6.26 payment_request__id-wlAAdOqo3vD7O18n.json"
+    purpose: "Genera el link de pago real via la API de Flow.cl (firma HMAC incluida) y se lo envia al cliente, con un mensaje distinto segun si el pago es requisito para confirmar el turno (prepago_required) o no."
+    file_note: "Tiene ediciones locales sin commitear (segun git status) -- leido tal cual esta en disco."
+    branch_points:
+      - node: "HTTP: POST flow/payment/create (2 salidas)"
+        type: code_branch
+        condition: "exito vs fallo de la llamada a la API de Flow.cl payment/create"
+        outcomes:
+          - "exito -> build_payment_message -> llama a '6.1 send_outbound_message' -> insert_payment_message -> update_lead_state_payment_pending -> return_payment_result (payment_request_status='sent')"
+          - "fallo -> build_payment_error [RESUELTO 2026-07-18] ahora arma el mensaje con contexto real (channel/phone desde build_flow_signature) y lo envia via un nodo dedicado 'Call 6.1 send_payment_error_message' (no pasa por insert_payment_message/update_lead_state_payment_pending, que son solo del camino de exito) -- ver known_gaps arriba"
+      - node: "build_payment_message"
+        type: code_branch
+        condition: "isPrepagoreRequired: payment_for_mode==='prepago_required' O ctx.payment_mode==='prepago_required' O context_packet.state.payment_mode==='prepago_required'"
+        outcomes:
+          - "true: 'Para confirmar tu turno{fecha}, necesito que pagues primero...'; last_bot_action='payment_link_pending_booking'"
+          - "false: 'Perfecto! Aqui tienes el link para pagar...'; last_bot_action='payment_link_sent'"
+
+  - workflow: "6 action_executor / confirm_booking (rama prepago_required)"
+    file: "workflows/exports/uncategorized/6 - 6 action_executor__id-80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13.json"
+    purpose: "[CAMBIADO 2026-07-24] Reserva real del cupo (evento GCal + fila appointments status='pending_payment') al momento de confirmar una reserva prepago_required, ANTES de mandar el link de pago. Antes de este cambio, el sistema no creaba ni el evento de calendario ni la fila en appointments hasta que Flow confirmaba el pago -- mientras el cliente tenia el link abierto, el horario seguia apareciendo disponible para cualquier otro cliente (6.2 check_calendar_slot consulta Google Calendar directamente, no la tabla appointments). Ver QA/GUide/FLOW_PAYMENT_SYSTEM_EVALUATION_2026-07-24.md, punto 1."
+    branch_points:
+      - node: "IF prepago_slot_available (nuevo)"
+        type: if
+        condition: "resultado de 'Call 6.2 check_calendar_slot (hold)' -- misma verificacion en vivo contra Google Calendar que usa el flujo normal de 6.5"
+        outcomes:
+          - "true -> Call 6.3 create_calendar_booking (hold) -> build_pending_payment_appointment_payload -> insert_pending_payment_appointment (status='pending_payment') -> restore_context_for_payment_request -> 6.26 payment_request (sin cambios en el resto del flujo)"
+          - "false (alguien tomo el horario justo antes) -> build_prepago_slot_taken_result: avisa que el horario ya no esta disponible, ofrece mostrar otros horarios (stage='booking_selection')"
+    note: "El hold no tiene TTL propio en este nodo -- lo libera 6.29 release_expired_payment_holds (cron cada 10 min, holds >30 min sin pagar). El calendar_id para el delete en 6.29 esta hardcodeado a 'primary' porque appointments no tiene columna calendar_id y el sistema hoy solo usa un calendario por agente."
+    known_gaps:
+      - issue: "[RESUELTO 2026-07-25] confirm_booking resolvia payment_mode con esta prioridad: ctx.payment_mode -> context_packet.state.payment_mode (=lead_state.payment_mode, UN VALOR PEGADO de una reserva anterior de ESE lead) -> recien al final agent_business_config.config.payment_mode (el ajuste ACTUAL del negocio). Bug real: un lead que ya habia reservado una vez con prepago_only quedaba atascado usando prepago_only para SIEMPRE en reservas futuras, aunque el usuario cambiara el config global a prepago_required para probar -- confirmado via ejecucion real (394565): confirm_booking calculo isPrepagoreRequired=false (deberia haber sido true) porque leyo lead_state.payment_mode='prepago_only' en vez del config activo."
+        fix_applied: "Prioridad invertida: agent_business_config.config.payment_mode (el ajuste de negocio ACTUAL) se chequea PRIMERO; ctx.payment_mode/lead_state.payment_mode quedan solo como fallback si el config no tiene valor (no deberia pasar en la practica). payment_mode es una decision de negocio que aplica a TODAS las reservas nuevas, no algo que deba quedar fijo por lead."
+
+  - workflow: "6.29 release_expired_payment_holds"
+    file: "(workflow nuevo, sin export local todavia -- creado directo via API, id j4DjI0eQ0eOYpAnJ)"
+    purpose: "[NUEVO 2026-07-24] Cron cada 10 minutos, con DOS ramas paralelas desde el mismo Schedule Trigger. Rama 1: libera holds de cupo (prepago_required) cuyo pago nunca se confirmo dentro de 30 minutos. Rama 2 [agregada 2026-07-24]: le recuerda al cliente que le quedan pocos minutos ANTES de que el hold expire."
+    branch_points:
+      - node: "find_expired_holds (rama 1)"
+        type: sql_filter
+        condition: "appointments.status='pending_payment' AND created_at < NOW() - INTERVAL '30 minutes'"
+        outcomes:
+          - "0 filas (caso normal) -> no hace nada, termina la ejecucion sin efectos"
+          - ">=1 fila -> borra el evento de Google Calendar (onError=continueRegularOutput + 3 reintentos, para que un evento ya borrado a mano no frene el resto del batch), marca appointments 'cancelled' (cancel_reason='payment_hold_expired'), limpia los campos de reserva/pago en lead_state, avisa al cliente"
+      - node: "find_holds_needing_reminder (rama 2, nueva)"
+        type: sql_filter
+        condition: "appointments.status='pending_payment' AND payment_hold_reminder_sent_at IS NULL AND created_at entre 15 y 25 minutos de antiguedad (ventana de 10 min, igual al intervalo del cron, para garantizar que ningun hold se salte el aviso entre corridas)"
+        outcomes:
+          - "0 filas -> no hace nada"
+          - ">=1 fila -> mark_reminder_sent (UPDATE payment_hold_reminder_sent_at=NOW(), ANTES de armar/enviar el mensaje, para garantizar como maximo un recordatorio por hold aunque el envio falle y se reintente) -> arma mensaje con el link de pago reenviado -> Call 6.1 send_hold_reminder -> log en messages"
+    note: "Decisiones de negocio confirmadas con el usuario 2026-07-24: TTL=30 min, SI avisar al cliente cuando el hold expira, y SI mandar un recordatorio a mitad de camino (~15-20 min) antes de esa expiracion -- se decidio NO construir el recordatorio equivalente para el pending general de 7 dias (6.30), solo para este hold corto donde hay un horario real en juego. Requiere columna nueva `appointments.payment_hold_reminder_sent_at` (migracion additive, nullable, aplicada 2026-07-24)."
+
+  - workflow: "6.30 reconcile_pending_payments"
+    file: "(workflow nuevo, sin export local todavia -- creado directo via API, id nRnyi0HdNMaYFFeC)"
+    purpose: "[NUEVO 2026-07-24] Cron cada 2 horas. Cierra el gap de 'la unica forma de detectar un pago perdido es que el cliente pregunte' -- recorre proactivamente lead_state.flow_order_id en estado pending y consulta la API real de Flow (payment/getStatusByFlowOrder), sin depender de que el cliente escriba. Encontrado con datos reales: 27 leads pending desde el 10-14 de julio, nunca resueltos porque nadie pregunto. Ver QA/GUide/FLOW_PAYMENT_SYSTEM_EVALUATION_2026-07-24.md, punto 2."
+    branch_points:
+      - node: "find_pending_payments"
+        type: sql_filter
+        condition: "lead_state.flow_order_id no vacio AND payment_status='pending', con edad calculada via el timestamp del ULTIMO mensaje saliente que contiene 'Monto: $' (no hay columna dedicada para cuando se genero la orden; lead_state.updated_at no sirve porque cualquier interaccion posterior no relacionada al pago lo pisa)"
+        outcomes: ["query validada contra datos reales 2026-07-24: detecta correctamente los ~26 leads pending existentes con su edad real en dias"]
+      - node: "IF payment_link_expired"
+        type: if
+        condition: "age_days >= 7 (decision de negocio confirmada con el usuario 2026-07-24)"
+        outcomes:
+          - "true -> mark_payment_expired (UPDATE payment_status='expired', sin llamar a Flow ni avisar al cliente -- se asume abandonado)"
+          - "false -> build_reconcile_signature -> HTTP GET flow getStatusByFlowOrder (mismo HMAC y onError=continueRegularOutput que 6.28) -> IF flow_says_paid"
+      - node: "IF flow_says_paid"
+        type: if
+        condition: "status===2 (pagado)"
+        outcomes:
+          - "true -> POST al propio webhook /webhook/flow-payment-confirmed (mismo mecanismo de self-heal que ya usa 6.28, reutiliza toda la logica probada de 6.27 incluyendo idempotencia)"
+          - "false -> no hace nada, se re-evalua en la proxima corrida"
+    note: "Decision de negocio confirmada con el usuario 2026-07-24: cada 2 horas, expira despues de 7 dias sin avisar al cliente (se asume abandonado). Multiples leads por corrida se procesan de forma independiente via $(\"find_pending_payments\").item.json (no .first(), a diferencia de nodos equivalentes en action_executor/6.27 que procesan un solo lead por ejecucion)."
+    extra_branch_points:
+      - node: "IF stuck_alert_needed [agregado 2026-07-24]"
+        type: if
+        condition: "age_days >= 1 (24h) AND lead_state.payment_stuck_alert_sent_at IS NULL -- rama en paralelo a la que consulta Flow (ambas corren, no son excluyentes), colgando del mismo output 'no expirado' de IF payment_link_expired"
+        outcomes:
+          - "true -> mark_stuck_alert_sent (UPDATE, ANTES de armar/mandar el mensaje, para que quede como maximo UNA alerta por pago durante toda la ventana hasta el expire de 7 dias) -> arma mensaje con lead_id/telefono/flow_order_id/antiguedad -> POST al mismo webhook de Telegram que 'Payment Error Alerts'"
+          - "false -> no hace nada"
+        note: "Requiere columna nueva lead_state.payment_stuck_alert_sent_at (migracion additive, nullable, aplicada 2026-07-24). Umbral de 24h confirmado con el usuario."
+
+  - workflow: "Payment Error Alerts"
+    file: "(workflow nuevo, sin export local todavia -- creado directo via API, id mFtn3WnwBIU0k5uF)"
+    purpose: "[NUEVO 2026-07-24] Error Trigger nativo de n8n: cualquier ejecucion fallida en 6.26/6.27/6.28/6.29/6.30 (settings.errorWorkflow apuntando a este id en los 5) dispara este workflow automaticamente, que arma un mensaje con el nombre del workflow/nodo/error y lo manda por Telegram reutilizando el webhook ya existente 'QA Notify via Telegram' (POST https://n8n.aahumada.com/webhook/qa-notify-whatsapp, mismo bot @Vendea_MainReport_bot -- no se duplico el token de Telegram, se reuso el webhook)."
+    branch_points: []
+    note: "Probado end-to-end 2026-07-24 con un POST manual al webhook de Telegram (200 OK, {sent:true}). El disparo real via Error Trigger (una ejecucion fallando de verdad) no se forzo aparte."
+
+  - workflow: "6.28 check_payment_status"
+    file: "workflows/exports/uncategorized/6.28 - 6.28 check_payment_status__id-bRPFQVB8uOwaTUyp.json"
+    purpose: "[Agregado 2026-07-24] Cuando el cliente pregunta si su pago se registro, consulta EN VIVO la API real de Flow.cl (nunca confia solo en lead_state.payment_status local). Si Flow dice pagado pero la DB local no, se auto-cura llamando a su propio webhook de confirmacion (mismo que Flow.cl llama) para que 6.27 procese todo (mensaje + DB) de forma idempotente antes de responder."
+    branch_points:
+      - node: "interpret_and_build_result"
+        type: code_branch
+        condition: "flowStatus (numerico, de payment/getStatusByFlowOrder): 1=pendiente, 2=pagado, 3=rechazado, 4=anulado"
+        outcomes:
+          - "sin flow_order_id en absoluto -> mensaje directo 'No tengo ningun pago pendiente registrado a tu nombre', sin llamar a Flow"
+          - "2 (pagado) Y local_payment_status ya es 'paid' -> mensaje de confirmacion simple, sin self-heal"
+          - "2 (pagado) Y local_payment_status NO es 'paid' -> needs_self_heal=true, message vacio (6.27 manda su propio mensaje de confirmacion via el self-heal)"
+          - "1 (pendiente) -> mensaje explicando que aun no se registra, reenvia el link de pago guardado"
+          - "3 (rechazado) -> mensaje ofreciendo generar un link nuevo"
+          - "4 (anulado) -> mensaje ofreciendo generar un link nuevo"
+      - node: "IF needs_self_heal"
+        type: if
+        condition: "$json.needs_self_heal === true"
+        outcomes:
+          - "true -> POST a su propio /webhook/flow-payment-confirmed con el token (extraido de flow_payment_url guardado, no hay columna dedicada para el token crudo) -- reutiliza 100% la logica ya arreglada y probada de 6.27, incluyendo su guard de idempotencia"
+          - "false -> pasa directo a finalize_result"
+    note: "Validado 2026-07-24 contra Flow.cl sandbox real: la rama 'pendiente' confirmada end-to-end (respuesta correcta, incluye el link de pago). Las ramas 'ya pagado' y 'self-heal' comparten el mismo bloque if/else revisado a mano pero no se forzaron con una prueba dedicada aparte (hubiera requerido un tercer pago sandbox real)."
+
+  - workflow: "6.27 payment_confirmed_webhook"
+    file: "workflows/exports/uncategorized/6.27 - 6.27 payment_confirmed_webhook__id-qogNrpBx2qu6LwYF.json"
+    purpose: "Webhook que recibe la notificacion de pago de Flow.cl, re-verifica el estado real contra la API (no confia ciegamente en el webhook), y si esta pagado crea la reserva pendiente (via 6.5) y notifica al cliente -- con guard de idempotencia para webhooks duplicados."
+    branch_points:
+      - node: "IF payment_confirmed"
+        type: if
+        condition: "$json.status === 2 (status numerico de Flow.cl GET payment/getStatus; 2=pagado)"
+        outcomes:
+          - "true -> find_lead_by_order -> [RESUELTO 2026-07-18] 'IF already_paid' -> update_payment_confirmed -> build_confirmation_msg (cualquier otro status -- pendiente, rechazado, cancelado -- cae todo junto en la rama false, sin distinguirse entre si)"
+          - "false -> respond_not_paid: {status:'not_paid'} -- retorna de inmediato, sin buscar/actualizar el lead"
+      - node: "IF already_paid [RESUELTO 2026-07-18]"
+        type: if
+        condition: "$json.payment_status === 'paid' (nuevo, campo agregado al SELECT de find_lead_by_order)"
+        outcomes:
+          - "true (ya estaba pagado, webhook duplicado) -> respond_already_processed: {status:'ok', already_processed:true} -- no re-envia mensajes ni re-crea la reserva"
+          - "false (primera confirmacion) -> update_payment_confirmed (que ademas ahora tiene 'AND payment_status IS DISTINCT FROM 'paid'' como defensa extra) -> build_confirmation_msg"
+      - node: "build_confirmation_msg"
+        type: code_branch
+        condition: "isPrepagoreRequired: pending_booking_data.payment_mode==='prepago_required' O (pending_booking presente && pending_booking.lead_id presente)"
+        outcomes:
+          - "true + pendingBooking: 'Pago confirmado! ... Tu turno para {fecha} a las {hora} esta reservado.'; action='confirm_booking_after_payment'; has_pending_booking=true"
+          - "false (o sin pendingBooking): 'Pago confirmado! ... Tu reserva esta asegurada.'; action='payment_confirmed'; has_pending_booking=false"
+      - node: "IF has_pending_booking"
+        type: if
+        condition: "$json.has_pending_booking === true"
+        outcomes:
+          - "[CAMBIADO 2026-07-24] true -> confirm_pending_payment_appointment (UPDATE appointments SET status='confirmed' sobre la fila que YA existe con status='pending_payment', creada al momento de confirmar la reserva -- ver known_gaps 'reserva del cupo prepago_required') -> update_lead_state_stage_booked (UPDATE lead_state SET stage='booked'; antes esto vivia en update_lead_state_after_booking con una expresion n8n rota '{{ \\.execution_context.lead_id }}' que nunca matcheaba ningun lead -- bug real, arreglado aca) -> restore_confirmation_payload_for_send -> converge en 'Call 6.1 send_confirmation' (mismo nodo que la rama false) -> insert_confirmation_message -> respond_ok. Ya NO llama a 6.5 (el evento de calendario y la fila de appointments se crean antes, en action_executor, no aca)."
+          - "false -> solo envia confirmacion simple de pago (sin crear GCal aca) -> Call 6.1 send_confirmation -> respond_ok"
+      - node: "build_post_payment_msg"
+        type: code_branch
+        condition: "originalMsg (execution_context.original_payment_message) presente/truthy"
+        outcomes:
+          - "presente -> finalMsg = 'Pago recibido!' + bookingMsg"
+          - "ausente -> finalMsg = bookingMsg solo"
+    note: "[RESUELTO 2026-07-18] Ver known_gaps arriba: se agrego guard de idempotencia (IF already_paid) en el camino de confirmacion de pago."

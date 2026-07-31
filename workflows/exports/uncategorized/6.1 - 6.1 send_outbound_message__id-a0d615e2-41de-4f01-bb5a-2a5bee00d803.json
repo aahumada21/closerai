@@ -1,0 +1,499 @@
+{
+  "updatedAt": "2026-06-20T18:50:38.595Z",
+  "createdAt": "2026-05-22T22:29:40.679Z",
+  "id": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+  "name": "6.1 send_outbound_message",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"lead_id\": \"uuid\",\n  \"followup_id\": \"uuid\",\n  \"phone\": \"56900000000\",\n  \"channel\": \"whatsapp\",\n  \"message\": \"Hola, mensaje de ejemplo\",\n  \"message_type\": \"followup\",\n  \"source\": \"followup_scheduler\",\n   \"chat_session_id\": \"session_del_chat_n8n\"\n}"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "send_outbound_message",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\n\nconst allowedChannels = ['whatsapp', 'n8n_chat', 'webchat'];\n\nif (!input.channel) throw new Error('Missing channel');\nif (!allowedChannels.includes(input.channel)) throw new Error('Unsupported channel: ' + input.channel);\nif (!input.phone) throw new Error('Missing phone');\nif (!input.message || typeof input.message !== 'string' || input.message.trim() === '') throw new Error('Invalid message');\n\nfunction fixMojibake(value) {\n  const text = String(value || '');\n\n  const latin1Fixed = text.replace(/[\\u00C3\\u00C2][\\u0080-\\u00BF]/g, (chunk) => {\n    try {\n      return Buffer.from(chunk, 'latin1').toString('utf8');\n    } catch {\n      return chunk;\n    }\n  });\n\n  const replacements = [\n    ['\\u252c\\u2510', '\\u00bf'],\n    ['\\u252c\\u00ed', '\\u00a1'],\n    ['\\u251c\\u00ed', '\\u00ed'],\n    ['\\u251c\\u00a1', '\\u00e1'],\n    ['\\u251c\\u2310', '\\u00e9'],\n    ['\\u251c\\u2502', '\\u00f3'],\n    ['\\u251c\\u2551', '\\u00fa'],\n    ['\\u251c\\u2592', '\\u00f1'],\n    ['\\u251c\\u00e2', '\\u00bf'],\n    ['\\u251c\\u00a9', '\\u00e9'],\n    ['\\ufffd', '']\n  ];\n\n  let fixed = latin1Fixed;\n  for (const [from, to] of replacements) {\n    fixed = fixed.split(from).join(to);\n  }\n  return fixed.trim();\n}\n\n// El formato Chile (56...) solo aplica al canal whatsapp (lo exige la API\n// de WhatsApp Cloud). Otros canales (webchat, n8n_chat) usan su propio\n// identificador de lead como 'phone' interno, no un numero real.\nlet phone = input.phone.toString();\nif (input.channel === 'whatsapp') {\n  phone = phone.replace(/\\D/g, '');\n  if (!phone.startsWith('56')) throw new Error('Phone must be Chile format (56...)');\n}\nconst message = fixMojibake(input.message);\n\nif (!message) throw new Error('Invalid message after mojibake fix');\n\nreturn [{ json: { ...input, phone, message } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        352
+      ],
+      "id": "44b8194f-27ab-4a53-a5c8-f708b2e66d5b",
+      "name": "validate_outbound_input"
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{\n({\n  whatsapp: 0,\n  n8n_chat: 1,\n  webchat: 2\n})[$json.channel] ?? -1\n}}"
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        352
+      ],
+      "id": "d7b88e07-b575-4442-bdbc-3899fa2ba3e1",
+      "name": "channel_router",
+      "notes": "Whatsapp Buisness = 0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const providerResponse = $json;\nconst originalInput = $(\"validate_outbound_input\").first().json;\n\nconst hasError = providerResponse.error !== undefined;\n\nreturn [{\n  json: {\n    ...originalInput,\n    success: !hasError,\n    message_sent: !hasError,\n    provider_message_id: providerResponse.messages?.[0]?.id || null,\n    provider_status: hasError ? \"failed\" : \"accepted\",\n    provider_error: hasError ? providerResponse.error : null,\n    provider_raw_response: providerResponse,\n    message_type: originalInput.message_type || \"text\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        208
+      ],
+      "id": "02791725-9e0e-47e8-a40e-7b4c45622191",
+      "name": "normalize_provider_response"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1024332077436840",
+        "recipientPhoneNumber": "={{$json.phone}}",
+        "textBody": "={{$json.message}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        272
+      ],
+      "id": "1fd3b6ff-7de6-40d7-8a34-69508cfaf118",
+      "name": "WB Send",
+      "webhookId": "b12031f6-9743-49ec-b9f6-0551b2cf302b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "lHyvwqasIbVP59b8",
+          "name": "WhatsApp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalInput = $(\"validate_outbound_input\").first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `n8n_chat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"n8n_chat\",\n        simulated_delivery: true,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        448
+      ],
+      "id": "ebd24374-ef60-4a8c-bded-699fdbc02175",
+      "name": "build_n8n_chat_response"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      ...$json,\n      outbound_completed: true\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        448
+      ],
+      "id": "6dd24022-10dd-4a6d-83de-039c84664132",
+      "name": "final_outbound_result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalInput = $(\"validate_outbound_input\").first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `webchat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"webchat_widget\",\n        simulated_delivery: true,\n        widget_id: originalInput.execution_context?.source_metadata?.widget_id || null,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        608
+      ],
+      "id": "b9e6f2a1-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "name": "build_webchat_response"
+    }
+  ],
+  "connections": {
+    "send_outbound_message": {
+      "main": [
+        [
+          {
+            "node": "validate_outbound_input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_outbound_input": {
+      "main": [
+        [
+          {
+            "node": "channel_router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "channel_router": {
+      "main": [
+        [
+          {
+            "node": "WB Send",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_n8n_chat_response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_webchat_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WB Send": {
+      "main": [
+        [
+          {
+            "node": "normalize_provider_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_provider_response": {
+      "main": [
+        [
+          {
+            "node": "final_outbound_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_n8n_chat_response": {
+      "main": [
+        [
+          {
+            "node": "final_outbound_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_webchat_response": {
+      "main": [
+        [
+          {
+            "node": "final_outbound_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "16cafd43-321b-4aed-a9a5-2c784a12699c",
+  "activeVersionId": "16cafd43-321b-4aed-a9a5-2c784a12699c",
+  "versionCounter": 55,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-20T18:50:38.603Z",
+    "createdAt": "2026-06-20T18:50:38.603Z",
+    "versionId": "16cafd43-321b-4aed-a9a5-2c784a12699c",
+    "workflowId": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\n  \"lead_id\": \"uuid\",\n  \"followup_id\": \"uuid\",\n  \"phone\": \"56900000000\",\n  \"channel\": \"whatsapp\",\n  \"message\": \"Hola, mensaje de ejemplo\",\n  \"message_type\": \"followup\",\n  \"source\": \"followup_scheduler\",\n   \"chat_session_id\": \"session_del_chat_n8n\"\n}"
+        },
+        "id": "c055762a-8fe7-4141-a639-df2372f30060",
+        "typeVersion": 1.1,
+        "name": "send_outbound_message",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "position": [
+          272,
+          352
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json;\n\nconst allowedChannels = ['whatsapp', 'n8n_chat', 'webchat'];\n\nif (!input.channel) throw new Error('Missing channel');\nif (!allowedChannels.includes(input.channel)) throw new Error('Unsupported channel: ' + input.channel);\nif (!input.phone) throw new Error('Missing phone');\nif (!input.message || typeof input.message !== 'string' || input.message.trim() === '') throw new Error('Invalid message');\n\nfunction fixMojibake(value) {\n  const text = String(value || '');\n\n  const latin1Fixed = text.replace(/[\\u00C3\\u00C2][\\u0080-\\u00BF]/g, (chunk) => {\n    try {\n      return Buffer.from(chunk, 'latin1').toString('utf8');\n    } catch {\n      return chunk;\n    }\n  });\n\n  const replacements = [\n    ['\\u252c\\u2510', '\\u00bf'],\n    ['\\u252c\\u00ed', '\\u00a1'],\n    ['\\u251c\\u00ed', '\\u00ed'],\n    ['\\u251c\\u00a1', '\\u00e1'],\n    ['\\u251c\\u2310', '\\u00e9'],\n    ['\\u251c\\u2502', '\\u00f3'],\n    ['\\u251c\\u2551', '\\u00fa'],\n    ['\\u251c\\u2592', '\\u00f1'],\n    ['\\u251c\\u00e2', '\\u00bf'],\n    ['\\u251c\\u00a9', '\\u00e9'],\n    ['\\ufffd', '']\n  ];\n\n  let fixed = latin1Fixed;\n  for (const [from, to] of replacements) {\n    fixed = fixed.split(from).join(to);\n  }\n  return fixed.trim();\n}\n\n// El formato Chile (56...) solo aplica al canal whatsapp (lo exige la API\n// de WhatsApp Cloud). Otros canales (webchat, n8n_chat) usan su propio\n// identificador de lead como 'phone' interno, no un numero real.\nlet phone = input.phone.toString();\nif (input.channel === 'whatsapp') {\n  phone = phone.replace(/\\D/g, '');\n  if (!phone.startsWith('56')) throw new Error('Phone must be Chile format (56...)');\n}\nconst message = fixMojibake(input.message);\n\nif (!message) throw new Error('Invalid message after mojibake fix');\n\nreturn [{ json: { ...input, phone, message } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          352
+        ],
+        "id": "44b8194f-27ab-4a53-a5c8-f708b2e66d5b",
+        "name": "validate_outbound_input"
+      },
+      {
+        "parameters": {
+          "mode": "expression",
+          "numberOutputs": 3,
+          "output": "={{\n({\n  whatsapp: 0,\n  n8n_chat: 1,\n  webchat: 2\n})[$json.channel] ?? -1\n}}"
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          688,
+          352
+        ],
+        "id": "d7b88e07-b575-4442-bdbc-3899fa2ba3e1",
+        "name": "channel_router",
+        "notes": "Whatsapp Buisness = 0"
+      },
+      {
+        "parameters": {
+          "jsCode": "const providerResponse = $json;\nconst originalInput = $(\"validate_outbound_input\").first().json;\n\nconst hasError = providerResponse.error !== undefined;\n\nreturn [{\n  json: {\n    ...originalInput,\n    success: !hasError,\n    message_sent: !hasError,\n    provider_message_id: providerResponse.messages?.[0]?.id || null,\n    provider_status: hasError ? \"failed\" : \"accepted\",\n    provider_error: hasError ? providerResponse.error : null,\n    provider_raw_response: providerResponse,\n    message_type: originalInput.message_type || \"text\"\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          208
+        ],
+        "id": "02791725-9e0e-47e8-a40e-7b4c45622191",
+        "name": "normalize_provider_response"
+      },
+      {
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1024332077436840",
+          "recipientPhoneNumber": "={{$json.phone}}",
+          "textBody": "={{$json.message}}",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          912,
+          272
+        ],
+        "id": "1fd3b6ff-7de6-40d7-8a34-69508cfaf118",
+        "name": "WB Send",
+        "webhookId": "b12031f6-9743-49ec-b9f6-0551b2cf302b",
+        "credentials": {
+          "whatsAppApi": {
+            "id": "lHyvwqasIbVP59b8",
+            "name": "WhatsApp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const originalInput = $(\"validate_outbound_input\").first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `n8n_chat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"n8n_chat\",\n        simulated_delivery: true,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          448
+        ],
+        "id": "ebd24374-ef60-4a8c-bded-699fdbc02175",
+        "name": "build_n8n_chat_response"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      ...$json,\n      outbound_completed: true\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1104,
+          448
+        ],
+        "id": "6dd24022-10dd-4a6d-83de-039c84664132",
+        "name": "final_outbound_result"
+      },
+      {
+        "parameters": {
+          "jsCode": "const originalInput = $(\"validate_outbound_input\").first().json;\n\nreturn [\n  {\n    json: {\n      ...originalInput,\n      success: true,\n      message_sent: true,\n      provider_message_id: `webchat_${Date.now()}`,\n      provider_status: \"accepted\",\n      provider_error: null,\n      provider_raw_response: {\n        provider: \"webchat_widget\",\n        simulated_delivery: true,\n        widget_id: originalInput.execution_context?.source_metadata?.widget_id || null,\n        chat_session_id: originalInput.chat_session_id || null\n      },\n      message_type: originalInput.message_type || \"text\"\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          608
+        ],
+        "id": "b9e6f2a1-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        "name": "build_webchat_response"
+      }
+    ],
+    "connections": {
+      "send_outbound_message": {
+        "main": [
+          [
+            {
+              "node": "validate_outbound_input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_outbound_input": {
+        "main": [
+          [
+            {
+              "node": "channel_router",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "channel_router": {
+        "main": [
+          [
+            {
+              "node": "WB Send",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_n8n_chat_response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_webchat_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "WB Send": {
+        "main": [
+          [
+            {
+              "node": "normalize_provider_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "normalize_provider_response": {
+        "main": [
+          [
+            {
+              "node": "final_outbound_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_n8n_chat_response": {
+        "main": [
+          [
+            {
+              "node": "final_outbound_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_webchat_response": {
+        "main": [
+          [
+            {
+              "node": "final_outbound_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-20T18:50:38.898Z",
+        "id": 1388,
+        "workflowId": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+        "versionId": "16cafd43-321b-4aed-a9a5-2c784a12699c",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-06-20T18:50:38.839Z",
+        "id": 1387,
+        "workflowId": "a0d615e2-41de-4f01-bb5a-2a5bee00d803",
+        "versionId": "16cafd43-321b-4aed-a9a5-2c784a12699c",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

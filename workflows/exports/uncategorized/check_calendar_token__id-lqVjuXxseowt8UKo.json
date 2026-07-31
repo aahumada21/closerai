@@ -1,0 +1,945 @@
+{
+  "updatedAt": "2026-07-05T15:04:31.746Z",
+  "createdAt": "2026-07-05T15:04:31.746Z",
+  "id": "lqVjuXxseowt8UKo",
+  "name": "check_calendar_token",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wh1",
+      "name": "Webhook check_calendar_token",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "check-calendar-token",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "check-calendar-token",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "code1",
+      "name": "validate_auth_header",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+      }
+    },
+    {
+      "id": "resp401",
+      "name": "Respond unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": false, \"error\": \"unauthorized\" }",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "pg1",
+      "name": "DB lookup_calendar_token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT access_token, refresh_token, access_token_expires_at FROM google_calendar_connections WHERE agent_id = '{{ $json.agent_id }}'::uuid LIMIT 1;",
+        "options": {}
+      }
+    },
+    {
+      "id": "if1",
+      "name": "IF token_exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.access_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "resp_no",
+      "name": "Respond no_token",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": false, \"error\": \"no_token\" }",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "http1",
+      "name": "test_google_calendar_api",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        180
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "if2",
+      "name": "IF token_valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "resp_ok1",
+      "name": "Respond ok",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        60
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "http2",
+      "name": "try_refresh_token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://oauth2.googleapis.com/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $('DB lookup_calendar_token').first().json.refresh_token }}"
+            },
+            {
+              "name": "client_id",
+              "value": "={{ $env.GOOGLE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.GOOGLE_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "if3",
+      "name": "IF refresh_ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3",
+              "leftValue": "={{ $json.access_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "pg2",
+      "name": "DB save_refreshed_token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2160,
+        180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE google_calendar_connections SET access_token='{{ $json.access_token }}', access_token_expires_at=NOW()+INTERVAL '1 hour', updated_at=NOW() WHERE agent_id='{{ $(\"validate_auth_header\").first().json.agent_id }}'::uuid;",
+        "options": {}
+      }
+    },
+    {
+      "id": "resp_ok2",
+      "name": "Respond ok after refresh",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "resp_exp",
+      "name": "Respond token_expired",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        420
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": false, \"error\": \"token_expired\" }",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook check_calendar_token": {
+      "main": [
+        [
+          {
+            "node": "validate_auth_header",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_auth_header": {
+      "main": [
+        [
+          {
+            "node": "DB lookup_calendar_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB lookup_calendar_token": {
+      "main": [
+        [
+          {
+            "node": "IF token_exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF token_exists": {
+      "main": [
+        [
+          {
+            "node": "test_google_calendar_api",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond no_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "test_google_calendar_api": {
+      "main": [
+        [
+          {
+            "node": "IF token_valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF token_valid": {
+      "main": [
+        [
+          {
+            "node": "Respond ok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "try_refresh_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "try_refresh_token": {
+      "main": [
+        [
+          {
+            "node": "IF refresh_ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF refresh_ok": {
+      "main": [
+        [
+          {
+            "node": "DB save_refreshed_token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond token_expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB save_refreshed_token": {
+      "main": [
+        [
+          {
+            "node": "Respond ok after refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+  "activeVersionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-07-05T15:04:31.77Z",
+      "createdAt": "2026-07-05T15:04:31.77Z",
+      "role": "workflow:owner",
+      "workflowId": "lqVjuXxseowt8UKo",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-05T15:04:31.784Z",
+    "createdAt": "2026-07-05T15:04:31.784Z",
+    "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+    "workflowId": "lqVjuXxseowt8UKo",
+    "nodes": [
+      {
+        "id": "wh1",
+        "name": "Webhook check_calendar_token",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          240,
+          300
+        ],
+        "webhookId": "check-calendar-token",
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "check-calendar-token",
+          "responseMode": "responseNode",
+          "options": {}
+        }
+      },
+      {
+        "id": "code1",
+        "name": "validate_auth_header",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ],
+        "parameters": {
+          "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+        }
+      },
+      {
+        "id": "resp401",
+        "name": "Respond unauthorized",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          480,
+          500
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={ \"ok\": false, \"error\": \"unauthorized\" }",
+          "options": {
+            "responseCode": 401
+          }
+        }
+      },
+      {
+        "id": "pg1",
+        "name": "DB lookup_calendar_token",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          720,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT access_token, refresh_token, access_token_expires_at FROM google_calendar_connections WHERE agent_id = '{{ $json.agent_id }}'::uuid LIMIT 1;",
+          "options": {}
+        }
+      },
+      {
+        "id": "if1",
+        "name": "IF token_exists",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          960,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c1",
+                "leftValue": "={{ $json.access_token }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "resp_no",
+        "name": "Respond no_token",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1200,
+          480
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={ \"ok\": false, \"error\": \"no_token\" }",
+          "options": {
+            "responseCode": 200
+          }
+        }
+      },
+      {
+        "id": "http1",
+        "name": "test_google_calendar_api",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          180
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "GET",
+          "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $json.access_token }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "if2",
+        "name": "IF token_valid",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1440,
+          180
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c2",
+                "leftValue": "={{ $json.kind }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "resp_ok1",
+        "name": "Respond ok",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1680,
+          60
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={ \"ok\": true }",
+          "options": {
+            "responseCode": 200
+          }
+        }
+      },
+      {
+        "id": "http2",
+        "name": "try_refresh_token",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1680,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "https://oauth2.googleapis.com/token",
+          "sendBody": true,
+          "contentType": "form-urlencoded",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "grant_type",
+                "value": "refresh_token"
+              },
+              {
+                "name": "refresh_token",
+                "value": "={{ $('DB lookup_calendar_token').first().json.refresh_token }}"
+              },
+              {
+                "name": "client_id",
+                "value": "={{ $env.GOOGLE_CLIENT_ID }}"
+              },
+              {
+                "name": "client_secret",
+                "value": "={{ $env.GOOGLE_SECRET }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "if3",
+        "name": "IF refresh_ok",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1920,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c3",
+                "leftValue": "={{ $json.access_token }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "pg2",
+        "name": "DB save_refreshed_token",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          2160,
+          180
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE google_calendar_connections SET access_token='{{ $json.access_token }}', access_token_expires_at=NOW()+INTERVAL '1 hour', updated_at=NOW() WHERE agent_id='{{ $(\"validate_auth_header\").first().json.agent_id }}'::uuid;",
+          "options": {}
+        }
+      },
+      {
+        "id": "resp_ok2",
+        "name": "Respond ok after refresh",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2400,
+          180
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={ \"ok\": true }",
+          "options": {
+            "responseCode": 200
+          }
+        }
+      },
+      {
+        "id": "resp_exp",
+        "name": "Respond token_expired",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2160,
+          420
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={ \"ok\": false, \"error\": \"token_expired\" }",
+          "options": {
+            "responseCode": 200
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook check_calendar_token": {
+        "main": [
+          [
+            {
+              "node": "validate_auth_header",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_auth_header": {
+        "main": [
+          [
+            {
+              "node": "DB lookup_calendar_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB lookup_calendar_token": {
+        "main": [
+          [
+            {
+              "node": "IF token_exists",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF token_exists": {
+        "main": [
+          [
+            {
+              "node": "test_google_calendar_api",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond no_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "test_google_calendar_api": {
+        "main": [
+          [
+            {
+              "node": "IF token_valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF token_valid": {
+        "main": [
+          [
+            {
+              "node": "Respond ok",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "try_refresh_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "try_refresh_token": {
+        "main": [
+          [
+            {
+              "node": "IF refresh_ok",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF refresh_ok": {
+        "main": [
+          [
+            {
+              "node": "DB save_refreshed_token",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond token_expired",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB save_refreshed_token": {
+        "main": [
+          [
+            {
+              "node": "Respond ok after refresh",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-05T15:04:34.167Z",
+        "id": 1744,
+        "workflowId": "lqVjuXxseowt8UKo",
+        "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

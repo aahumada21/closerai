@@ -1,0 +1,785 @@
+{
+  "updatedAt": "2026-07-05T15:34:31.746Z",
+  "createdAt": "2026-07-05T15:31:26.656Z",
+  "id": "bP1pWj4IkF5wbjMN",
+  "name": "get_valid_calendar_token",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "trigger1",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\"agent_id\":\"\"}"
+      }
+    },
+    {
+      "id": "pg_read",
+      "name": "DB read_agent_tokens",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT google_access_token, google_refresh_token, google_token_expires_at FROM agents WHERE id = '{{ $json.agent_id }}'::uuid LIMIT 1;",
+        "options": {}
+      }
+    },
+    {
+      "id": "code_check",
+      "name": "check_token_validity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\nconst expiresAt = row.google_token_expires_at ? new Date(row.google_token_expires_at) : null;\nconst now = new Date();\nconst fiveMin = 5 * 60 * 1000;\nconst needsRefresh = !expiresAt || !row.google_access_token || (expiresAt - now) < fiveMin;\nreturn [{ json: {\n  needs_refresh: needsRefresh,\n  access_token: row.google_access_token,\n  refresh_token: row.google_refresh_token,\n  agent_id: $('When Executed by Another Workflow').first().json.agent_id\n}}];"
+      }
+    },
+    {
+      "id": "if_refresh",
+      "name": "IF needs_refresh",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.needs_refresh }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "http_refresh",
+      "name": "refresh_access_token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        180
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://oauth2.googleapis.com/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.refresh_token }}"
+            },
+            {
+              "name": "client_id",
+              "value": "1010991582940-ot8anumf8gk665t2km3rvjn6b4411915.apps.googleusercontent.com"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.GOOGLE_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "if_refresh_ok",
+      "name": "IF refresh_ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.access_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "code_expires",
+      "name": "build_token_update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        60
+      ],
+      "parameters": {
+        "jsCode": "const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();\nreturn [{ json: { access_token: $json.access_token, expires_at: expiresAt, agent_id: $('check_token_validity').first().json.agent_id }}];"
+      }
+    },
+    {
+      "id": "pg_save",
+      "name": "DB save_new_token",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1920,
+        60
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE agents SET google_access_token='{{ $json.access_token }}', google_token_expires_at='{{ $json.expires_at }}'::timestamptz, updated_at=NOW() WHERE id='{{ $json.agent_id }}'::uuid;",
+        "options": {}
+      }
+    },
+    {
+      "id": "output_new",
+      "name": "output_refreshed_token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        60
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { access_token: $('build_token_update').first().json.access_token }}];"
+      }
+    },
+    {
+      "id": "output_cached",
+      "name": "output_cached_token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        480
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { access_token: $('check_token_validity').first().json.access_token }}];"
+      }
+    },
+    {
+      "id": "pg_disconnect",
+      "name": "DB mark_disconnected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE agents SET google_calendar_connected=false, updated_at=NOW() WHERE id='{{ $(\"check_token_validity\").first().json.agent_id }}'::uuid;",
+        "options": {}
+      }
+    },
+    {
+      "id": "output_fail",
+      "name": "output_token_expired",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { access_token: null, error: 'token_expired' }}];"
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "DB read_agent_tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB read_agent_tokens": {
+      "main": [
+        [
+          {
+            "node": "check_token_validity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_token_validity": {
+      "main": [
+        [
+          {
+            "node": "IF needs_refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF needs_refresh": {
+      "main": [
+        [
+          {
+            "node": "refresh_access_token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "output_cached_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "refresh_access_token": {
+      "main": [
+        [
+          {
+            "node": "IF refresh_ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF refresh_ok": {
+      "main": [
+        [
+          {
+            "node": "build_token_update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB mark_disconnected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_token_update": {
+      "main": [
+        [
+          {
+            "node": "DB save_new_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB save_new_token": {
+      "main": [
+        [
+          {
+            "node": "output_refreshed_token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB mark_disconnected": {
+      "main": [
+        [
+          {
+            "node": "output_token_expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "a2a8dd7a-ddc4-42fc-ae5a-25b930da9424",
+  "activeVersionId": "a2a8dd7a-ddc4-42fc-ae5a-25b930da9424",
+  "versionCounter": 5,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-07-05T15:31:26.665Z",
+      "createdAt": "2026-07-05T15:31:26.665Z",
+      "role": "workflow:owner",
+      "workflowId": "bP1pWj4IkF5wbjMN",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-05T15:34:31.748Z",
+    "createdAt": "2026-07-05T15:34:31.748Z",
+    "versionId": "a2a8dd7a-ddc4-42fc-ae5a-25b930da9424",
+    "workflowId": "bP1pWj4IkF5wbjMN",
+    "nodes": [
+      {
+        "id": "trigger1",
+        "name": "When Executed by Another Workflow",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          240,
+          300
+        ],
+        "parameters": {
+          "inputSource": "jsonExample",
+          "jsonExample": "{\"agent_id\":\"\"}"
+        }
+      },
+      {
+        "id": "pg_read",
+        "name": "DB read_agent_tokens",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          480,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT google_access_token, google_refresh_token, google_token_expires_at FROM agents WHERE id = '{{ $json.agent_id }}'::uuid LIMIT 1;",
+          "options": {}
+        }
+      },
+      {
+        "id": "code_check",
+        "name": "check_token_validity",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          300
+        ],
+        "parameters": {
+          "jsCode": "const row = $input.first().json;\nconst expiresAt = row.google_token_expires_at ? new Date(row.google_token_expires_at) : null;\nconst now = new Date();\nconst fiveMin = 5 * 60 * 1000;\nconst needsRefresh = !expiresAt || !row.google_access_token || (expiresAt - now) < fiveMin;\nreturn [{ json: {\n  needs_refresh: needsRefresh,\n  access_token: row.google_access_token,\n  refresh_token: row.google_refresh_token,\n  agent_id: $('When Executed by Another Workflow').first().json.agent_id\n}}];"
+        }
+      },
+      {
+        "id": "if_refresh",
+        "name": "IF needs_refresh",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          960,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c1",
+                "leftValue": "={{ $json.needs_refresh }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "http_refresh",
+        "name": "refresh_access_token",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          180
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "method": "POST",
+          "url": "https://oauth2.googleapis.com/token",
+          "sendBody": true,
+          "contentType": "form-urlencoded",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "grant_type",
+                "value": "refresh_token"
+              },
+              {
+                "name": "refresh_token",
+                "value": "={{ $json.refresh_token }}"
+              },
+              {
+                "name": "client_id",
+                "value": "1010991582940-ot8anumf8gk665t2km3rvjn6b4411915.apps.googleusercontent.com"
+              },
+              {
+                "name": "client_secret",
+                "value": "={{ $env.GOOGLE_SECRET }}"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "if_refresh_ok",
+        "name": "IF refresh_ok",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1440,
+          180
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c2",
+                "leftValue": "={{ $json.access_token }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "code_expires",
+        "name": "build_token_update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          60
+        ],
+        "parameters": {
+          "jsCode": "const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();\nreturn [{ json: { access_token: $json.access_token, expires_at: expiresAt, agent_id: $('check_token_validity').first().json.agent_id }}];"
+        }
+      },
+      {
+        "id": "pg_save",
+        "name": "DB save_new_token",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1920,
+          60
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE agents SET google_access_token='{{ $json.access_token }}', google_token_expires_at='{{ $json.expires_at }}'::timestamptz, updated_at=NOW() WHERE id='{{ $json.agent_id }}'::uuid;",
+          "options": {}
+        }
+      },
+      {
+        "id": "output_new",
+        "name": "output_refreshed_token",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2160,
+          60
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { access_token: $('build_token_update').first().json.access_token }}];"
+        }
+      },
+      {
+        "id": "output_cached",
+        "name": "output_cached_token",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          480
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { access_token: $('check_token_validity').first().json.access_token }}];"
+        }
+      },
+      {
+        "id": "pg_disconnect",
+        "name": "DB mark_disconnected",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1680,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE agents SET google_calendar_connected=false, updated_at=NOW() WHERE id='{{ $(\"check_token_validity\").first().json.agent_id }}'::uuid;",
+          "options": {}
+        }
+      },
+      {
+        "id": "output_fail",
+        "name": "output_token_expired",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1920,
+          300
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { access_token: null, error: 'token_expired' }}];"
+        }
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
+            {
+              "node": "DB read_agent_tokens",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB read_agent_tokens": {
+        "main": [
+          [
+            {
+              "node": "check_token_validity",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "check_token_validity": {
+        "main": [
+          [
+            {
+              "node": "IF needs_refresh",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF needs_refresh": {
+        "main": [
+          [
+            {
+              "node": "refresh_access_token",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "output_cached_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "refresh_access_token": {
+        "main": [
+          [
+            {
+              "node": "IF refresh_ok",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF refresh_ok": {
+        "main": [
+          [
+            {
+              "node": "build_token_update",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "DB mark_disconnected",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_token_update": {
+        "main": [
+          [
+            {
+              "node": "DB save_new_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB save_new_token": {
+        "main": [
+          [
+            {
+              "node": "output_refreshed_token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB mark_disconnected": {
+        "main": [
+          [
+            {
+              "node": "output_token_expired",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-05T15:34:33.492Z",
+        "id": 1745,
+        "workflowId": "bP1pWj4IkF5wbjMN",
+        "versionId": "a2a8dd7a-ddc4-42fc-ae5a-25b930da9424",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

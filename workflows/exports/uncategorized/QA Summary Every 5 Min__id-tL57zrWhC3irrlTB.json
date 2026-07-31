@@ -1,0 +1,418 @@
+{
+  "updatedAt": "2026-07-04T18:32:50.705Z",
+  "createdAt": "2026-07-04T18:00:20.655Z",
+  "id": "tL57zrWhC3irrlTB",
+  "name": "QA Summary Every 5 Min",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "sched1",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "qry1",
+      "name": "Query QA last 5 min",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*)::int AS total_completados, count(*) FILTER (WHERE llm_passed = true)::int AS total_pasados, count(*) FILTER (WHERE llm_passed = false AND llm_notes NOT LIKE '%No se pudo%')::int AS total_fallidos FROM qa_test_results WHERE created_at > NOW() - INTERVAL '5 minutes' AND llm_passed IS NOT NULL;",
+        "options": {}
+      }
+    },
+    {
+      "id": "if1",
+      "name": "IF hay resultados",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ Number($json.total_completados) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "code1",
+      "name": "Build WA message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const total=Number($json.total_completados||0);const pasados=Number($json.total_pasados||0);const fallidos=Number($json.total_fallidos||0);const pct=total>0?Math.round((pasados/total)*100):0;const hora=new Date().toISOString().substring(11,16);const msg=`QA Resumen (${hora} UTC):\\n- Completados: ${total}\\n- Pasados: ${pasados} (${pct}%)\\n- Fallidos: ${fallidos}`;return [{chatId:'1734857807',message:msg}];"
+      }
+    },
+    {
+      "id": "wa1",
+      "name": "WB Send Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1200,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8977117395:AAEOezIQYMbWRRF62th2v5C9vhaybcoDhUU/sendMessage",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Query QA last 5 min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query QA last 5 min": {
+      "main": [
+        [
+          {
+            "node": "IF hay resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF hay resultados": {
+      "main": [
+        [
+          {
+            "node": "Build WA message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build WA message": {
+      "main": [
+        [
+          {
+            "node": "WB Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {
+    "node:Every 5 Minutes": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+  "activeVersionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+  "versionCounter": 17,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-07-04T18:00:20.715Z",
+      "createdAt": "2026-07-04T18:00:20.715Z",
+      "role": "workflow:owner",
+      "workflowId": "tL57zrWhC3irrlTB",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-04T18:32:50.722Z",
+    "createdAt": "2026-07-04T18:32:50.722Z",
+    "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+    "workflowId": "tL57zrWhC3irrlTB",
+    "nodes": [
+      {
+        "id": "sched1",
+        "name": "Every 5 Minutes",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          240,
+          300
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "qry1",
+        "name": "Query QA last 5 min",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          480,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT count(*)::int AS total_completados, count(*) FILTER (WHERE llm_passed = true)::int AS total_pasados, count(*) FILTER (WHERE llm_passed = false AND llm_notes NOT LIKE '%No se pudo%')::int AS total_fallidos FROM qa_test_results WHERE created_at > NOW() - INTERVAL '5 minutes' AND llm_passed IS NOT NULL;",
+          "options": {}
+        }
+      },
+      {
+        "id": "if1",
+        "name": "IF hay resultados",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          720,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "c1",
+                "leftValue": "={{ Number($json.total_completados) }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true
+        }
+      },
+      {
+        "id": "code1",
+        "name": "Build WA message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          240
+        ],
+        "parameters": {
+          "jsCode": "const total=Number($json.total_completados||0);const pasados=Number($json.total_pasados||0);const fallidos=Number($json.total_fallidos||0);const pct=total>0?Math.round((pasados/total)*100):0;const hora=new Date().toISOString().substring(11,16);const msg=`QA Resumen (${hora} UTC):\\n- Completados: ${total}\\n- Pasados: ${pasados} (${pct}%)\\n- Fallidos: ${fallidos}`;return [{phone:'56930977617',message:msg}];"
+        }
+      },
+      {
+        "id": "wa1",
+        "name": "WB Send Summary",
+        "type": "n8n-nodes-base.whatsApp",
+        "typeVersion": 1.1,
+        "position": [
+          1200,
+          240
+        ],
+        "credentials": {
+          "whatsAppApi": {
+            "id": "lHyvwqasIbVP59b8",
+            "name": "WhatsApp account"
+          }
+        },
+        "parameters": {
+          "operation": "send",
+          "phoneNumberId": "1024332077436840",
+          "recipientPhoneNumber": "={{$json.phone}}",
+          "textBody": "={{$json.message}}",
+          "additionalFields": {}
+        },
+        "webhookId": "e7318fe8-bed5-448d-bd32-0c6e4b151563"
+      }
+    ],
+    "connections": {
+      "Every 5 Minutes": {
+        "main": [
+          [
+            {
+              "node": "Query QA last 5 min",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query QA last 5 min": {
+        "main": [
+          [
+            {
+              "node": "IF hay resultados",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF hay resultados": {
+        "main": [
+          [
+            {
+              "node": "Build WA message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Build WA message": {
+        "main": [
+          [
+            {
+              "node": "WB Send Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-04T18:32:50.973Z",
+        "id": 1729,
+        "workflowId": "tL57zrWhC3irrlTB",
+        "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-14T13:27:13.381Z",
+        "id": 2011,
+        "workflowId": "tL57zrWhC3irrlTB",
+        "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-04T18:32:50.894Z",
+        "id": 1728,
+        "workflowId": "tL57zrWhC3irrlTB",
+        "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-13T20:36:21.053Z",
+        "id": 2000,
+        "workflowId": "tL57zrWhC3irrlTB",
+        "versionId": "946c444f-1727-4c2d-af36-8c0a0fcc13fa",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

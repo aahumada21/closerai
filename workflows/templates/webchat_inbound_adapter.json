@@ -1,0 +1,286 @@
+{
+  "name": "webchat_inbound_adapter",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "webchat-inbound",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        120
+      ],
+      "id": "webchat-webhook-post",
+      "name": "WEBHOOK webchat_post"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\nconst query = input.query || {};\nconst receivedAt = new Date().toISOString();\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || '') : '';\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();\n  }\n  return '';\n}\n\nfunction cleanText(value) {\n  return String(value || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction safePart(value, fallback) {\n  const text = String(value || fallback || '').trim();\n  return text.replace(/[^a-zA-Z0-9_.:-]/g, '_') || fallback;\n}\n\nfunction hashText(value) {\n  const text = String(value || '');\n  let hash = 0;\n  for (let i = 0; i < text.length; i++) {\n    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;\n  }\n  return Math.abs(hash).toString(36);\n}\n\nconst expectedToken = firstValue($env.WEBCHAT_WIDGET_TOKEN, $env.WEBCHAT_SHARED_SECRET);\nconst authHeader = header('authorization');\nconst bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';\nconst providedToken = firstValue(header('x-webchat-token'), bearerToken, query.token, body.token);\nconst widgetId = firstValue(body.widget_id, body.widgetId, query.widget_id, query.widgetId);\nconst visitorId = firstValue(body.visitor_id, body.visitorId, body.contact?.external_id, query.visitor_id, query.visitorId);\nconst sessionId = firstValue(body.session_id, body.sessionId, query.session_id, query.sessionId);\nconst text = cleanText(body.text || body.message || body.body);\nconst messageId = firstValue(body.message_id, body.messageId, ['web', widgetId, visitorId || sessionId, hashText(text), body.timestamp || receivedAt].join('_'));\nconst leadKey = visitorId || sessionId;\nconst leadId = leadKey ? 'web_' + leadKey : null;\nconst idempotencyKey = ['web_msg', safePart(widgetId, 'missing_widget'), safePart(messageId, 'missing_message')].join('__');\n\nlet error = null;\nif (!expectedToken) error = 'missing_webchat_token_config';\nelse if (!providedToken || providedToken !== expectedToken) error = 'invalid_webchat_token';\nelse if (!widgetId) error = 'missing_widget_id';\nelse if (!leadKey) error = 'missing_visitor_or_session_id';\nelse if (!text) error = 'missing_text';\n\nconst normalized = {\n  event_type: error ? 'discarded' : 'message',\n  channel: 'webchat',\n  provider: 'webchat_widget',\n  external_channel_id: widgetId || null,\n  widget_id: widgetId || null,\n  lead_id: leadId,\n  message_id: messageId,\n  timestamp: firstValue(body.timestamp, receivedAt),\n  message_type: 'text',\n  text,\n  contact: {\n    external_id: leadKey || null,\n    visitor_id: visitorId || null,\n    session_id: sessionId || null,\n    name: firstValue(body.name, body.contact?.name) || null,\n    email: firstValue(body.email, body.contact?.email) || null,\n    phone: firstValue(body.phone, body.contact?.phone) || null\n  },\n  source_metadata: {\n    provider: 'webchat_widget',\n    external_channel_id: widgetId || null,\n    widget_id: widgetId || null,\n    visitor_id: visitorId || null,\n    session_id: sessionId || null,\n    page_url: firstValue(body.page_url, body.pageUrl, body.url) || null,\n    referrer: firstValue(body.referrer, headers.referer, headers.referrer) || null,\n    user_agent: header('user-agent') || null,\n    ip: firstValue(header('x-forwarded-for'), header('x-real-ip')) || null,\n    utm: body.utm || {}\n  },\n  idempotency_key: idempotencyKey,\n  normalized_ok: !error,\n  not_processed_reason: error,\n  raw: body\n};\n\nreturn [{ json: normalized }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        120
+      ],
+      "id": "webchat-code-validate-normalize",
+      "name": "CODE validate_and_normalize_webchat"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "normalized-ok",
+              "leftValue": "={{ $json.normalized_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "event-message",
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -340,
+        120
+      ],
+      "id": "webchat-if-valid-message",
+      "name": "IF valid_message"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "gYYvc3jTVgDnAB8K",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/gYYvc3jTVgDnAB8K",
+          "cachedResultName": "2.1 channel_config_resolver"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -60,
+        20
+      ],
+      "id": "webchat-call-channel-config-resolver",
+      "name": "Call '2.1 channel_config_resolver'"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.channel_event_logs (\n  organization_id,\n  agent_id,\n  channel,\n  provider,\n  external_channel_id,\n  event_type,\n  message_id,\n  lead_id,\n  idempotency_key,\n  normalized_ok,\n  error,\n  normalized_event,\n  raw\n)\nVALUES (\n  NULL,\n  NULL,\n  'webchat',\n  'webchat_widget',\n  NULLIF('{{ String($json.external_channel_id || \"\").replace(/'/g, \"''\") }}', ''),\n  'webchat_rejected',\n  NULLIF('{{ String($json.message_id || \"\").replace(/'/g, \"''\") }}', ''),\n  NULLIF('{{ String($json.lead_id || \"\").replace(/'/g, \"''\") }}', ''),\n  '{{ String($json.idempotency_key || \"\").replace(/'/g, \"''\") }}',\n  false,\n  NULLIF('{{ String($json.not_processed_reason || \"webchat_rejected\").replace(/'/g, \"''\") }}', ''),\n  '{{ JSON.stringify($json || {}).replace(/'/g, \"''\") }}'::jsonb,\n  '{{ JSON.stringify($json.raw || {}).replace(/'/g, \"''\") }}'::jsonb\n)\nON CONFLICT (idempotency_key) DO UPDATE SET\n  normalized_ok = false,\n  error = EXCLUDED.error,\n  normalized_event = EXCLUDED.normalized_event,\n  raw = EXCLUDED.raw,\n  event_received_at = now()\nRETURNING id, event_type, normalized_ok, error;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -60,
+        220
+      ],
+      "id": "webchat-db-log-rejected",
+      "name": "DB log_webchat_rejected",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('CODE validate_and_normalize_webchat').item.json || {};\nconst resolved = $json || {};\nconst routing = resolved.routing || {};\nconst sourceMetadata = {\n  ...(normalized.source_metadata || {}),\n  provider: routing.provider || normalized.provider || 'webchat_widget',\n  external_channel_id: routing.external_channel_id || normalized.external_channel_id || null,\n  widget_id: routing.external_channel_id || normalized.widget_id || null,\n  organization_id: routing.organization_id || null,\n  agent_id: routing.agent_id || null,\n  channel_resolution_reason: resolved.not_processed_reason || null\n};\n\nreturn [{\n  json: {\n    ...normalized,\n    should_process: resolved.should_process === true,\n    not_processed_reason: resolved.not_processed_reason || normalized.not_processed_reason || null,\n    organization: resolved.organization || {},\n    agent: resolved.agent || {},\n    channel_config: resolved.channel_config || {},\n    routing,\n    source_metadata: sourceMetadata,\n    channel_resolution: {\n      should_process: resolved.should_process === true,\n      not_processed_reason: resolved.not_processed_reason || null,\n      audit: resolved.audit || null\n    },\n    event: normalized,\n    normalized_event: normalized\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        20
+      ],
+      "id": "webchat-attach-channel-context",
+      "name": "attach_channel_context"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "should-process-true",
+              "leftValue": "={{ $json.should_process }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        500,
+        20
+      ],
+      "id": "webchat-if-should-process",
+      "name": "IF should_process"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/f5383ae7-dd2e-4177-9875-c6dcff27e3d5",
+          "cachedResultName": "2 lead_loader"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        780,
+        -80
+      ],
+      "id": "webchat-call-lead-loader",
+      "name": "Call '2 lead_loader'"
+    }
+  ],
+  "connections": {
+    "WEBHOOK webchat_post": {
+      "main": [
+        [
+          {
+            "node": "CODE validate_and_normalize_webchat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE validate_and_normalize_webchat": {
+      "main": [
+        [
+          {
+            "node": "IF valid_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF valid_message": {
+      "main": [
+        [
+          {
+            "node": "Call '2.1 channel_config_resolver'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DB log_webchat_rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '2.1 channel_config_resolver'": {
+      "main": [
+        [
+          {
+            "node": "attach_channel_context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "attach_channel_context": {
+      "main": [
+        [
+          {
+            "node": "IF should_process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF should_process": {
+      "main": [
+        [
+          {
+            "node": "Call '2 lead_loader'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "DB log_webchat_rejected": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

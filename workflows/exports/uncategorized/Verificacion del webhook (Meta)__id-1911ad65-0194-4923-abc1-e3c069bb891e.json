@@ -1,0 +1,254 @@
+{
+  "updatedAt": "2026-06-02T12:35:52.372Z",
+  "createdAt": "2026-05-22T22:29:40.642Z",
+  "id": "1911ad65-0194-4923-abc1-e3c069bb891e",
+  "name": "Verificacion del webhook (Meta)",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{$json[\"query\"][\"hub.challenge\"]}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        736,
+        -176
+      ],
+      "id": "fbf408d9-0498-4aab-8f81-cdac9aa225a0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c0923e95-9496-4956-bfea-26e3fdb9d7b3",
+              "leftValue": "={{$json[\"query\"][\"hub.verify_token\"]}}",
+              "rightValue": "AAHUMADA",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        -64
+      ],
+      "id": "0bc4ec16-c0c0-4701-9e33-fd94e511e657",
+      "name": "if tokeN"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Invalid verify token",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        16
+      ],
+      "id": "2d1b126c-a2fa-4d49-9d0f-628da271c186",
+      "name": "Respond to Webhook INVALID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entry = $json.body?.entry?.[0];\nconst change = entry?.changes?.[0];\nconst value = change?.value;\n\nif (!value) {\n  return [{ json: { event_type: 'unknown', raw: $json.body } }];\n}\n\nif (value.messages?.length) {\n  const msg = value.messages[0];\n  const contact = value.contacts?.[0];\n\n  return [{\n    json: {\n      event_type: 'message',\n      channel: 'whatsapp',\n      from: msg.from,\n      name: contact?.profile?.name || null,\n      message_id: msg.id,\n      timestamp: msg.timestamp,\n      text: msg.text?.body || null,\n      raw: $json.body\n    }\n  }];\n}\n\nif (value.statuses?.length) {\n  return [{\n    json: {\n      event_type: 'status',\n      channel: 'whatsapp',\n      status: value.statuses[0],\n      raw: $json.body\n    }\n  }];\n}\n\nreturn [{ json: { event_type: 'other', raw: $json.body } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        208
+      ],
+      "id": "8fdb554c-0211-4fd6-b78c-a0da47d69a83",
+      "name": "Parse WhatsApp POST"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        608,
+        224
+      ],
+      "id": "0f19bab8-fd14-40bd-942d-dcf502d09e16",
+      "name": "Respond to Webhook OK"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-meta",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1111f1f8-5e0b-4602-a8a2-e5710fc107bf",
+      "name": "WB WEBHOOK",
+      "webhookId": "9395322a-eca6-4412-9168-b050e6ce38e3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "96cecbf9-0db4-49b3-b3cb-1549dfeb5897",
+              "leftValue": "={{$json[\"query\"][\"hub.mode\"]}}",
+              "rightValue": "subscribe",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "cf2840fb-ce33-4600-812b-ee1c28b4ab51",
+      "name": "VERIFICACION (GET)"
+    }
+  ],
+  "connections": {
+    "if tokeN": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook INVALID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse WhatsApp POST": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WB WEBHOOK": {
+      "main": [
+        [
+          {
+            "node": "VERIFICACION (GET)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VERIFICACION (GET)": {
+      "main": [
+        [
+          {
+            "node": "if tokeN",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse WhatsApp POST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "6e7e606c-a3c1-4ad3-ad69-2cd86441a1a5",
+  "activeVersionId": null,
+  "versionCounter": 4,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-05-23T18:17:07.014Z",
+      "createdAt": "2026-05-23T18:17:07.014Z",
+      "role": "workflow:owner",
+      "workflowId": "1911ad65-0194-4923-abc1-e3c069bb891e",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
