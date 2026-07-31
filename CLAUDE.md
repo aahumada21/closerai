@@ -20,6 +20,22 @@
 - Tras cambiar `3 rules_engine`: `node scripts/rules_engine_regression_harness.js`
   (corre el `jsCode` real, sin red ni DB; debe quedar en verde antes de desplegar).
 
+## Código extraído de los workflows (`workflows/extracted/`)
+
+El 26% del JSON de los workflows es lógica en strings (721 KB de JS en 283 Code
+nodes, 89 KB de SQL), invisible para cualquier indexador de código. `node
+scripts/extract_workflow_code.js` la vuelca a archivos `.js`/`.sql` reales para
+que graphify (y el code review) la puedan ver.
+
+- **Son derivados y de solo lectura.** La fuente de verdad es siempre el JSON en
+  `workflows/exports/`. Editar un archivo de `extracted/` no tiene ningún efecto.
+- **Sí se commitean**, aunque sean derivados: graphify respeta `.gitignore`, así
+  que ignorarlos los borraría del grafo.
+- Después de cambiar cualquier workflow: correr el extractor y `graphify update .`.
+  `--check` falla si quedó desactualizado.
+- Genera además `docs/arquitectura/GRAFO_WORKFLOWS.md`: el grafo de dependencias
+  entre workflows (quién llama a quién) y la lista de workflows aislados.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
