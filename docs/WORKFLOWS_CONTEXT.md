@@ -1,7 +1,7 @@
 # Contexto de workflows (AI Closer / n8n)
 
 ## Pipeline base (según documentación existente)
-Estos son los módulos descritos en `Contexto/` como arquitectura modular del AI Closer:
+Estos son los módulos descritos en `docs/arquitectura/archivo/` (antes `Contexto/flujos/`) como arquitectura modular del AI Closer:
 
 1. `whatsapp_inbound_router`
 2. `lead_loader`

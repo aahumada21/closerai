@@ -2,6 +2,7 @@
 # secrets
 .env
 **/.env
+Contexto/INFO_ignore.txt
 
 # graphify (regenerable knowledge graph, run `graphify update .` to rebuild)
 graphify-out/
