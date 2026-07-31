@@ -84,7 +84,7 @@ function loadRulesEvaluationFn() {
   }
 
   const fn = new Function('$json', node.parameters.jsCode + '\n//# end');
-  return { fn, workflowPath };
+  return { fn, workflowPath, jsCode: node.parameters.jsCode };
 }
 
 function evaluate(fn, { text, lead_state = {}, memory = {}, lead = {}, agent_business_config = {}, agent_staff = [] }) {
@@ -659,11 +659,53 @@ const scenarios = [
   })(),
 ];
 
+// ---- guard del vocabulario de estados ----
+// `lead_state.stage` es `text` libre, sin enum ni CHECK en la base. Se evaluó
+// poner un CHECK y se descartó: convertiría un estado inesperado en un error
+// duro que aborta la escritura en `6.24 persist_and_audit` (el único camino de
+// persistencia), o sea que el bot dejaría de responderle a ese lead en vez de
+// degradar. En 15.431 turnos históricos hubo exactamente 2 valores espurios, así
+// que el CHECK compra poco y puede costar caro.
+//
+// Este guard da la misma protección en tiempo de desarrollo: si alguien agrega
+// un `stage: "algo_nuevo"` al motor de reglas, el harness falla acá y obliga a
+// decidirlo a conciencia (y a documentarlo) en vez de que aparezca en
+// producción. Vocabulario y evidencia: docs/arquitectura/ESTADOS_LEAD_STATE.md
+const CANONICAL_STAGES = new Set([
+  'new_lead', 'service_discovery', 'qualified', 'quoted', 'closing',
+  'booking_selection', 'collecting_address', 'address_confirmation',
+  'booking_confirmation', 'booked_pending', 'booked', 'post_service',
+  'cancelling', 'cancelled', 'reschedule', 'human_handoff',
+]);
+
+function checkStageVocabulary(jsCode) {
+  const found = new Map(); // stage -> ocurrencias
+  for (const re of [/\bstage\s*:\s*["'`]([a-z_][a-z0-9_]{2,})["'`]/g, /\bstage\s*=\s*["'`]([a-z_][a-z0-9_]{2,})["'`]/g]) {
+    let m;
+    while ((m = re.exec(jsCode)) !== null) found.set(m[1], (found.get(m[1]) || 0) + 1);
+  }
+  const unknown = [...found.keys()].filter((s) => !CANONICAL_STAGES.has(s));
+  return { seen: found, unknown };
+}
+
 function main() {
-  const { fn, workflowPath } = loadRulesEvaluationFn();
+  const { fn, workflowPath, jsCode } = loadRulesEvaluationFn();
   console.log(`Using rules_evaluation from: ${path.relative(REPO_ROOT, workflowPath)}\n`);
 
   let failures = 0;
+
+  const vocab = checkStageVocabulary(jsCode || '');
+  if (vocab.unknown.length > 0) {
+    failures += 1;
+    console.log('FAIL  Vocabulario de estados — el motor escribe stages fuera del set canonico');
+    console.log(`      desconocidos: ${vocab.unknown.join(', ')}`);
+    console.log('      Si el estado nuevo es intencional: agregarlo a CANONICAL_STAGES aca y');
+    console.log('      documentarlo en docs/arquitectura/ESTADOS_LEAD_STATE.md (incluyendo de');
+    console.log('      donde se entra y hacia donde se sale). Si no, es un typo o una accion');
+    console.log('      filtrandose al campo stage (ya paso una vez con "continue_conversation").');
+  } else {
+    console.log(`PASS  Vocabulario de estados — ${vocab.seen.size} stages escritos, todos canonicos`);
+  }
 
   for (const scenario of scenarios) {
     let failureReason = null;
@@ -688,7 +730,9 @@ function main() {
     }
   }
 
-  console.log(`\n${scenarios.length - failures}/${scenarios.length} passed`);
+  // +1 por el guard de vocabulario de estados, que no es un escenario de la lista.
+  const total = scenarios.length + 1;
+  console.log(`\n${total - failures}/${total} passed`);
   process.exit(failures > 0 ? 1 : 0);
 }
 
