@@ -1,0 +1,904 @@
+{
+  "updatedAt": "2026-07-24T18:26:15.231Z",
+  "createdAt": "2026-07-24T18:06:28.425Z",
+  "id": "nRnyi0HdNMaYFFeC",
+  "name": "6.30 reconcile_pending_payments",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "schedule_trigger_630",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ls.lead_id, ls.flow_order_id, ls.flow_payment_url, ls.payment_mode,\n       ls.payment_stuck_alert_sent_at, l.phone, l.channel,\n       m.sent_at,\n       EXTRACT(EPOCH FROM (NOW() - m.sent_at)) / 86400.0 AS age_days\nFROM public.lead_state ls\nJOIN public.leads l ON l.id = ls.lead_id\nJOIN LATERAL (\n  SELECT MAX(created_at) AS sent_at\n  FROM public.messages\n  WHERE lead_id = ls.lead_id AND direction = 'outbound' AND content ILIKE '%Monto: $%'\n) m ON true\nWHERE ls.flow_order_id IS NOT NULL AND ls.flow_order_id <> ''\n  AND ls.payment_status = 'pending'\n  AND m.sent_at IS NOT NULL;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "id": "find_pending_payments",
+      "name": "find_pending_payments",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "payment_link_expired_check",
+              "leftValue": "={{ Number($json.age_days) }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "if_payment_link_expired",
+      "name": "IF payment_link_expired"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.lead_state\nSET payment_status = 'expired', updated_at = NOW()\nWHERE lead_id = '{{ $json.lead_id }}'::uuid;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        -120
+      ],
+      "id": "mark_payment_expired",
+      "name": "mark_payment_expired",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function sha256(data) {\n  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length,bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0; w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16),s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;}\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const t1=(hh+S1+ch+K[i]+s[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b2)^(a&c)^(b2&c);const t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b2;b2=a;a=(t1+t2)>>>0;}\n    h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b2)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(s){const b=[];for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c<128)b.push(c);else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}}return b;}\nfunction hmacHex(msg,key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ip=kb.map(v=>v^0x36),op=kb.map(v=>v^0x5c);\n  while(ip.length<64)ip.push(0x36); while(op.length<64)op.push(0x5c);\n  const inner=sha256([...ip,...strToBytes(msg)]);\n  const ib=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  return sha256([...op,...ib]).map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst d = $json;\nconst flowOrder = d.flow_order_id || \"\";\n\nconst flowApiKey = $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = $env.FLOW_API_URL || \"https://www.flow.cl/api\";\n\nconst statusParams = { apiKey: flowApiKey, flowOrder: String(flowOrder) };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(k => k + statusParams[k]).join(\"\");\nconst signature = hmacHex(sigString, flowSecretKey);\n\nreturn [{\n  ...d,\n  flow_status_url: flowApiUrl + \"/payment/getStatusByFlowOrder\",\n  status_params: { apiKey: flowApiKey, flowOrder: String(flowOrder), s: signature }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        120
+      ],
+      "id": "build_reconcile_signature",
+      "name": "build_reconcile_signature"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.flow_status_url }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $json.status_params.apiKey }}"
+            },
+            {
+              "name": "flowOrder",
+              "value": "={{ $json.status_params.flowOrder }}"
+            },
+            {
+              "name": "s",
+              "value": "={{ $json.status_params.s }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        120
+      ],
+      "id": "http_get_flow_status_reconcile",
+      "name": "HTTP: GET flow getStatusByFlowOrder (reconcile)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "flow_says_paid_check",
+              "leftValue": "={{ Number($json.status) }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        120
+      ],
+      "id": "if_flow_says_paid_reconcile",
+      "name": "IF flow_says_paid"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.aahumada.com/webhook/flow-payment-confirmed",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ token: ($(\"find_pending_payments\").item.json.flow_payment_url.split(\"token=\")[1] || \"\").trim() }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        60
+      ],
+      "id": "call_self_heal_webhook_reconcile",
+      "name": "HTTP: POST self-heal flow-payment-confirmed (reconcile)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "stuck_age_check",
+              "leftValue": "={{ Number($json.age_days) }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "stuck_not_alerted_check",
+              "leftValue": "={{ !$json.payment_stuck_alert_sent_at }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -300
+      ],
+      "id": "if_stuck_alert_needed",
+      "name": "IF stuck_alert_needed"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.lead_state\nSET payment_stuck_alert_sent_at = NOW()\nWHERE lead_id = '{{ $(\"find_pending_payments\").item.json.lead_id }}'::uuid;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        880,
+        -300
+      ],
+      "id": "mark_stuck_alert_sent",
+      "name": "mark_stuck_alert_sent",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $(\"find_pending_payments\").item.json;\nconst ageRounded = Math.round(Number(d.age_days) * 10) / 10;\n\nconst lines = [\n  \"ALERTA: pago pendiente hace mas de 24h\",\n  \"Lead: \" + d.lead_id,\n  \"Telefono: \" + (d.phone || \"desconocido\"),\n  \"Flow order: \" + d.flow_order_id,\n  \"Antiguedad: \" + ageRounded + \" dias\",\n  \"payment_mode: \" + (d.payment_mode || \"(sin especificar)\")\n];\n\nreturn [{ message: lines.join(\"\\n\") }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -300
+      ],
+      "id": "build_stuck_alert_message",
+      "name": "build_stuck_alert_message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.aahumada.com/webhook/qa-notify-whatsapp",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -300
+      ],
+      "id": "send_stuck_alert_telegram",
+      "name": "send_stuck_alert_telegram",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "find_pending_payments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_pending_payments": {
+      "main": [
+        [
+          {
+            "node": "IF payment_link_expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF payment_link_expired": {
+      "main": [
+        [
+          {
+            "node": "mark_payment_expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_reconcile_signature",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF stuck_alert_needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_reconcile_signature": {
+      "main": [
+        [
+          {
+            "node": "HTTP: GET flow getStatusByFlowOrder (reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: GET flow getStatusByFlowOrder (reconcile)": {
+      "main": [
+        [
+          {
+            "node": "IF flow_says_paid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF flow_says_paid": {
+      "main": [
+        [
+          {
+            "node": "HTTP: POST self-heal flow-payment-confirmed (reconcile)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "IF stuck_alert_needed": {
+      "main": [
+        [
+          {
+            "node": "mark_stuck_alert_sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "mark_stuck_alert_sent": {
+      "main": [
+        [
+          {
+            "node": "build_stuck_alert_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_stuck_alert_message": {
+      "main": [
+        [
+          {
+            "node": "send_stuck_alert_telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "mFtn3WnwBIU0k5uF"
+  },
+  "staticData": {
+    "node:Schedule Trigger": {
+      "recurrenceRules": [
+        14
+      ]
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "fd44ad99-ccf6-430d-8832-dbc586a7c418",
+  "activeVersionId": "fd44ad99-ccf6-430d-8832-dbc586a7c418",
+  "versionCounter": 107,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-07-24T18:06:28.436Z",
+      "createdAt": "2026-07-24T18:06:28.436Z",
+      "role": "workflow:owner",
+      "workflowId": "nRnyi0HdNMaYFFeC",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-24T18:26:15.233Z",
+    "createdAt": "2026-07-24T18:26:15.233Z",
+    "versionId": "fd44ad99-ccf6-430d-8832-dbc586a7c418",
+    "workflowId": "nRnyi0HdNMaYFFeC",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 2
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "id": "schedule_trigger_630",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ls.lead_id, ls.flow_order_id, ls.flow_payment_url, ls.payment_mode,\n       ls.payment_stuck_alert_sent_at, l.phone, l.channel,\n       m.sent_at,\n       EXTRACT(EPOCH FROM (NOW() - m.sent_at)) / 86400.0 AS age_days\nFROM public.lead_state ls\nJOIN public.leads l ON l.id = ls.lead_id\nJOIN LATERAL (\n  SELECT MAX(created_at) AS sent_at\n  FROM public.messages\n  WHERE lead_id = ls.lead_id AND direction = 'outbound' AND content ILIKE '%Monto: $%'\n) m ON true\nWHERE ls.flow_order_id IS NOT NULL AND ls.flow_order_id <> ''\n  AND ls.payment_status = 'pending'\n  AND m.sent_at IS NOT NULL;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          220,
+          0
+        ],
+        "id": "find_pending_payments",
+        "name": "find_pending_payments",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "payment_link_expired_check",
+                "leftValue": "={{ Number($json.age_days) }}",
+                "rightValue": 7,
+                "operator": {
+                  "type": "number",
+                  "operation": "gte"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "id": "if_payment_link_expired",
+        "name": "IF payment_link_expired"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE public.lead_state\nSET payment_status = 'expired', updated_at = NOW()\nWHERE lead_id = '{{ $json.lead_id }}'::uuid;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          660,
+          -120
+        ],
+        "id": "mark_payment_expired",
+        "name": "mark_payment_expired",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "function sha256(data) {\n  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  function rotr(x,n){return(x>>>n)|(x<<(32-n));}\n  const len=data.length,bitLen=len*8;\n  const blocks=Math.ceil((len+9)/64);\n  const w=new Array(blocks*16).fill(0);\n  for(let i=0;i<len;i++) w[i>>2]|=data[i]<<(24-(i%4)*8);\n  w[len>>2]|=0x80<<(24-(len%4)*8);\n  w[blocks*16-2]=(bitLen/0x100000000)|0; w[blocks*16-1]=bitLen>>>0;\n  const h=[...H];\n  for(let b=0;b<blocks;b++){\n    const m=w.slice(b*16,b*16+16),s=new Array(64);\n    for(let i=0;i<16;i++) s[i]=m[i];\n    for(let i=16;i<64;i++){const s0=rotr(s[i-15],7)^rotr(s[i-15],18)^(s[i-15]>>>3);const s1=rotr(s[i-2],17)^rotr(s[i-2],19)^(s[i-2]>>>10);s[i]=(s[i-16]+s0+s[i-7]+s1)>>>0;}\n    let [a,b2,c,d,e,f,g,hh]=h;\n    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const t1=(hh+S1+ch+K[i]+s[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b2)^(a&c)^(b2&c);const t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b2;b2=a;a=(t1+t2)>>>0;}\n    h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b2)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;\n  }\n  return h;\n}\nfunction strToBytes(s){const b=[];for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c<128)b.push(c);else if(c<2048){b.push(192|(c>>6));b.push(128|(c&63));}else{b.push(224|(c>>12));b.push(128|((c>>6)&63));b.push(128|(c&63));}}return b;}\nfunction hmacHex(msg,key){\n  let kb=strToBytes(key);\n  if(kb.length>64) kb=sha256(kb).reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  const ip=kb.map(v=>v^0x36),op=kb.map(v=>v^0x5c);\n  while(ip.length<64)ip.push(0x36); while(op.length<64)op.push(0x5c);\n  const inner=sha256([...ip,...strToBytes(msg)]);\n  const ib=inner.reduce((a,v)=>{a.push((v>>24)&0xff,(v>>16)&0xff,(v>>8)&0xff,v&0xff);return a;},[]);\n  return sha256([...op,...ib]).map(v=>v.toString(16).padStart(8,'0')).join('');\n}\n\nconst d = $json;\nconst flowOrder = d.flow_order_id || \"\";\n\nconst flowApiKey = $env.FLOW_API_KEY || \"\";\nconst flowSecretKey = $env.FLOW_SECRET_KEY || \"\";\nconst flowApiUrl = $env.FLOW_API_URL || \"https://www.flow.cl/api\";\n\nconst statusParams = { apiKey: flowApiKey, flowOrder: String(flowOrder) };\nconst sortedKeys = Object.keys(statusParams).sort();\nconst sigString = sortedKeys.map(k => k + statusParams[k]).join(\"\");\nconst signature = hmacHex(sigString, flowSecretKey);\n\nreturn [{\n  ...d,\n  flow_status_url: flowApiUrl + \"/payment/getStatusByFlowOrder\",\n  status_params: { apiKey: flowApiKey, flowOrder: String(flowOrder), s: signature }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          120
+        ],
+        "id": "build_reconcile_signature",
+        "name": "build_reconcile_signature"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.flow_status_url }}",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "apiKey",
+                "value": "={{ $json.status_params.apiKey }}"
+              },
+              {
+                "name": "flowOrder",
+                "value": "={{ $json.status_params.flowOrder }}"
+              },
+              {
+                "name": "s",
+                "value": "={{ $json.status_params.s }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          120
+        ],
+        "id": "http_get_flow_status_reconcile",
+        "name": "HTTP: GET flow getStatusByFlowOrder (reconcile)",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "flow_says_paid_check",
+                "leftValue": "={{ Number($json.status) }}",
+                "rightValue": 2,
+                "operator": {
+                  "type": "number",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          120
+        ],
+        "id": "if_flow_says_paid_reconcile",
+        "name": "IF flow_says_paid"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n.aahumada.com/webhook/flow-payment-confirmed",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ token: ($(\"find_pending_payments\").item.json.flow_payment_url.split(\"token=\")[1] || \"\").trim() }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          60
+        ],
+        "id": "call_self_heal_webhook_reconcile",
+        "name": "HTTP: POST self-heal flow-payment-confirmed (reconcile)",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "stuck_age_check",
+                "leftValue": "={{ Number($json.age_days) }}",
+                "rightValue": 1,
+                "operator": {
+                  "type": "number",
+                  "operation": "gte"
+                }
+              },
+              {
+                "id": "stuck_not_alerted_check",
+                "leftValue": "={{ !$json.payment_stuck_alert_sent_at }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          660,
+          -300
+        ],
+        "id": "if_stuck_alert_needed",
+        "name": "IF stuck_alert_needed"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE public.lead_state\nSET payment_stuck_alert_sent_at = NOW()\nWHERE lead_id = '{{ $(\"find_pending_payments\").item.json.lead_id }}'::uuid;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          880,
+          -300
+        ],
+        "id": "mark_stuck_alert_sent",
+        "name": "mark_stuck_alert_sent",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const d = $(\"find_pending_payments\").item.json;\nconst ageRounded = Math.round(Number(d.age_days) * 10) / 10;\n\nconst lines = [\n  \"ALERTA: pago pendiente hace mas de 24h\",\n  \"Lead: \" + d.lead_id,\n  \"Telefono: \" + (d.phone || \"desconocido\"),\n  \"Flow order: \" + d.flow_order_id,\n  \"Antiguedad: \" + ageRounded + \" dias\",\n  \"payment_mode: \" + (d.payment_mode || \"(sin especificar)\")\n];\n\nreturn [{ message: lines.join(\"\\n\") }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -300
+        ],
+        "id": "build_stuck_alert_message",
+        "name": "build_stuck_alert_message"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n.aahumada.com/webhook/qa-notify-whatsapp",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -300
+        ],
+        "id": "send_stuck_alert_telegram",
+        "name": "send_stuck_alert_telegram",
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000
+      }
+    ],
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "find_pending_payments",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "find_pending_payments": {
+        "main": [
+          [
+            {
+              "node": "IF payment_link_expired",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF payment_link_expired": {
+        "main": [
+          [
+            {
+              "node": "mark_payment_expired",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_reconcile_signature",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "IF stuck_alert_needed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_reconcile_signature": {
+        "main": [
+          [
+            {
+              "node": "HTTP: GET flow getStatusByFlowOrder (reconcile)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP: GET flow getStatusByFlowOrder (reconcile)": {
+        "main": [
+          [
+            {
+              "node": "IF flow_says_paid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF flow_says_paid": {
+        "main": [
+          [
+            {
+              "node": "HTTP: POST self-heal flow-payment-confirmed (reconcile)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "IF stuck_alert_needed": {
+        "main": [
+          [
+            {
+              "node": "mark_stuck_alert_sent",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "mark_stuck_alert_sent": {
+        "main": [
+          [
+            {
+              "node": "build_stuck_alert_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_stuck_alert_message": {
+        "main": [
+          [
+            {
+              "node": "send_stuck_alert_telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-24T18:26:15.387Z",
+        "id": 2111,
+        "workflowId": "nRnyi0HdNMaYFFeC",
+        "versionId": "fd44ad99-ccf6-430d-8832-dbc586a7c418",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-24T18:26:15.323Z",
+        "id": 2110,
+        "workflowId": "nRnyi0HdNMaYFFeC",
+        "versionId": "fd44ad99-ccf6-430d-8832-dbc586a7c418",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

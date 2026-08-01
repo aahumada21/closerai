@@ -1,0 +1,503 @@
+{
+  "updatedAt": "2026-07-28T18:09:52.389Z",
+  "createdAt": "2026-07-28T17:47:24.732Z",
+  "id": "0rz0ue6OkEKRlqUG",
+  "name": "onboarding_add_channel",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "onboarding-add-channel",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "node-addchannel-webhook",
+      "name": "WEBHOOK add_channel_post",
+      "webhookId": "onboarding-add-channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();\n  }\n  return \"\";\n}\n\nconst expectedToken = $env.ONBOARDING_API_TOKEN;\nconst providedToken = header(\"x-onboarding-token\");\n\nconst userId = firstValue(body.user_id, body.userId);\nconst organizationId = firstValue(body.organization_id, body.organizationId);\nconst agentId = firstValue(body.agent_id, body.agentId);\nconst channelInput = body.channel && typeof body.channel === \"object\" ? body.channel : {};\n\nconst channel = firstValue(channelInput.channel);\nconst provider = firstValue(channelInput.provider);\nconst externalChannelId = firstValue(channelInput.external_channel_id, channelInput.externalChannelId);\nconst displayName = firstValue(channelInput.display_name, channelInput.displayName);\nconst wabaId = firstValue(\n  channelInput.whatsapp_business_account_id,\n  channelInput.waba_id,\n  channelInput.wabaId\n);\n\nlet error = null;\nif (!expectedToken) error = \"missing_onboarding_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_onboarding_token\";\nelse if (!userId) error = \"missing_user_id\";\nelse if (!organizationId) error = \"missing_organization_id\";\nelse if (!agentId) error = \"missing_agent_id\";\nelse if (!channel) error = \"missing_channel\";\nelse if (!provider) error = \"missing_provider\";\nelse if (!externalChannelId) error = \"missing_external_channel_id\";\n\n// Config JSON estandar para el runtime omnicanal (ver agent_channels.config en\n// docs/OMNICHANNEL_IMPLEMENTATION_GUIDE_2026-06-15.md). whatsapp_business_account_id\n// (WABA id) es distinto del phone_number_id -- Meta necesita el WABA id para el paso\n// de suscribir la app al webhook de esa cuenta (POST /{waba_id}/subscribed_apps),\n// que es independiente de vincular el numero puntual. Se guarda ademas del\n// phone_number_id porque una misma WABA puede tener varios numeros, y ese paso de\n// suscripcion solo hace falta una vez por WABA, no por numero.\nconst config = {\n  environment: \"production\",\n  inbound_enabled: true,\n  outbound_enabled: true,\n  display_name: displayName || \"\",\n  default_language: \"es-CL\",\n  provider_credentials_ref: \"\",\n  whatsapp_business_account_id: wabaId || \"\",\n  rate_limit: { messages_per_minute: 60 },\n  fallback_policy: { on_error: \"handoff_or_retry\" }\n};\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    user_id: userId || null,\n    organization_id: organizationId || null,\n    agent_id: agentId || null,\n    channel: channel || null,\n    provider: provider || null,\n    external_channel_id: externalChannelId || null,\n    display_name: displayName || null,\n    whatsapp_business_account_id: wabaId || null,\n    config\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "node-addchannel-validate",
+      "name": "validate_and_build_channel_request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? null : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (!input.valid) {\n  return [{ json: { ...input, channel_query: null } }];\n}\n\nconst query = `\nWITH membership AS (\n  SELECT EXISTS (\n    SELECT 1 FROM organization_members\n    WHERE user_id = ${sqlUuidOrNull(input.user_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS is_member\n),\nagent_check AS (\n  SELECT EXISTS (\n    SELECT 1 FROM agents\n    WHERE id = ${sqlUuidOrNull(input.agent_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS agent_belongs\n),\nupserted_channel AS (\n  INSERT INTO agent_channels (organization_id, agent_id, channel, provider, external_channel_id, display_name, is_active, config)\n  SELECT\n    ${sqlUuidOrNull(input.organization_id)},\n    ${sqlUuidOrNull(input.agent_id)},\n    ${sqlText(input.channel)},\n    ${sqlText(input.provider)},\n    ${sqlText(input.external_channel_id)},\n    ${sqlText(input.display_name)},\n    true,\n    ${sqlJsonb(input.config)}\n  WHERE (SELECT is_member FROM membership) AND (SELECT agent_belongs FROM agent_check)\n  ON CONFLICT (provider, external_channel_id) DO UPDATE SET\n    organization_id = excluded.organization_id,\n    agent_id = excluded.agent_id,\n    channel = excluded.channel,\n    display_name = excluded.display_name,\n    is_active = true,\n    config = excluded.config,\n    updated_at = now()\n  RETURNING id, agent_id\n)\nSELECT\n  (SELECT is_member FROM membership) AS is_member,\n  (SELECT agent_belongs FROM agent_check) AS agent_belongs,\n  (SELECT id FROM upserted_channel) AS channel_id\n;\n`;\n\nreturn [{\n  json: {\n    ...input,\n    channel_query: query\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "node-addchannel-build-query",
+      "name": "build_channel_query"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-addchannel-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "node-addchannel-if-valid",
+      "name": "IF valid_request"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.channel_query }}",
+        "options": {
+          "connectionTimeout": 30,
+          "queryBatching": "single"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        -100
+      ],
+      "id": "node-addchannel-db",
+      "name": "DB upsert_channel",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstream = $(\"build_channel_query\").first().json;\nconst dbResult = $json || {};\n\nconst isMember = dbResult.is_member === true || dbResult.is_member === \"t\" || dbResult.is_member === \"true\";\nconst agentBelongs = dbResult.agent_belongs === true || dbResult.agent_belongs === \"t\" || dbResult.agent_belongs === \"true\";\nconst channelId = dbResult.channel_id || null;\n\nlet status = \"ok\";\nif (!isMember) status = \"forbidden\";\nelse if (!agentBelongs) status = \"agent_not_found\";\nelse if (!channelId) status = \"creation_failed\";\n\nreturn [{\n  json: {\n    status,\n    channel_id: channelId,\n    agent_id: upstream.agent_id,\n    organization_id: upstream.organization_id,\n    channel: upstream.channel,\n    provider: upstream.provider,\n    external_channel_id: upstream.external_channel_id,\n    whatsapp_business_account_id: upstream.whatsapp_business_account_id\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ],
+      "id": "node-addchannel-interpret",
+      "name": "interpret_channel_result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\n\nif (input.status === \"forbidden\") {\n  return [{ json: { ok: false, error: \"forbidden\", message: \"El usuario no pertenece a esa organizacion.\", channel_id: null } }];\n}\nif (input.status === \"agent_not_found\") {\n  return [{ json: { ok: false, error: \"agent_not_found\", message: \"El agente no existe o no pertenece a esa organizacion.\", channel_id: null } }];\n}\nif (input.status === \"creation_failed\") {\n  return [{ json: { ok: false, error: \"creation_failed\", message: \"No se pudo vincular el canal. Revisa external_channel_id o intenta de nuevo.\", channel_id: null } }];\n}\n\nreturn [{\n  json: {\n    ok: true,\n    channel_id: input.channel_id,\n    agent_id: input.agent_id,\n    organization_id: input.organization_id,\n    channel: input.channel,\n    provider: input.provider,\n    external_channel_id: input.external_channel_id,\n    whatsapp_business_account_id: input.whatsapp_business_account_id || null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -100
+      ],
+      "id": "node-addchannel-build-response",
+      "name": "build_response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nreturn [{ json: { ok: false, error: input.error || \"invalid_request\", channel_id: null } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ],
+      "id": "node-addchannel-validation-error",
+      "name": "build_validation_error_response"
+    }
+  ],
+  "connections": {
+    "WEBHOOK add_channel_post": {
+      "main": [
+        [
+          {
+            "node": "validate_and_build_channel_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_and_build_channel_request": {
+      "main": [
+        [
+          {
+            "node": "build_channel_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_channel_query": {
+      "main": [
+        [
+          {
+            "node": "IF valid_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF valid_request": {
+      "main": [
+        [
+          {
+            "node": "DB upsert_channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_validation_error_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB upsert_channel": {
+      "main": [
+        [
+          {
+            "node": "interpret_channel_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "interpret_channel_result": {
+      "main": [
+        [
+          {
+            "node": "build_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "b71c15ac-c67e-4a51-8182-408dab2bc41a",
+  "activeVersionId": "b71c15ac-c67e-4a51-8182-408dab2bc41a",
+  "versionCounter": 6,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-07-28T17:47:24.763Z",
+      "createdAt": "2026-07-28T17:47:24.763Z",
+      "role": "workflow:owner",
+      "workflowId": "0rz0ue6OkEKRlqUG",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-28T18:09:52.393Z",
+    "createdAt": "2026-07-28T18:09:52.393Z",
+    "versionId": "b71c15ac-c67e-4a51-8182-408dab2bc41a",
+    "workflowId": "0rz0ue6OkEKRlqUG",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "onboarding-add-channel",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "node-addchannel-webhook",
+        "name": "WEBHOOK add_channel_post",
+        "webhookId": "onboarding-add-channel"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst headers = input.headers || {};\n\nfunction header(name) {\n  const key = Object.keys(headers).find((item) => item.toLowerCase() === name.toLowerCase());\n  return key ? String(headers[key] || \"\") : \"\";\n}\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") return String(value).trim();\n  }\n  return \"\";\n}\n\nconst expectedToken = $env.ONBOARDING_API_TOKEN;\nconst providedToken = header(\"x-onboarding-token\");\n\nconst userId = firstValue(body.user_id, body.userId);\nconst organizationId = firstValue(body.organization_id, body.organizationId);\nconst agentId = firstValue(body.agent_id, body.agentId);\nconst channelInput = body.channel && typeof body.channel === \"object\" ? body.channel : {};\n\nconst channel = firstValue(channelInput.channel);\nconst provider = firstValue(channelInput.provider);\nconst externalChannelId = firstValue(channelInput.external_channel_id, channelInput.externalChannelId);\nconst displayName = firstValue(channelInput.display_name, channelInput.displayName);\nconst wabaId = firstValue(\n  channelInput.whatsapp_business_account_id,\n  channelInput.waba_id,\n  channelInput.wabaId\n);\n\nlet error = null;\nif (!expectedToken) error = \"missing_onboarding_token_config\";\nelse if (!providedToken || providedToken !== expectedToken) error = \"invalid_onboarding_token\";\nelse if (!userId) error = \"missing_user_id\";\nelse if (!organizationId) error = \"missing_organization_id\";\nelse if (!agentId) error = \"missing_agent_id\";\nelse if (!channel) error = \"missing_channel\";\nelse if (!provider) error = \"missing_provider\";\nelse if (!externalChannelId) error = \"missing_external_channel_id\";\n\n// Config JSON estandar para el runtime omnicanal (ver agent_channels.config en\n// docs/OMNICHANNEL_IMPLEMENTATION_GUIDE_2026-06-15.md). whatsapp_business_account_id\n// (WABA id) es distinto del phone_number_id -- Meta necesita el WABA id para el paso\n// de suscribir la app al webhook de esa cuenta (POST /{waba_id}/subscribed_apps),\n// que es independiente de vincular el numero puntual. Se guarda ademas del\n// phone_number_id porque una misma WABA puede tener varios numeros, y ese paso de\n// suscripcion solo hace falta una vez por WABA, no por numero.\nconst config = {\n  environment: \"production\",\n  inbound_enabled: true,\n  outbound_enabled: true,\n  display_name: displayName || \"\",\n  default_language: \"es-CL\",\n  provider_credentials_ref: \"\",\n  whatsapp_business_account_id: wabaId || \"\",\n  rate_limit: { messages_per_minute: 60 },\n  fallback_policy: { on_error: \"handoff_or_retry\" }\n};\n\nreturn [{\n  json: {\n    valid: !error,\n    error,\n    user_id: userId || null,\n    organization_id: organizationId || null,\n    agent_id: agentId || null,\n    channel: channel || null,\n    provider: provider || null,\n    external_channel_id: externalChannelId || null,\n    display_name: displayName || null,\n    whatsapp_business_account_id: wabaId || null,\n    config\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "id": "node-addchannel-validate",
+        "name": "validate_and_build_channel_request"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nfunction sqlText(value) {\n  if (value === undefined || value === null || value === \"\") return \"NULL\";\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction sqlUuidOrNull(value) {\n  const text = String(value || \"\").trim();\n  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);\n  return isUuid ? \"'\" + text + \"'\" : \"NULL\";\n}\n\nfunction sqlJsonb(value) {\n  const json = JSON.stringify(value === undefined ? null : value);\n  return \"'\" + json.replace(/'/g, \"''\") + \"'::jsonb\";\n}\n\nif (!input.valid) {\n  return [{ json: { ...input, channel_query: null } }];\n}\n\nconst query = `\nWITH membership AS (\n  SELECT EXISTS (\n    SELECT 1 FROM organization_members\n    WHERE user_id = ${sqlUuidOrNull(input.user_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS is_member\n),\nagent_check AS (\n  SELECT EXISTS (\n    SELECT 1 FROM agents\n    WHERE id = ${sqlUuidOrNull(input.agent_id)}\n      AND organization_id = ${sqlUuidOrNull(input.organization_id)}\n  ) AS agent_belongs\n),\nupserted_channel AS (\n  INSERT INTO agent_channels (organization_id, agent_id, channel, provider, external_channel_id, display_name, is_active, config)\n  SELECT\n    ${sqlUuidOrNull(input.organization_id)},\n    ${sqlUuidOrNull(input.agent_id)},\n    ${sqlText(input.channel)},\n    ${sqlText(input.provider)},\n    ${sqlText(input.external_channel_id)},\n    ${sqlText(input.display_name)},\n    true,\n    ${sqlJsonb(input.config)}\n  WHERE (SELECT is_member FROM membership) AND (SELECT agent_belongs FROM agent_check)\n  ON CONFLICT (provider, external_channel_id) DO UPDATE SET\n    organization_id = excluded.organization_id,\n    agent_id = excluded.agent_id,\n    channel = excluded.channel,\n    display_name = excluded.display_name,\n    is_active = true,\n    config = excluded.config,\n    updated_at = now()\n  RETURNING id, agent_id\n)\nSELECT\n  (SELECT is_member FROM membership) AS is_member,\n  (SELECT agent_belongs FROM agent_check) AS agent_belongs,\n  (SELECT id FROM upserted_channel) AS channel_id\n;\n`;\n\nreturn [{\n  json: {\n    ...input,\n    channel_query: query\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "id": "node-addchannel-build-query",
+        "name": "build_channel_query"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cond-addchannel-valid",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "id": "node-addchannel-if-valid",
+        "name": "IF valid_request"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.channel_query }}",
+          "options": {
+            "connectionTimeout": 30,
+            "queryBatching": "single"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          880,
+          -100
+        ],
+        "id": "node-addchannel-db",
+        "name": "DB upsert_channel",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const upstream = $(\"build_channel_query\").first().json;\nconst dbResult = $json || {};\n\nconst isMember = dbResult.is_member === true || dbResult.is_member === \"t\" || dbResult.is_member === \"true\";\nconst agentBelongs = dbResult.agent_belongs === true || dbResult.agent_belongs === \"t\" || dbResult.agent_belongs === \"true\";\nconst channelId = dbResult.channel_id || null;\n\nlet status = \"ok\";\nif (!isMember) status = \"forbidden\";\nelse if (!agentBelongs) status = \"agent_not_found\";\nelse if (!channelId) status = \"creation_failed\";\n\nreturn [{\n  json: {\n    status,\n    channel_id: channelId,\n    agent_id: upstream.agent_id,\n    organization_id: upstream.organization_id,\n    channel: upstream.channel,\n    provider: upstream.provider,\n    external_channel_id: upstream.external_channel_id,\n    whatsapp_business_account_id: upstream.whatsapp_business_account_id\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -100
+        ],
+        "id": "node-addchannel-interpret",
+        "name": "interpret_channel_result"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\n\nif (input.status === \"forbidden\") {\n  return [{ json: { ok: false, error: \"forbidden\", message: \"El usuario no pertenece a esa organizacion.\", channel_id: null } }];\n}\nif (input.status === \"agent_not_found\") {\n  return [{ json: { ok: false, error: \"agent_not_found\", message: \"El agente no existe o no pertenece a esa organizacion.\", channel_id: null } }];\n}\nif (input.status === \"creation_failed\") {\n  return [{ json: { ok: false, error: \"creation_failed\", message: \"No se pudo vincular el canal. Revisa external_channel_id o intenta de nuevo.\", channel_id: null } }];\n}\n\nreturn [{\n  json: {\n    ok: true,\n    channel_id: input.channel_id,\n    agent_id: input.agent_id,\n    organization_id: input.organization_id,\n    channel: input.channel,\n    provider: input.provider,\n    external_channel_id: input.external_channel_id,\n    whatsapp_business_account_id: input.whatsapp_business_account_id || null\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          -100
+        ],
+        "id": "node-addchannel-build-response",
+        "name": "build_response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json || {};\nreturn [{ json: { ok: false, error: input.error || \"invalid_request\", channel_id: null } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          100
+        ],
+        "id": "node-addchannel-validation-error",
+        "name": "build_validation_error_response"
+      }
+    ],
+    "connections": {
+      "WEBHOOK add_channel_post": {
+        "main": [
+          [
+            {
+              "node": "validate_and_build_channel_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "validate_and_build_channel_request": {
+        "main": [
+          [
+            {
+              "node": "build_channel_query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_channel_query": {
+        "main": [
+          [
+            {
+              "node": "IF valid_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF valid_request": {
+        "main": [
+          [
+            {
+              "node": "DB upsert_channel",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_validation_error_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB upsert_channel": {
+        "main": [
+          [
+            {
+              "node": "interpret_channel_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "interpret_channel_result": {
+        "main": [
+          [
+            {
+              "node": "build_response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-28T18:09:52.549Z",
+        "id": 2175,
+        "workflowId": "0rz0ue6OkEKRlqUG",
+        "versionId": "b71c15ac-c67e-4a51-8182-408dab2bc41a",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-28T18:09:52.510Z",
+        "id": 2174,
+        "workflowId": "0rz0ue6OkEKRlqUG",
+        "versionId": "b71c15ac-c67e-4a51-8182-408dab2bc41a",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

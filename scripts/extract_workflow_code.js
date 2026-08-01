@@ -144,8 +144,20 @@ function extract() {
   const wanted = new Map(); // ruta absoluta -> contenido
   const deps = []; // { from, to, node }
 
+  // Dos workflows DISTINTOS pueden compartir nombre (pasa con exports fantasma
+  // de workflows ya borrados de n8n). Si la carpeta de salida se nombra solo por
+  // el nombre, el segundo pisa al primero y queda codigo de un workflow atribuido
+  // a otro -- paso de verdad: lo extraido de `6.9 answer_question` venia del
+  // workflow BORRADO, no del vivo. Cuando hay colision se desambigua con el id.
+  const nameCount = new Map();
+  for (const { wf } of workflows) nameCount.set(wf.name, (nameCount.get(wf.name) || 0) + 1);
+
   for (const { wf } of workflows) {
-    const wfDir = path.join(OUT_DIR, safeName(wf.name));
+    const collides = (nameCount.get(wf.name) || 0) > 1;
+    const dirName = collides
+      ? `${safeName(wf.name)} [${String(wf.id).slice(0, 8)}]`
+      : safeName(wf.name);
+    const wfDir = path.join(OUT_DIR, dirName);
 
     for (const node of wf.nodes) {
       const p = node.parameters || {};

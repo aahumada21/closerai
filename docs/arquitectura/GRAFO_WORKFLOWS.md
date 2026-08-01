@@ -78,11 +78,13 @@ graph LR
   n362e3233206f --> n362e32206368
   n362e3233206f --> n362e34206c69
   n362e31207365["6.1 send_outbound_message"]
-  n362e32342070 -->|2| n362e31207365
+  n362e32342070 --> n362e31207365
   n362e32362070 -->|2| n362e31207365
   n362e32372070["6.27 payment_confirmed_webhook"]
   n362e32372070 -->|2| n362e31207365
   n362e32372070 --> n362e3520636f
+  n362e32392072["6.29 release_expired_payment_holds"]
+  n362e32392072 -->|2| n362e31207365
   n362e33206372["6.3 create_calendar_booking"]
   n362e33206372 --> n6765745f7661
   n362e34206c69 --> n6765745f7661
@@ -112,16 +114,15 @@ graph LR
 
 ## Resumen
 
-- Workflows totales: **71**
-- Llamadas `executeWorkflow`: **63** (55 pares distintos)
+- Workflows totales: **73**
+- Llamadas `executeWorkflow`: **64** (56 pares distintos)
 - Con destino dinamico (expresion, no resoluble estaticamente): **0**
-- Workflows aislados (ni llaman ni son llamados): **20**
+- Workflows aislados (ni llaman ni son llamados): **23**
 
 ### Destinos que no resuelven a ningun export
 
 El `workflowId` apunta a un id que no existe entre los exports locales. O el workflow vive solo en n8n y nunca se exporto, o quedo una referencia colgada a uno borrado.
 
-- `6.24 persist_and_audit` :: `Call '6.1 send_outbound_message'` → `6.1 send_outbound_message` (id `qY8gG9AaeBkFmxGn`)
 - `whatsapp_webhook_meta` :: `WF whatsapp_inbound_router` → `whatsapp_inbound_router` (id `whatsapp_inbound_router`)
 - `whatsapp_webhook_meta` :: `WF whatsapp_inbound_router` → `whatsapp_inbound_router` (id `whatsapp_inbound_router`)
 - `whatsapp_webhook_meta` :: `WF whatsapp_inbound_router` → `whatsapp_inbound_router` (id `whatsapp_inbound_router`)
@@ -130,11 +131,13 @@ El `workflowId` apunta a un id que no existe entre los exports locales. O el wor
 
 No aparecen en el grafo porque ningun `executeWorkflow` los referencia y ellos no llaman a nadie. Puede ser legitimo (se disparan por webhook, cron o trigger de n8n) o puede ser que hayan quedado huerfanos — vale la pena revisarlos.
 
+- 6.30 reconcile_pending_payments
 - 8.1 reactivate_bot_after_handoff
 - ChatBot AhumadaDetialing
 - My Sub-Workflow 1
 - My Sub-workflow
 - My workflow
+- Payment Error Alerts
 - QA Notify via Telegram
 - QA Summary Every 5 Min
 - Verificacion del webhook (Meta)
@@ -144,6 +147,7 @@ No aparecen en el grafo porque ningun `executeWorkflow` los referencia y ellos n
 - get_fresh_google_calendar_token
 - google_calendar_oauth_callback
 - health_check_agents
+- onboarding_add_channel
 - onboarding_create_agent
 - onboarding_manage_service
 - webchat_outbound_adapter

@@ -1,5 +1,5 @@
 // === ARCHIVO GENERADO -- NO EDITAR ===
-// Extraido de: 6.9 answer_question  (workflow id efe50346-2d38-4d11-8cd0-3694db16a8e3)
+// Extraido de: 6.9 answer_question  (workflow id ce882890-6ea3-4784-879d-b1e1b4f8c5e9)
 // Nodo:        answer_question
 //
 // La fuente de verdad es el JSON del workflow en workflows/exports/.

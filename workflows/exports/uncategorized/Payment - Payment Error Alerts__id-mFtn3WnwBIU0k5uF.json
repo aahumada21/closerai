@@ -1,0 +1,209 @@
+{
+  "updatedAt": "2026-07-24T18:24:26.065Z",
+  "createdAt": "2026-07-24T18:24:26.065Z",
+  "id": "mFtn3WnwBIU0k5uF",
+  "name": "Payment Error Alerts",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "error_trigger_payment_alerts",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nconst workflowName = d.workflow?.name || d.workflowName || \"workflow desconocido\";\nconst errorMessage = d.execution?.error?.message || d.error?.message || d.errorMessage || \"error desconocido\";\nconst nodeName = d.execution?.lastNodeExecuted || d.execution?.error?.node?.name || \"\";\nconst executionUrl = d.execution?.url || d.executionUrl || \"\";\n\nconst lines = [\n  \"ALERTA: fallo de ejecucion en pagos\",\n  \"Workflow: \" + workflowName\n];\nif (nodeName) lines.push(\"Nodo: \" + nodeName);\nlines.push(\"Error: \" + errorMessage);\nif (executionUrl) lines.push(executionUrl);\n\nreturn [{ message: lines.join(\"\\n\") }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "build_error_alert_message",
+      "name": "build_error_alert_message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.aahumada.com/webhook/qa-notify-whatsapp",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "send_error_alert_telegram",
+      "name": "send_error_alert_telegram",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "build_error_alert_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_error_alert_message": {
+      "main": [
+        [
+          {
+            "node": "send_error_alert_telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2f95f804-f943-4dd0-a729-4176e283b29f",
+  "activeVersionId": "2f95f804-f943-4dd0-a729-4176e283b29f",
+  "versionCounter": 4,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-07-24T18:24:26.074Z",
+      "createdAt": "2026-07-24T18:24:26.074Z",
+      "role": "workflow:owner",
+      "workflowId": "mFtn3WnwBIU0k5uF",
+      "projectId": "J8CtSM5GdhbsP4gj",
+      "project": {
+        "updatedAt": "2026-04-05T17:01:22.376Z",
+        "createdAt": "2026-04-05T16:21:40.594Z",
+        "id": "J8CtSM5GdhbsP4gj",
+        "name": "Agustín Ahumada <agustin.ahumada@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-24T18:24:26.077Z",
+    "createdAt": "2026-07-24T18:24:26.077Z",
+    "versionId": "2f95f804-f943-4dd0-a729-4176e283b29f",
+    "workflowId": "mFtn3WnwBIU0k5uF",
+    "nodes": [
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "error_trigger_payment_alerts",
+        "name": "Error Trigger"
+      },
+      {
+        "parameters": {
+          "jsCode": "const d = $json;\nconst workflowName = d.workflow?.name || d.workflowName || \"workflow desconocido\";\nconst errorMessage = d.execution?.error?.message || d.error?.message || d.errorMessage || \"error desconocido\";\nconst nodeName = d.execution?.lastNodeExecuted || d.execution?.error?.node?.name || \"\";\nconst executionUrl = d.execution?.url || d.executionUrl || \"\";\n\nconst lines = [\n  \"ALERTA: fallo de ejecucion en pagos\",\n  \"Workflow: \" + workflowName\n];\nif (nodeName) lines.push(\"Nodo: \" + nodeName);\nlines.push(\"Error: \" + errorMessage);\nif (executionUrl) lines.push(executionUrl);\n\nreturn [{ message: lines.join(\"\\n\") }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "id": "build_error_alert_message",
+        "name": "build_error_alert_message"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n.aahumada.com/webhook/qa-notify-whatsapp",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          440,
+          0
+        ],
+        "id": "send_error_alert_telegram",
+        "name": "send_error_alert_telegram",
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000
+      }
+    ],
+    "connections": {
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "build_error_alert_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_error_alert_message": {
+        "main": [
+          [
+            {
+              "node": "send_error_alert_telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Agustín Ahumada",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-24T18:24:37.332Z",
+        "id": 2099,
+        "workflowId": "mFtn3WnwBIU0k5uF",
+        "versionId": "2f95f804-f943-4dd0-a729-4176e283b29f",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      }
+    ]
+  }
+}

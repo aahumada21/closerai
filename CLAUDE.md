@@ -36,6 +36,17 @@ que graphify (y el code review) la puedan ver.
 - Genera además `docs/arquitectura/GRAFO_WORKFLOWS.md`: el grafo de dependencias
   entre workflows (quién llama a quién) y la lista de workflows aislados.
 
+`node scripts/audit_workflow_exports.js` compara el repo contra n8n en vivo y
+reporta tres cosas: exports fantasma (el workflow ya se borró de n8n), exports
+sin `id` (nunca sincronizados), y workflows **vivos y activos sin export** — o
+sea, producción sin respaldo en git. Correrlo cada tanto; ya destapó 4 workflows
+de pago/onboarding activos que no estaban versionados.
+
+> **El campo `active` de un archivo de export es una foto histórica**, no la
+> verdad de hoy: un export de un workflow borrado hace meses sigue diciendo
+> `"active": true`. Para saber qué está vivo hay que preguntarle a la API, que
+> es lo que hace ese script.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
