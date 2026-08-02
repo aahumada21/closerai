@@ -9,11 +9,21 @@
 
 const input = $json;
 
-const executionContext = input.execution_context || {};
-const contextPacket = input.context_packet || {};
+function parseMaybeJson(value, fallback = {}) {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+const executionContext = parseMaybeJson(input.execution_context, {});
+const contextPacket = parseMaybeJson(input.context_packet, {});
 const state = contextPacket.state || {};
-const stateUpdate = input.state_update || executionContext.state_update || {};
-const decision = input.decision || {};
+const stateUpdate = parseMaybeJson(input.state_update, executionContext.state_update || {});
+const decision = parseMaybeJson(input.decision, {});
 
 function firstValue(...values) {
   for (const value of values) {
@@ -72,15 +82,18 @@ return [{
   phone,
   channel,
 
+  // Sin fallback hardcodeado a proposito (ver 6 action_executor).
   calendar_id:
     input.calendar_id ||
     executionContext.calendar_id ||
     state.calendar_id ||
-    "0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com",
+    null,
 
   agent_id:
     input.agent_id ||
     executionContext.agent_id ||
+    contextPacket.routing?.agent_id ||
+    contextPacket.agent?.id ||
     null,
 
   booking_date: shouldListNewSlots

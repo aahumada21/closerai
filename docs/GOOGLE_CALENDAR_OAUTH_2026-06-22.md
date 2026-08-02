@@ -143,11 +143,18 @@ Los 3 workflows que hablan con Google Calendar ya tienen **camino dual**:
 - Para que el `agent_id` llegue hasta ahi, tambien se agrego esa propagacion en
   los 3 workflows que llaman a estos: `6.5 confirm_booking_executor`,
   `6.10 reschedule_booking`, `6.23 offer_available_slots`.
-- Validado que el camino de fallback (compartido) sigue intacto para Ahumada:
+- ~~Validado que el camino de fallback (compartido) sigue intacto para Ahumada:
   confirmado en la base de datos que su agente no tiene fila en
-  `google_calendar_connections`, asi que siempre toma la rama `false` del
-  `IF oauth_connected` — cero cambio de comportamiento para el bot en
-  produccion hoy.
+  `google_calendar_connections`~~ — ⚠️ **desactualizado (verificado 2026-08-02)**:
+  hoy Ahumada **sí** tiene fila en `google_calendar_connections` y además tiene
+  `calendar_id` explícito en su `agent_business_config`, así que toma la rama
+  OAuth y no depende de ningún fallback.
+- ⚠️ **El fallback compartido cambió el 2026-08-02.** Antes, un agente sin OAuth
+  y sin `calendar_id` caía en un ID hardcodeado que era el calendario real de
+  Ahumada — o sea, las reservas de un cliente aterrizaban en el calendario de
+  otro. Hoy ese caso **corta el flujo** en vez de agendar. Detalle completo,
+  incluyendo los 31 eventos ya contaminados que quedan por remediar, en
+  [`docs/arquitectura/AISLAMIENTO_CALENDARIO.md`](arquitectura/AISLAMIENTO_CALENDARIO.md).
 - Detalle importante encontrado durante esta implementacion: hay 445 leads
   historicos sin `agent_id` asignado (de antes de que esa columna existiera).
   Si alguno de esos leads activa un flujo de booking, `get_fresh_google_calendar_token`

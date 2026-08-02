@@ -28,5 +28,6 @@ CROSS JOIN sleep_if_needed
 WHERE a.conversation_id = $1
   AND a.status IN ('confirmed', 'pending')
   AND a.start_at >= NOW()
+  AND ($2::int IS NULL OR a.id = $2::int)
 ORDER BY a.start_at ASC
 LIMIT 1;

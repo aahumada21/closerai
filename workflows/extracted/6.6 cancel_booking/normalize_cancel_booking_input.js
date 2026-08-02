@@ -54,6 +54,19 @@ const cancellation_reason =
   decision.reason ||
   "cancelled_by_client";
 
+const target_appointment_id =
+  $json.target_appointment_id ||
+  execution_context.target_appointment_id ||
+  state_update.target_appointment_id ||
+  null;
+
+const agent_id =
+  $json.agent_id ||
+  execution_context.agent_id ||
+  context_packet?.routing?.agent_id ||
+  context_packet?.agent?.id ||
+  null;
+
 if (!lead_id) {
   throw new Error("Missing lead_id in cancel_booking");
 }
@@ -66,6 +79,8 @@ return [
       phone,
       calendar_id,
       cancellation_reason,
+      target_appointment_id,
+      agent_id,
 
       execution_context: {
         ...execution_context,
@@ -74,6 +89,8 @@ return [
         phone,
         calendar_id,
         cancellation_reason,
+        target_appointment_id,
+        agent_id,
         action: "cancel_booking"
       },
 

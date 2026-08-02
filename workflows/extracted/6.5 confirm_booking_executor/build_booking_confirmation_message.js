@@ -7,7 +7,7 @@
 //   node scripts/extract_workflow_code.js
 // =====================================
 
-function serviceLabel(service) {
+function serviceLabel(service, configuredServices) {
   const map = {
     "lavado_basico": "lavado basico",
     "lavado_premium": "lavado premium",
@@ -16,7 +16,12 @@ function serviceLabel(service) {
     "lavado_esencial": "lavado basico"
   };
 
-  return map[service] || "el servicio";
+  if (map[service]) return map[service];
+
+  const found = (configuredServices || []).find((s) => s.key === service);
+  if (found && found.name) return found.name;
+
+  return service ? String(service).replace(/_/g, " ") : "el servicio";
 }
 
 function firstValue(...values) {
@@ -44,18 +49,25 @@ const hora = start && !isNaN(start.getTime())
   ? start.toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hour12: false })
   : firstValue(ctx.booking_time, $json.booking_time, "el horario acordado");
 
-const service = serviceLabel(firstValue(ctx.service_interest, $json.booking_context?.service_interest, $json.context_packet?.state?.service_interest));
+const rawBusinessConfig = $json.agent_business_config?.config || $json.context_packet?.agent_business_config?.config || null;
+const requiresPricingContext = rawBusinessConfig?.pricing_policy?.requires_service_vehicle_district !== false;
+const configuredServices = Array.isArray(rawBusinessConfig?.services) ? rawBusinessConfig.services : [];
+
+const service = serviceLabel(firstValue(ctx.service_interest, $json.booking_context?.service_interest, $json.context_packet?.state?.service_interest), configuredServices);
 const district = firstValue(ctx.district, $json.booking_context?.district, $json.context_packet?.state?.district);
 const address = firstValue(ctx.service_address, ctx.address, $json.booking_request?.service_address, $json.state_update?.service_address, $json.context_packet?.state?.service_address);
 
-const districtText = district ? `Comuna: ${district}. ` : "";
+const districtText = (district && requiresPricingContext) ? `Comuna: ${district}. ` : "";
 const addressText = address ? `Direccion: ${address}. ` : "";
+const closingText = requiresPricingContext
+  ? "Te escribire antes de la visita para coordinar."
+  : "Te esperamos en nuestro local.";
 
 const finalMessage = `Perfecto, tu reserva quedo confirmada para el ${fecha} a las ${hora}. ` +
   `Servicio: ${service}. ` +
   districtText +
   addressText +
-  `Te escribire antes de la visita para coordinar.`;
+  closingText;
 
 return [{
   ...$json,

@@ -16,7 +16,7 @@ function serviceLabel(service) {
     lavado_esencial: "lavado basico",
   };
 
-  return map[service] || "el servicio";
+  return map[service] || (service ? String(service).replace(/_/g, " ") : "el servicio");
 }
 
 function formatDateTime(value) {

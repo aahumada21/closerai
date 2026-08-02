@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T12:17:52.578Z",
+  "updatedAt": "2026-07-31T18:34:15.939Z",
   "createdAt": "2026-05-22T22:29:40.697Z",
   "id": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
   "name": "6.4 list_available_slots",
@@ -160,7 +160,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\n\n// --- Guard de aislamiento multi-tenant ---\n// Si no hay calendario propio (config/staff) NI conexion OAuth del agente, no\n// se agenda. Antes se caia a \"primary\", el calendario de la credencial\n// compartida de n8n, que es de otro tenant. Fallar aca es deliberado: es\n// preferible cortar y derivar a un humano antes que escribir o leer el\n// calendario de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md\nconst resolvedCalendarId =\n  staffCalendarId || (auth.connected === true ? auth.calendar_id : null) || null;\n\nif (!resolvedCalendarId) {\n  throw new Error(\n    'calendar_not_configured: el agente no tiene calendario propio ni conexion ' +\n    'de Google Calendar. No se agenda para no usar el calendario de otro cliente. ' +\n    'Configurar agent_business_config.config.calendar_id o conectar OAuth.'\n  );\n}\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
+        "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -456,9 +456,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "a5634a61-6e82-429b-ad84-baa3b42b13e4",
-  "activeVersionId": "a5634a61-6e82-429b-ad84-baa3b42b13e4",
-  "versionCounter": 89,
+  "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
+  "activeVersionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
+  "versionCounter": 86,
   "triggerCount": 0,
   "shared": [
     {
@@ -481,9 +481,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-08-02T12:17:52.580Z",
-    "createdAt": "2026-08-02T12:17:52.580Z",
-    "versionId": "a5634a61-6e82-429b-ad84-baa3b42b13e4",
+    "updatedAt": "2026-07-31T18:34:15.942Z",
+    "createdAt": "2026-07-31T18:34:15.942Z",
+    "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
     "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
     "nodes": [
       {
@@ -639,7 +639,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\n\n// --- Guard de aislamiento multi-tenant ---\n// Si no hay calendario propio (config/staff) NI conexion OAuth del agente, no\n// se agenda. Antes se caia a \"primary\", el calendario de la credencial\n// compartida de n8n, que es de otro tenant. Fallar aca es deliberado: es\n// preferible cortar y derivar a un humano antes que escribir o leer el\n// calendario de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md\nconst resolvedCalendarId =\n  staffCalendarId || (auth.connected === true ? auth.calendar_id : null) || null;\n\nif (!resolvedCalendarId) {\n  throw new Error(\n    'calendar_not_configured: el agente no tiene calendario propio ni conexion ' +\n    'de Google Calendar. No se agenda para no usar el calendario de otro cliente. ' +\n    'Configurar agent_business_config.config.calendar_id o conectar OAuth.'\n  );\n}\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
+          "jsCode": "const original = $(\"generate_candidate_slots\").first().json;\nconst auth = $json || {};\n\n// Si la seleccion de personal asigno un calendario propio a esa persona\n// (agent_staff.calendar_id), ese manda por sobre el calendario por defecto\n// del agente que devuelve get_valid_calendar_token. Cuando el negocio opera\n// con un solo calendario compartido este campo llega vacio o como \"primary\"\n// y se sigue usando el del agente, igual que siempre.\nconst staffCalendarId =\n  original.calendar_id && original.calendar_id !== \"primary\"\n    ? original.calendar_id\n    : null;\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: staffCalendarId || auth.calendar_id || null\n  }\n}];\n"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -933,18 +933,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T12:17:52.752Z",
-        "id": 2273,
+        "createdAt": "2026-07-31T18:34:16.104Z",
+        "id": 2263,
         "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
-        "versionId": "a5634a61-6e82-429b-ad84-baa3b42b13e4",
+        "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-08-02T12:17:52.674Z",
-        "id": 2272,
+        "createdAt": "2026-07-31T18:34:16.040Z",
+        "id": 2262,
         "workflowId": "1e882e96-85ef-4afa-8619-8a7bf5f52376",
-        "versionId": "a5634a61-6e82-429b-ad84-baa3b42b13e4",
+        "versionId": "e6b15e2d-cd37-42a0-9c3e-597ff8672fc3",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

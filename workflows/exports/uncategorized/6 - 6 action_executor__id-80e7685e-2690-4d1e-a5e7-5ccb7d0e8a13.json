@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-13T22:15:40.273Z",
+  "updatedAt": "2026-08-02T12:17:48.609Z",
   "createdAt": "2026-05-22T22:29:40.675Z",
   "id": "80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13",
   "name": "6 action_executor",
@@ -63,7 +63,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\n\nconst paymentMode = ctx.payment_mode ||\n  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||\n  (data.context_packet && data.context_packet.agent_business_config &&\n   data.context_packet.agent_business_config.config &&\n   data.context_packet.agent_business_config.config.payment_mode) ||\n  \"both\";\n\nconst isPrepagoreRequired = paymentMode === \"prepago_required\";\n\nconst bookingData = {\n  lead_id: ctx.lead_id,\n  channel: ctx.channel,\n  service_interest: ctx.service_interest,\n  vehicle_type: ctx.vehicle_type,\n  district: ctx.district,\n  booking_date: ctx.booking_date,\n  booking_time: ctx.booking_time,\n  slot_id: ctx.slot_id,\n  availability_confirmed: ctx.availability_confirmed,\n  duration_minutes: ctx.duration_minutes || 120,\n  calendar_id: ctx.calendar_id || \"primary\",\n  service_address: ctx.service_address || ctx.address || null,\n  address_reference: ctx.address_reference || null,\n  address_confirmed: ctx.address_confirmed === true\n};\n\nif (isPrepagoreRequired) {\n  // Skip GCal booking — send payment link first via 6.26\n  // GCal event will be created by 6.27 when Flow confirms payment\n  const payloadObject = {\n    ...data,\n    db_operations: [\"messages\", \"lead_state\"],\n    skip_calendar_booking: true,\n    pending_booking_data: bookingData,\n    booking_request: bookingData,\n    state_update: {\n      ...(ctx.state_update || {}),\n      last_bot_action: \"payment_link_pending\",\n      payment_mode: \"prepago_required\",\n      payment_preference: \"prepago\",\n      pending_booking_data: bookingData,\n    }\n  };\n  return [{ ...payloadObject, payload: JSON.stringify(payloadObject) }];\n}\n\n// Normal booking flow (prepago_only, postpago_only, both)\nconst payloadObject = {\n  ...data,\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"],\n  booking_request: bookingData,\n  state_update: {\n    ...(ctx.state_update || {}),\n    last_bot_action: \"confirm_booking_in_progress\"\n  }\n};\n\nreturn [{\n  ...payloadObject,\n  payload: JSON.stringify(payloadObject)\n}];"
+        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\n\n// El config global del negocio (agent_business_config) SIEMPRE manda sobre\n// cualquier valor pegado en lead_state de una reserva anterior -- payment_mode\n// es una decision de negocio, no algo que deba quedar fijo por lead para\n// siempre. Antes, un lead que ya habia reservado una vez quedaba atascado\n// usando el payment_mode VIEJO aunque el negocio cambiara su configuracion,\n// incluso para una reserva nueva/distinta (bug real: 2do auto de un cliente\n// use prepago_only heredado en vez de prepago_required, el modo activo real).\nconst paymentMode = (data.context_packet && data.context_packet.agent_business_config &&\n   data.context_packet.agent_business_config.config &&\n   data.context_packet.agent_business_config.config.payment_mode) ||\n  ctx.payment_mode ||\n  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||\n  \"both\";\n\nconst isPrepagoreRequired = paymentMode === \"prepago_required\";\n\nconst bookingData = {\n  lead_id: ctx.lead_id,\n  channel: ctx.channel,\n  service_interest: ctx.service_interest,\n  vehicle_type: ctx.vehicle_type,\n  district: ctx.district,\n  booking_date: ctx.booking_date,\n  booking_time: ctx.booking_time,\n  slot_id: ctx.slot_id,\n  availability_confirmed: ctx.availability_confirmed,\n  duration_minutes: ctx.duration_minutes || 120,\n  calendar_id: ctx.calendar_id || \"primary\",\n  service_address: ctx.service_address || ctx.address || null,\n  address_reference: ctx.address_reference || null,\n  address_confirmed: ctx.address_confirmed === true\n};\n\nif (isPrepagoreRequired) {\n  // Skip GCal booking — send payment link first via 6.26\n  // GCal event will be created by 6.27 when Flow confirms payment\n  const payloadObject = {\n    ...data,\n    db_operations: [\"messages\", \"lead_state\"],\n    skip_calendar_booking: true,\n    pending_booking_data: bookingData,\n    booking_request: bookingData,\n    state_update: {\n      ...(ctx.state_update || {}),\n      last_bot_action: \"payment_link_pending\",\n      payment_mode: \"prepago_required\",\n      payment_preference: \"prepago\",\n      pending_booking_data: bookingData,\n    }\n  };\n  return [{ ...payloadObject, payload: JSON.stringify(payloadObject) }];\n}\n\n// Normal booking flow (prepago_only, postpago_only, both)\nconst payloadObject = {\n  ...data,\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"],\n  booking_request: bookingData,\n  state_update: {\n    ...(ctx.state_update || {}),\n    last_bot_action: \"confirm_booking_in_progress\"\n  }\n};\n\nreturn [{\n  ...payloadObject,\n  payload: JSON.stringify(payloadObject)\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -245,7 +245,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const originalInput = $(\"IN LLM_Descision\").first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst decision =\n  $json.decision ||\n  originalInput.decision ||\n  null;\n\nconst executionContext = {\n  ...($json.execution_context || {})\n};\n\nconst toolRegistry = $json.tool_registry || {};\n\nconst messageActions = new Set([\n  \"ask_missing_data\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\"\n]);\n\nconst mappedToolName = Array.isArray(toolRegistry.mapped_tool_names)\n  ? toolRegistry.mapped_tool_names.find(Boolean)\n  : null;\n\nconst preliminaryAction =\n  executionContext.action ||\n  decision?.action ||\n  $json.action ||\n  null;\n\nconst emittedMessage = Boolean(\n  $json.message ||\n  $json.message_to_send ||\n  $json.meta?.bot\n);\n\nconst actionToolDefaults = {\n  send_quote: \"quote.create\",\n  offer_available_slots: \"calendar.availability\",\n  confirm_booking: \"calendar.create_booking\",\n  cancel_booking: \"calendar.cancel_booking\",\n  reschedule_booking: \"calendar.reschedule_booking\",\n  schedule_followup: \"followup.schedule\",\n  request_review: \"review.request\",\n  request_referral: \"referral.request\",\n  handoff_human: \"handoff.create\"\n};\n\nconst toolName =\n  executionContext.tool_name ||\n  toolRegistry.tool_name ||\n  mappedToolName ||\n  actionToolDefaults[preliminaryAction] ||\n  (emittedMessage || messageActions.has(preliminaryAction) ? \"message.send\" : null);\nconst executorRef =\n  executionContext.executor_ref ||\n  toolRegistry.executor_ref ||\n  null;\nconst executorType =\n  executionContext.executor_type ||\n  toolRegistry.executor_type ||\n  null;\nconst agentId =\n  executionContext.agent_id ||\n  toolRegistry.agent_id ||\n  contextPacket.agent?.id ||\n  contextPacket.routing?.agent_id ||\n  null;\nconst organizationId =\n  executionContext.organization_id ||\n  toolRegistry.organization_id ||\n  contextPacket.organization?.id ||\n  contextPacket.routing?.organization_id ||\n  null;\nconst toolResolutionMode =\n  executionContext.tool_resolution_mode ||\n  toolRegistry.mode ||\n  \"legacy\";\n\nconst leadId =\n  executionContext.lead_id ||\n  $json.lead_id ||\n  contextPacket.lead?.id ||\n  contextPacket.state?.lead_id ||\n  contextPacket.event?.lead_id ||\n  originalInput.execution_context?.lead_id ||\n  originalInput.lead_id ||\n  originalInput.context_packet?.lead?.id ||\n  originalInput.context_packet?.state?.lead_id ||\n  null;\n\nconst channel =\n  executionContext.channel ||\n  $json.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nconst action = preliminaryAction;\n\nconst inboundMessageId =\n  executionContext.inbound_message_id ||\n  contextPacket.conversation?.last_message_id ||\n  contextPacket.event?.message_id ||\n  originalInput.event?.message_id ||\n  $json.execution_meta?.execution_id ||\n  originalInput.execution_meta?.execution_id ||\n  Date.now().toString();\n\nconst computedIdempotencyKey =\n  leadId && inboundMessageId && action\n    ? `${leadId}__${inboundMessageId}__${action}`\n    : null;\n\nconst idempotencyKey =\n  computedIdempotencyKey ||\n  executionContext.idempotency_key ||\n  $json.idempotency_key ||\n  (leadId && action ? `${leadId}__${Date.now().toString()}__${action}` : null);\n\nif (!leadId) throw new Error(\"Missing lead_id for audit\");\n\nconst finalDecision =\n  decision && decision.action\n    ? decision\n    : {\n        action: action || executionContext.action || null,\n        reason: \"missing_decision_fallback\",\n        message:\n          $json.message ||\n          $json.message_to_send ||\n          $json.execution_result?.bot ||\n          null,\n        confidence: 0,\n        source: \"action_executor\",\n        state_update: $json.state_update || $json.lead_state_update || {},\n      };\n\nif (!finalDecision.action) throw new Error(\"Missing decision.action for audit\");\nif (!idempotencyKey) throw new Error(\"Missing idempotency_key for audit\");\n\nconst botMessage =\n  $json.message ||\n  $json.message_to_send ||\n  $json.execution_result?.bot ||\n  $json.execution_result?.message ||\n  null;\n\nconst messageSent = $json.message_sent === true;\nconst outboundMessageId =\n  $json.outbound_message_id ||\n  $json.message_id ||\n  $json.message_db_id ||\n  null;\n\nconst providerStatus =\n  $json.provider_status ||\n  ($json.message_sent === true ? \"sent\" : \"failed\");\n\nconst providerMessageId =\n  $json.provider_message_id ||\n  null;\n\nreturn [{\n  ...$json,\n  flow_name: \"action_executor\",\n  lead_id: leadId,\n  inbound_message_id: inboundMessageId,\n  outbound_message_id: outboundMessageId,\n  provider_status: providerStatus,\n  provider_message_id: providerMessageId,\n  channel,\n  stage_before: contextPacket.state?.stage || null,\n  latest_user_message: contextPacket.conversation?.latest_user_message || null,\n  allowed_actions: contextPacket.allowed_actions || [],\n  decision: finalDecision,\n  llm: null,\n  idempotency_key: idempotencyKey,\n  tool_name: toolName,\n  executor_ref: executorRef,\n  agent_id: agentId,\n  organization_id: organizationId,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    action,\n    inbound_message_id: inboundMessageId,\n    idempotency_key: idempotencyKey,\n    tool_name: toolName,\n    executor_ref: executorRef,\n    executor_type: executorType,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_resolution_mode: toolResolutionMode\n  },\n\n  context_packet: contextPacket,\n\n  meta: {\n    execution_meta: $json.execution_meta || null,\n    validation: {\n      ...($json.validation || {}),\n      requirements_ok:\n        typeof $json.validation?.requirements_ok === \"boolean\"\n          ? $json.validation.requirements_ok\n          : true,\n      required_fields: Array.isArray($json.validation?.required_fields)\n        ? $json.validation.required_fields\n        : [],\n      missing_fields: Array.isArray($json.validation?.missing_fields)\n        ? $json.validation.missing_fields\n        : []\n    },\n    tool_name: toolName,\n    executor_ref: executorRef,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_registry: {\n      mode: toolResolutionMode,\n      tool_name: toolName,\n      executor_type: executorType,\n      executor_ref: executorRef,\n      agent_id: agentId,\n      organization_id: organizationId,\n      side_effect_level: toolRegistry.side_effect_level || null,\n      mapped_tool_names: Array.isArray(toolRegistry.mapped_tool_names) && toolRegistry.mapped_tool_names.length > 0\n        ? toolRegistry.mapped_tool_names\n        : (toolName ? [toolName] : []),\n      tool_chain: Array.isArray(toolRegistry.tool_chain)\n        ? toolRegistry.tool_chain\n        : []\n    },\n    action,\n    state: {\n      before: contextPacket.state || null,\n      proposed_update: $json.proposed_state_update || finalDecision.state_update || null,\n      sanitized_update: $json.sanitized_state_update || $json.state_update || null,\n      current: $json.persisted_state_current || $json.state?.current || null,\n    },\n    outcome: $json.outcome || $json.execution_result?.outcome || null,\n    handoff: action === \"handoff_human\" ? {\n      human_handoff: true,\n      handoff_case_id: $json.handoff_case_id || null,\n      assigned_to: $json.assigned_to || null,\n      assigned_team: $json.assigned_team || null,\n      notification_sent: $json.notification_sent === true,\n      notification_channel: $json.notification_channel || null,\n      notification_sent_at: $json.notification_sent_at || null\n    } : null,\n    last_bot_action:\n      $json.state_update?.last_bot_action ||\n      $json.lead_state_update?.last_bot_action ||\n      null,\n    bot: botMessage,\n    message_sent: messageSent,\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    outbound_message_id: outboundMessageId,\n    outbound_message_saved: $json.outbound_message_saved === true,\n    state_updated: $json.state_updated === true,\n    db_records_created: $json.records || $json.db_operations || [],\n    execution_result: $json.execution_result || null,\n    notes: $json.notes || []\n  },\n\n  created_at: new Date().toISOString()\n}];"
+        "jsCode": "const originalInput = $(\"IN LLM_Descision\").first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst decision =\n  $json.decision ||\n  originalInput.decision ||\n  null;\n\nconst executionContext = {\n  ...($json.execution_context || {})\n};\n\nconst toolRegistry = $json.tool_registry || {};\n\nconst messageActions = new Set([\n  \"ask_missing_data\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\"\n]);\n\nconst mappedToolName = Array.isArray(toolRegistry.mapped_tool_names)\n  ? toolRegistry.mapped_tool_names.find(Boolean)\n  : null;\n\nconst preliminaryAction =\n  executionContext.action ||\n  decision?.action ||\n  $json.action ||\n  null;\n\nconst emittedMessage = Boolean(\n  $json.message ||\n  $json.message_to_send ||\n  $json.meta?.bot\n);\n\nconst actionToolDefaults = {\n  send_quote: \"quote.create\",\n  offer_available_slots: \"calendar.availability\",\n  confirm_booking: \"calendar.create_booking\",\n  cancel_booking: \"calendar.cancel_booking\",\n  reschedule_booking: \"calendar.reschedule_booking\",\n  schedule_followup: \"followup.schedule\",\n  request_review: \"review.request\",\n  request_referral: \"referral.request\",\n  handoff_human: \"handoff.create\"\n};\n\nconst toolName =\n  executionContext.tool_name ||\n  toolRegistry.tool_name ||\n  mappedToolName ||\n  actionToolDefaults[preliminaryAction] ||\n  (emittedMessage || messageActions.has(preliminaryAction) ? \"message.send\" : null);\nconst executorRef =\n  executionContext.executor_ref ||\n  toolRegistry.executor_ref ||\n  null;\nconst executorType =\n  executionContext.executor_type ||\n  toolRegistry.executor_type ||\n  null;\nconst agentId =\n  executionContext.agent_id ||\n  toolRegistry.agent_id ||\n  contextPacket.agent?.id ||\n  contextPacket.routing?.agent_id ||\n  null;\nconst organizationId =\n  executionContext.organization_id ||\n  toolRegistry.organization_id ||\n  contextPacket.organization?.id ||\n  contextPacket.routing?.organization_id ||\n  null;\nconst toolResolutionMode =\n  executionContext.tool_resolution_mode ||\n  toolRegistry.mode ||\n  \"legacy\";\n\nconst leadId =\n  executionContext.lead_id ||\n  $json.lead_id ||\n  contextPacket.lead?.id ||\n  contextPacket.state?.lead_id ||\n  contextPacket.event?.lead_id ||\n  originalInput.execution_context?.lead_id ||\n  originalInput.lead_id ||\n  originalInput.context_packet?.lead?.id ||\n  originalInput.context_packet?.state?.lead_id ||\n  null;\n\nconst channel =\n  executionContext.channel ||\n  $json.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nconst action = preliminaryAction;\n\nconst inboundMessageId =\n  executionContext.inbound_message_id ||\n  contextPacket.conversation?.last_message_id ||\n  contextPacket.event?.message_id ||\n  originalInput.event?.message_id ||\n  $json.execution_meta?.execution_id ||\n  originalInput.execution_meta?.execution_id ||\n  Date.now().toString();\n\nconst computedIdempotencyKey =\n  leadId && inboundMessageId && action\n    ? `${leadId}__${inboundMessageId}__${action}`\n    : null;\n\nconst idempotencyKey =\n  computedIdempotencyKey ||\n  executionContext.idempotency_key ||\n  $json.idempotency_key ||\n  (leadId && action ? `${leadId}__${Date.now().toString()}__${action}` : null);\n\nif (!leadId) throw new Error(\"Missing lead_id for audit\");\n\nconst finalDecision =\n  decision && decision.action\n    ? decision\n    : {\n        action: action || executionContext.action || null,\n        reason: \"missing_decision_fallback\",\n        message:\n          $json.message ||\n          $json.message_to_send ||\n          $json.execution_result?.bot ||\n          null,\n        confidence: 0,\n        source: \"action_executor\",\n        state_update: $json.state_update || $json.lead_state_update || {},\n      };\n\nif (!finalDecision.action) throw new Error(\"Missing decision.action for audit\");\nif (!idempotencyKey) throw new Error(\"Missing idempotency_key for audit\");\n\nconst botMessage =\n  $json.message ||\n  $json.message_to_send ||\n  $json.execution_result?.bot ||\n  $json.execution_result?.message ||\n  null;\n\nconst messageSent = $json.message_sent === true;\nconst outboundMessageId =\n  $json.outbound_message_id ||\n  $json.message_id ||\n  $json.message_db_id ||\n  null;\n\nconst providerStatus =\n  $json.provider_status ||\n  ($json.message_sent === true ? \"sent\" : \"failed\");\n\nconst providerMessageId =\n  $json.provider_message_id ||\n  null;\n\nconst outboundPhoneNumberId =\n  $json.resolved_outbound_phone_number_id ||\n  contextPacket.routing?.phone_number_id ||\n  contextPacket.routing?.external_channel_id ||\n  '1024332077436840';\n\nreturn [{\n  ...$json,\n  flow_name: \"action_executor\",\n  lead_id: leadId,\n  inbound_message_id: inboundMessageId,\n  outbound_message_id: outboundMessageId,\n  provider_status: providerStatus,\n  provider_message_id: providerMessageId,\n  channel,\n  stage_before: contextPacket.state?.stage || null,\n  latest_user_message: contextPacket.conversation?.latest_user_message || null,\n  allowed_actions: contextPacket.allowed_actions || [],\n  decision: finalDecision,\n  llm: null,\n  idempotency_key: idempotencyKey,\n  tool_name: toolName,\n  executor_ref: executorRef,\n  agent_id: agentId,\n  organization_id: organizationId,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    action,\n    inbound_message_id: inboundMessageId,\n    idempotency_key: idempotencyKey,\n    tool_name: toolName,\n    executor_ref: executorRef,\n    executor_type: executorType,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_resolution_mode: toolResolutionMode\n  },\n\n  context_packet: contextPacket,\n\n  meta: {\n    execution_meta: $json.execution_meta || null,\n    validation: {\n      ...($json.validation || {}),\n      requirements_ok:\n        typeof $json.validation?.requirements_ok === \"boolean\"\n          ? $json.validation.requirements_ok\n          : true,\n      required_fields: Array.isArray($json.validation?.required_fields)\n        ? $json.validation.required_fields\n        : [],\n      missing_fields: Array.isArray($json.validation?.missing_fields)\n        ? $json.validation.missing_fields\n        : []\n    },\n    tool_name: toolName,\n    executor_ref: executorRef,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_registry: {\n      mode: toolResolutionMode,\n      tool_name: toolName,\n      executor_type: executorType,\n      executor_ref: executorRef,\n      agent_id: agentId,\n      organization_id: organizationId,\n      side_effect_level: toolRegistry.side_effect_level || null,\n      mapped_tool_names: Array.isArray(toolRegistry.mapped_tool_names) && toolRegistry.mapped_tool_names.length > 0\n        ? toolRegistry.mapped_tool_names\n        : (toolName ? [toolName] : []),\n      tool_chain: Array.isArray(toolRegistry.tool_chain)\n        ? toolRegistry.tool_chain\n        : []\n    },\n    action,\n    state: {\n      before: contextPacket.state || null,\n      proposed_update: $json.proposed_state_update || finalDecision.state_update || null,\n      sanitized_update: $json.sanitized_state_update || $json.state_update || null,\n      current: $json.persisted_state_current || $json.state?.current || null,\n    },\n    outcome: $json.outcome || $json.execution_result?.outcome || null,\n    handoff: action === \"handoff_human\" ? {\n      human_handoff: true,\n      handoff_case_id: $json.handoff_case_id || null,\n      assigned_to: $json.assigned_to || null,\n      assigned_team: $json.assigned_team || null,\n      notification_sent: $json.notification_sent === true,\n      notification_channel: $json.notification_channel || null,\n      notification_sent_at: $json.notification_sent_at || null\n    } : null,\n    last_bot_action:\n      $json.state_update?.last_bot_action ||\n      $json.lead_state_update?.last_bot_action ||\n      null,\n    bot: botMessage,\n    message_sent: messageSent,\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    outbound_message_id: outboundMessageId,\n    outbound_phone_number_id: outboundPhoneNumberId,\n    outbound_message_saved: $json.outbound_message_saved === true,\n    state_updated: $json.state_updated === true,\n    db_records_created: $json.records || $json.db_operations || [],\n    execution_result: $json.execution_result || null,\n    notes: $json.notes || []\n  },\n\n  created_at: new Date().toISOString()\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -543,7 +543,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nconst ctx = data.context_packet || {};\nconst state = ctx.state || {};\nconst conversation = ctx.conversation || {};\nconst lead = ctx.lead || {};\nconst event = data.event || {};\nconst ruleContext = ctx.rule_context || {};\nconst stateUpdate = data.decision?.state_update || {};\n\nconst action = data.decision?.action || \"unknown_action\";\nconst message =\n  data.decision?.message ||\n  data.rule_result?.message ||\n  data.context_packet?.rule_result?.message ||\n  data.context_packet?.decision?.message ||\n  \"\";\n\nconst leadId =\n  lead.id ||\n  state.lead_id ||\n  data.lead?.id ||\n  null;\n\nconst phone =\n  lead.phone ||\n  data.lead?.phone ||\n  event.phone ||\n  null;\n\nconst channel =\n  lead.channel ||\n  data.lead?.channel ||\n  event.channel ||\n  \"whatsapp\";\n\nconst inboundMessageId =\n  conversation.last_message_id ||\n  event.message_id ||\n  data.message_id ||\n  data.context_packet?.event?.message_id ||\n  data.execution_meta?.execution_id ||\n  \"no_message_id\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in execution context\");\n}\n\nif (!action) {\n  throw new Error(\"Missing action in execution context\");\n}\n\nif (!inboundMessageId || inboundMessageId === \"no_message_id\") {\n  throw new Error(\"Missing inbound message id for idempotency\");\n}\n\nconst idempotency_key = `${leadId}__${inboundMessageId}__${action}`;\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && value !== \"\") return value;\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction normalizeTool(tool) {\n  if (!tool || typeof tool !== \"object\") return null;\n\n  return {\n    tool_name: tool.tool_name || tool.name || null,\n    executor_type: tool.executor_type || null,\n    executor_ref: tool.executor_ref || null,\n    required_fields: asArray(tool.required_fields),\n    config: tool.config && typeof tool.config === \"object\" ? tool.config : {},\n    side_effect_level: tool.side_effect_level || null,\n    is_active: tool.is_active !== false,\n    agent_id: tool.agent_id || ctx.agent?.id || ctx.routing?.agent_id || null,\n    organization_id: tool.organization_id || ctx.organization?.id || ctx.routing?.organization_id || null,\n  };\n}\n\nconst actionToTools = {\n  ask_missing_data: [\"message.send\"],\n  answer_question: [\"message.send\"],\n  answer_objection: [\"message.send\"],\n  offer_booking: [\"message.send\"],\n  send_service_menu: [\"message.send\"],\n  recommend_service: [\"message.send\"],\n  ask_payment_preference: [\"message.send\", \"lead_state.update\"],\n  collect_address: [\"message.send\", \"lead_state.update\"],\n  confirm_address: [\"message.send\", \"lead_state.update\"],\n  send_pre_service_instructions: [\"message.send\"],\n  notify_on_the_way: [\"message.send\"],\n  request_review: [\"review.request\"],\n  request_referral: [\"referral.request\"],\n  send_quote: [\"quote.create\", \"message.send\"],\n  offer_available_slots: [\"calendar.availability\"],\n  confirm_booking: [\"calendar.create_booking\"],\n  cancel_booking: [\"calendar.cancel_booking\"],\n  reschedule_booking: [\"calendar.reschedule_booking\"],\n  schedule_followup: [\"followup.schedule\"],\n  handoff_human: [\"handoff.create\"],\n};\n\nconst configuredTools = [\n  ...asArray(ctx.agent_tools),\n  ...asArray(ctx.tools),\n]\n  .map(normalizeTool)\n  .filter((tool) => tool && tool.tool_name && tool.is_active);\n\nconst toolNamesForAction = actionToTools[action] || [];\nconst resolvedTools = toolNamesForAction\n  .map((toolName) => configuredTools.find((tool) => tool.tool_name === toolName) || null)\n  .filter(Boolean);\nconst primaryTool = resolvedTools[0] || null;\nconst primaryMappedToolName = primaryTool?.tool_name || toolNamesForAction[0] || null;\nconst toolResolutionMode = primaryTool ? \"tools\" : (primaryMappedToolName ? \"mapped_legacy\" : \"legacy\");\nconst organizationId =\n  primaryTool?.organization_id ||\n  ctx.organization?.id ||\n  ctx.routing?.organization_id ||\n  lead.organization_id ||\n  state.organization_id ||\n  null;\nconst agentId =\n  primaryTool?.agent_id ||\n  ctx.agent?.id ||\n  ctx.routing?.agent_id ||\n  lead.agent_id ||\n  state.agent_id ||\n  null;\n\nconst bookingDate = firstValue(\n  stateUpdate.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  stateUpdate.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  stateUpdate.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate && bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nreturn [\n  {\n    ...data,\n    tool_registry: {\n      mode: toolResolutionMode,\n      action,\n      mapped_tool_names: toolNamesForAction,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      required_fields: primaryTool?.required_fields || [],\n      side_effect_level: primaryTool?.side_effect_level || null,\n      agent_id: agentId,\n      organization_id: organizationId,\n      tool_chain: resolvedTools.map((tool) => ({\n        tool_name: tool.tool_name,\n        executor_type: tool.executor_type,\n        executor_ref: tool.executor_ref,\n        side_effect_level: tool.side_effect_level,\n      })),\n    },\n    execution_context: {\n      lead_id: leadId,\n      phone,\n      channel,\n      action,\n      message,\n      state_update: stateUpdate,\n      inbound_message_id: inboundMessageId,\n      idempotency_key,\n      organization_id: organizationId,\n      agent_id: agentId,\n      tool_resolution_mode: toolResolutionMode,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      tool_chain: resolvedTools.map((tool) => tool.tool_name),\n      chat_session_id:\n        data.context_packet?.conversation?.chat_session_id ||\n        data.context_packet?.lead?.chat_session_id ||\n        data.context_packet?.source_metadata?.chat_session_id ||\n        data.context_packet?.event?.source_metadata?.chat_session_id ||\n        null,\n      address: firstValue(\n        stateUpdate.address,\n        stateUpdate.service_address,\n        state.service_address,\n        ruleContext.address_candidate?.address,\n        ctx.conversation?.latest_user_message\n      ),\n      \n      address_reference: firstValue(\n        stateUpdate.address_reference,\n        state.address_reference,\n        ruleContext.address_candidate?.address_reference\n      ),\n      service_interest: firstValue(\n        stateUpdate.service_interest,\n        state.service_interest\n      ),\n\n      service_scope: firstValue(\n        stateUpdate.service_scope,\n        state.service_scope\n      ),\n\n      vehicle_type: firstValue(\n        stateUpdate.vehicle_type,\n        state.vehicle_type\n      ),\n\n      district: firstValue(\n        stateUpdate.district,\n        state.district\n      ),\n\n      staff_id: firstValue(\n        stateUpdate.staff_id,\n        state.staff_id\n      ),\n\n      staff_name: firstValue(\n        stateUpdate.staff_name,\n        state.staff_name\n      ),\n\n      // Efimero: solo viaja en esta misma ejecucion (no tiene columna\n      // propia en lead_state). Se resuelve de nuevo cada turno en rules_engine.\n      schedule: Array.isArray(stateUpdate.schedule) ? stateUpdate.schedule : null,\n      availability_window: firstValue(\n        stateUpdate.availability_window,\n        state.availability_window\n      ),\n      \n      availability_label: firstValue(\n        stateUpdate.availability_label,\n        state.availability_label\n      ),\n      \n      days_ahead: firstValue(\n        stateUpdate.days_ahead,\n        state.days_ahead\n      ),\n      \n      start_offset_days: firstValue(\n        stateUpdate.start_offset_days,\n        state.start_offset_days\n      ),\n      \n      max_slots: firstValue(\n        stateUpdate.max_slots,\n        state.max_slots\n      ),\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed:\n        stateUpdate.availability_confirmed ??\n        state.availability_confirmed ??\n        ruleContext.booking_candidate?.availability_confirmed ??\n        (action === \"confirm_booking\" ? true : null),\n\n      duration_minutes:\n        stateUpdate.duration_minutes ||\n        state.duration_minutes ||\n        120,\n\n      // Cada agente (numero) puede tener su propio Google Calendar via\n      // agent_business_config.config.calendar_id. El hardcode queda solo\n      // como ultimo fallback para no romper agentes sin calendario propio.\n      calendar_id:\n        state.calendar_id ||\n        ctx.agent_business_config?.config?.calendar_id ||\n        \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n\n      auto_offer_slots_after_cancel: stateUpdate.auto_offer_slots_after_cancel === true,\n\n      followup_type:\n        data.decision?.followup_type ||\n        stateUpdate.followup_type ||\n        state.followup_type ||\n        null,\n\n      scheduled_for:\n        data.decision?.scheduled_for ||\n        stateUpdate.scheduled_for ||\n        state.scheduled_for ||\n        null,\n      cancellation_reason: firstValue(\n        data.decision?.cancellation_reason,\n        stateUpdate.cancellation_reason,\n        ruleContext.cancellation_reason\n      ),\n            reschedule_reason: firstValue(\n        data.decision?.reschedule_reason,\n        stateUpdate.reschedule_reason,\n        ruleContext.reschedule_reason\n      ),\n      payment_preference: firstValue(\n        stateUpdate.payment_preference,\n        state.payment_preference\n      ),\n      payment_mode: firstValue(\n        stateUpdate.payment_mode,\n        state.payment_mode,\n        ctx.agent_business_config?.config?.payment_mode\n      ) || \"both\",\n      handoff_reason: data.decision?.reason || null,\n      handoff_summary:\n        ctx.conversation?.short_summary ||\n        ctx.conversation?.latest_user_message ||\n        null,\n    },\n  },\n];"
+        "jsCode": "const data = $json;\nconst ctx = data.context_packet || {};\nconst state = ctx.state || {};\nconst conversation = ctx.conversation || {};\nconst lead = ctx.lead || {};\nconst event = data.event || {};\nconst ruleContext = ctx.rule_context || {};\nconst stateUpdate = data.decision?.state_update || {};\n\nconst action = data.decision?.action || \"unknown_action\";\nconst message =\n  data.decision?.message ||\n  data.rule_result?.message ||\n  data.context_packet?.rule_result?.message ||\n  data.context_packet?.decision?.message ||\n  \"\";\n\nconst leadId =\n  lead.id ||\n  state.lead_id ||\n  data.lead?.id ||\n  null;\n\nconst phone =\n  lead.phone ||\n  data.lead?.phone ||\n  event.phone ||\n  null;\n\nconst channel =\n  lead.channel ||\n  data.lead?.channel ||\n  event.channel ||\n  \"whatsapp\";\n\nconst inboundMessageId =\n  conversation.last_message_id ||\n  event.message_id ||\n  data.message_id ||\n  data.context_packet?.event?.message_id ||\n  data.execution_meta?.execution_id ||\n  \"no_message_id\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in execution context\");\n}\n\nif (!action) {\n  throw new Error(\"Missing action in execution context\");\n}\n\nif (!inboundMessageId || inboundMessageId === \"no_message_id\") {\n  throw new Error(\"Missing inbound message id for idempotency\");\n}\n\nconst idempotency_key = `${leadId}__${inboundMessageId}__${action}`;\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && value !== \"\") return value;\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction normalizeTool(tool) {\n  if (!tool || typeof tool !== \"object\") return null;\n\n  return {\n    tool_name: tool.tool_name || tool.name || null,\n    executor_type: tool.executor_type || null,\n    executor_ref: tool.executor_ref || null,\n    required_fields: asArray(tool.required_fields),\n    config: tool.config && typeof tool.config === \"object\" ? tool.config : {},\n    side_effect_level: tool.side_effect_level || null,\n    is_active: tool.is_active !== false,\n    agent_id: tool.agent_id || ctx.agent?.id || ctx.routing?.agent_id || null,\n    organization_id: tool.organization_id || ctx.organization?.id || ctx.routing?.organization_id || null,\n  };\n}\n\nconst actionToTools = {\n  ask_missing_data: [\"message.send\"],\n  answer_question: [\"message.send\"],\n  answer_objection: [\"message.send\"],\n  offer_booking: [\"message.send\"],\n  send_service_menu: [\"message.send\"],\n  recommend_service: [\"message.send\"],\n  ask_payment_preference: [\"message.send\", \"lead_state.update\"],\n  collect_address: [\"message.send\", \"lead_state.update\"],\n  confirm_address: [\"message.send\", \"lead_state.update\"],\n  send_pre_service_instructions: [\"message.send\"],\n  notify_on_the_way: [\"message.send\"],\n  request_review: [\"review.request\"],\n  request_referral: [\"referral.request\"],\n  send_quote: [\"quote.create\", \"message.send\"],\n  offer_available_slots: [\"calendar.availability\"],\n  confirm_booking: [\"calendar.create_booking\"],\n  cancel_booking: [\"calendar.cancel_booking\"],\n  reschedule_booking: [\"calendar.reschedule_booking\"],\n  schedule_followup: [\"followup.schedule\"],\n  handoff_human: [\"handoff.create\"],\n};\n\nconst configuredTools = [\n  ...asArray(ctx.agent_tools),\n  ...asArray(ctx.tools),\n]\n  .map(normalizeTool)\n  .filter((tool) => tool && tool.tool_name && tool.is_active);\n\nconst toolNamesForAction = actionToTools[action] || [];\nconst resolvedTools = toolNamesForAction\n  .map((toolName) => configuredTools.find((tool) => tool.tool_name === toolName) || null)\n  .filter(Boolean);\nconst primaryTool = resolvedTools[0] || null;\nconst primaryMappedToolName = primaryTool?.tool_name || toolNamesForAction[0] || null;\nconst toolResolutionMode = primaryTool ? \"tools\" : (primaryMappedToolName ? \"mapped_legacy\" : \"legacy\");\nconst organizationId =\n  primaryTool?.organization_id ||\n  ctx.organization?.id ||\n  ctx.routing?.organization_id ||\n  lead.organization_id ||\n  state.organization_id ||\n  null;\nconst agentId =\n  primaryTool?.agent_id ||\n  ctx.agent?.id ||\n  ctx.routing?.agent_id ||\n  lead.agent_id ||\n  state.agent_id ||\n  null;\n\nconst bookingDate = firstValue(\n  stateUpdate.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  stateUpdate.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  stateUpdate.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate && bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nreturn [\n  {\n    ...data,\n    tool_registry: {\n      mode: toolResolutionMode,\n      action,\n      mapped_tool_names: toolNamesForAction,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      required_fields: primaryTool?.required_fields || [],\n      side_effect_level: primaryTool?.side_effect_level || null,\n      agent_id: agentId,\n      organization_id: organizationId,\n      tool_chain: resolvedTools.map((tool) => ({\n        tool_name: tool.tool_name,\n        executor_type: tool.executor_type,\n        executor_ref: tool.executor_ref,\n        side_effect_level: tool.side_effect_level,\n      })),\n    },\n    execution_context: {\n      lead_id: leadId,\n      phone,\n      channel,\n      action,\n      message,\n      state_update: stateUpdate,\n      inbound_message_id: inboundMessageId,\n      idempotency_key,\n      organization_id: organizationId,\n      agent_id: agentId,\n      tool_resolution_mode: toolResolutionMode,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      tool_chain: resolvedTools.map((tool) => tool.tool_name),\n      chat_session_id:\n        data.context_packet?.conversation?.chat_session_id ||\n        data.context_packet?.lead?.chat_session_id ||\n        data.context_packet?.source_metadata?.chat_session_id ||\n        data.context_packet?.event?.source_metadata?.chat_session_id ||\n        null,\n      address: firstValue(\n        stateUpdate.address,\n        stateUpdate.service_address,\n        state.service_address,\n        ruleContext.address_candidate?.address,\n        ctx.conversation?.latest_user_message\n      ),\n      \n      address_reference: firstValue(\n        stateUpdate.address_reference,\n        state.address_reference,\n        ruleContext.address_candidate?.address_reference\n      ),\n      service_interest: firstValue(\n        stateUpdate.service_interest,\n        state.service_interest\n      ),\n\n      service_scope: firstValue(\n        stateUpdate.service_scope,\n        state.service_scope\n      ),\n\n      vehicle_type: firstValue(\n        stateUpdate.vehicle_type,\n        state.vehicle_type\n      ),\n\n      district: firstValue(\n        stateUpdate.district,\n        state.district\n      ),\n\n      staff_id: firstValue(\n        stateUpdate.staff_id,\n        state.staff_id\n      ),\n\n      staff_name: firstValue(\n        stateUpdate.staff_name,\n        state.staff_name\n      ),\n\n      // Efimero: solo viaja en esta misma ejecucion (no tiene columna\n      // propia en lead_state). Se resuelve de nuevo cada turno en rules_engine.\n      schedule: Array.isArray(stateUpdate.schedule) ? stateUpdate.schedule : null,\n      availability_window: firstValue(\n        stateUpdate.availability_window,\n        state.availability_window\n      ),\n      \n      availability_label: firstValue(\n        stateUpdate.availability_label,\n        state.availability_label\n      ),\n      \n      days_ahead: firstValue(\n        stateUpdate.days_ahead,\n        state.days_ahead\n      ),\n      \n      start_offset_days: firstValue(\n        stateUpdate.start_offset_days,\n        state.start_offset_days\n      ),\n      \n      max_slots: firstValue(\n        stateUpdate.max_slots,\n        state.max_slots\n      ),\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed:\n        stateUpdate.availability_confirmed ??\n        state.availability_confirmed ??\n        ruleContext.booking_candidate?.availability_confirmed ??\n        (action === \"confirm_booking\" ? true : null),\n\n      duration_minutes:\n        stateUpdate.duration_minutes ||\n        state.duration_minutes ||\n        120,\n\n      // Cada agente (numero) puede tener su propio Google Calendar via\n      // agent_business_config.config.calendar_id. El hardcode queda solo\n      // como ultimo fallback para no romper agentes sin calendario propio.\n      // Sin fallback hardcodeado a proposito: si no hay calendario propio,\n      // queda null y 6.2/6.3/6.4 cortan el flujo. Antes esto apuntaba al\n      // calendario real de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md\n      calendar_id:\n        state.calendar_id ||\n        ctx.agent_business_config?.config?.calendar_id ||\n        null,\n\n      auto_offer_slots_after_cancel: stateUpdate.auto_offer_slots_after_cancel === true,\n\n      followup_type:\n        data.decision?.followup_type ||\n        stateUpdate.followup_type ||\n        state.followup_type ||\n        null,\n\n      scheduled_for:\n        data.decision?.scheduled_for ||\n        stateUpdate.scheduled_for ||\n        state.scheduled_for ||\n        null,\n      cancellation_reason: firstValue(\n        data.decision?.cancellation_reason,\n        stateUpdate.cancellation_reason,\n        ruleContext.cancellation_reason\n      ),\n            reschedule_reason: firstValue(\n        data.decision?.reschedule_reason,\n        stateUpdate.reschedule_reason,\n        ruleContext.reschedule_reason\n      ),\n      payment_preference: firstValue(\n        stateUpdate.payment_preference,\n        state.payment_preference\n      ),\n      payment_mode: firstValue(\n        stateUpdate.payment_mode,\n        state.payment_mode,\n        ctx.agent_business_config?.config?.payment_mode\n      ) || \"both\",\n      handoff_reason: data.decision?.reason || null,\n      handoff_summary:\n        ctx.conversation?.short_summary ||\n        ctx.conversation?.latest_user_message ||\n        null,\n    },\n  },\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -627,7 +627,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\n\nreturn [{\n  lead_id: data.execution_context?.lead_id,\n  channel: data.execution_context?.channel || \"whatsapp\",\n  phone: data.execution_context?.phone || data.context_packet?.lead?.phone || null,\n  calendar_id: data.execution_context?.calendar_id || null,\n\n  cancellation_reason:\n    data.execution_context?.cancellation_reason ||\n    data.decision?.cancellation_reason ||\n    data.decision?.reason ||\n    \"cancelled_by_client\",\n\n  execution_context: data.execution_context || {},\n  context_packet: data.context_packet || {},\n  decision: data.decision || {},\n  state_update: data.state_update || {},\n  execution_meta: data.execution_meta || {},\n\n  notes: [\n    ...(data.notes || []),\n    \"cancel_booking_parent_payload_prepared\"\n  ]\n}];"
+        "jsCode": "const data = $json;\n\n// Forzar limpieza de los campos de reserva sin importar si la decision vino\n// de una regla determinista (que ya declara fields_to_clear) o del LLM (que\n// no conoce esa convencion y puede reusar valores viejos de booking_date/\n// booking_time del contexto). Sin esto, COALESCE en 6.24 persist_and_audit\n// preserva el valor viejo en la columna y el bot sigue \"recordando\" una\n// reserva ya cancelada.\nconst incomingStateUpdate = data.state_update || {};\nconst forcedClearFields = [\"booking_date\", \"booking_time\", \"slot_id\", \"booking_options\", \"availability_confirmed\"];\nconst existingFieldsToClear = Array.isArray(incomingStateUpdate.fields_to_clear) ? incomingStateUpdate.fields_to_clear : [];\nconst mergedFieldsToClear = Array.from(new Set([...existingFieldsToClear, ...forcedClearFields]));\n\nconst stateUpdate = {\n  ...incomingStateUpdate,\n  booking_date: null,\n  booking_time: null,\n  slot_id: null,\n  availability_confirmed: false,\n  booking_options: [],\n  fields_to_clear: mergedFieldsToClear\n};\n\nconst targetAppointmentId =\n  data.decision?.state_update?.target_appointment_id ||\n  data.execution_context?.state_update?.target_appointment_id ||\n  incomingStateUpdate.target_appointment_id ||\n  data.execution_context?.target_appointment_id ||\n  null;\n\nreturn [{\n  lead_id: data.execution_context?.lead_id,\n  channel: data.execution_context?.channel || \"whatsapp\",\n  phone: data.execution_context?.phone || data.context_packet?.lead?.phone || null,\n  calendar_id: data.execution_context?.calendar_id || null,\n  target_appointment_id: targetAppointmentId,\n\n  cancellation_reason:\n    data.execution_context?.cancellation_reason ||\n    data.decision?.cancellation_reason ||\n    data.decision?.reason ||\n    \"cancelled_by_client\",\n\n  execution_context: {\n    ...(data.execution_context || {}),\n    target_appointment_id: targetAppointmentId\n  },\n  context_packet: data.context_packet || {},\n  decision: data.decision || {},\n  state_update: stateUpdate,\n  execution_meta: data.execution_meta || {},\n\n  notes: [\n    ...(data.notes || []),\n    \"cancel_booking_parent_payload_prepared\"\n  ]\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -2302,7 +2302,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = data.business || contextPacket.business || rawBusinessConfig || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
+        "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = rawBusinessConfig || data.business || contextPacket.business || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3024,6 +3024,542 @@
       ],
       "id": "qa-call-628-check-payment-status",
       "name": "Call 6.28 check_payment_status"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/9b16489e-ce39-4213-ab5d-270d035fa1e0",
+          "cachedResultName": "6.2 check_calendar_slot"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{$json.execution_context.lead_id}}",
+            "slot_id": "={{$json.execution_context.slot_id}}",
+            "booking_date": "={{$json.execution_context.booking_date}}",
+            "booking_time": "={{$json.execution_context.booking_time}}",
+            "duration_minutes": "={{ String($json.execution_context.duration_minutes || 120) }}",
+            "calendar_id": "={{$json.execution_context.calendar_id || 'primary'}}",
+            "agent_id": "={{$json.execution_context.agent_id}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "booking_date",
+              "displayName": "booking_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "booking_time",
+              "displayName": "booking_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slot_id",
+              "displayName": "slot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "duration_minutes",
+              "displayName": "duration_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "calendar_id",
+              "displayName": "calendar_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "agent_id",
+              "displayName": "agent_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2500,
+        550
+      ],
+      "id": "call_62_prepago_hold",
+      "name": "Call 6.2 check_calendar_slot (hold)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "prepago_slot_available_check",
+              "leftValue": "={{ !!$json.slot_available }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        550
+      ],
+      "id": "if_prepago_slot_available",
+      "name": "IF prepago_slot_available"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepPayload = $(\"prepago_required_prep\").first().json;\nconst ctx = prepPayload.execution_context || {};\n\nconst msg = \"Justo en este momento ese horario se reservo para otro cliente. Si quieres, te muestro los horarios disponibles de nuevo.\";\n\nreturn [{\n  ...prepPayload,\n  channel: ctx.channel || \"whatsapp\",\n  phone: ctx.phone || \"\",\n  message_to_send: msg,\n  message: msg,\n  db_operations: [\"messages\", \"lead_state\"],\n  execution_context: {\n    ...ctx,\n    action: \"answer_question\",\n    message: msg,\n    state_update: {\n      ...(ctx.state_update || {}),\n      stage: \"booking_selection\",\n      intent_last: \"selected_slot_unavailable\",\n      next_goal: \"collect_selected_slot\",\n      last_bot_action: \"answer_question\",\n      availability_confirmed: false,\n      booking_date: null,\n      booking_time: null,\n      slot_id: null,\n      pending_booking_data: null,\n      fields_to_clear: [\"booking_date\", \"booking_time\", \"slot_id\", \"pending_booking_data\"],\n      missing_fields: []\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2940,
+        700
+      ],
+      "id": "build_prepago_slot_taken_result",
+      "name": "build_prepago_slot_taken_result"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "a3ec1c2d-0a59-46b1-a404-7a990234f3dc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/a3ec1c2d-0a59-46b1-a404-7a990234f3dc",
+          "cachedResultName": "6.3 create_calendar_booking"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $(\"prepago_required_prep\").first().json.execution_context.lead_id }}",
+            "slot_id": "={{ $json.slot_id }}",
+            "slot_start_at": "={{ $json.slot_start_at }}",
+            "slot_end_at": "={{ $json.slot_end_at }}",
+            "service_interest": "={{ $(\"prepago_required_prep\").first().json.execution_context.service_interest }}",
+            "vehicle_type": "={{ $(\"prepago_required_prep\").first().json.execution_context.vehicle_type }}",
+            "district": "={{ $(\"prepago_required_prep\").first().json.execution_context.district }}",
+            "customer_name": "={{ $(\"prepago_required_prep\").first().json.context_packet?.lead?.name || 'Cliente' }}",
+            "phone": "={{ $(\"prepago_required_prep\").first().json.context_packet?.lead?.phone || null }}",
+            "calendar_id": "={{ $json.calendar_id || 'primary' }}",
+            "service_address": "={{ $(\"prepago_required_prep\").first().json.execution_context.service_address || null }}",
+            "address_reference": "={{ $(\"prepago_required_prep\").first().json.execution_context.address_reference || null }}",
+            "agent_id": "={{ $(\"prepago_required_prep\").first().json.execution_context.agent_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "lead_id",
+              "displayName": "lead_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slot_id",
+              "displayName": "slot_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slot_start_at",
+              "displayName": "slot_start_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slot_end_at",
+              "displayName": "slot_end_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "service_interest",
+              "displayName": "service_interest",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "vehicle_type",
+              "displayName": "vehicle_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "district",
+              "displayName": "district",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "calendar_id",
+              "displayName": "calendar_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "service_address",
+              "displayName": "service_address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "address_reference",
+              "displayName": "address_reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "agent_id",
+              "displayName": "agent_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2940,
+        400
+      ],
+      "id": "call_63_prepago_hold",
+      "name": "Call 6.3 create_calendar_booking (hold)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json.calendar_event || $json;\nconst prepPayload = $(\"prepago_required_prep\").first().json;\nconst slotCheck = $(\"Call 6.2 check_calendar_slot (hold)\").first().json;\nconst ctx = prepPayload.execution_context || {};\nconst lead = prepPayload.context_packet?.lead || {};\n\nif (!event?.id) {\n  throw new Error(\"Missing real calendar event id (prepago hold)\");\n}\n\nconst startAt = event.start?.dateTime || slotCheck.slot_start_at;\nconst endAt = event.end?.dateTime || slotCheck.slot_end_at;\n\nreturn [{\n  ...prepPayload,\n  appointment_payload: {\n    event_id: event.id,\n    conversation_id: ctx.lead_id,\n    start_at: startAt,\n    end_at: endAt,\n    summary: event.summary || `${ctx.service_interest || \"Servicio\"} - ${lead.name || \"Cliente\"}`,\n    description: event.description || \"\",\n    status: \"pending_payment\",\n    staff_id: ctx.staff_id || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3160,
+        400
+      ],
+      "id": "build_pending_payment_appointment_payload",
+      "name": "build_pending_payment_appointment_payload"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "appointments",
+          "mode": "list",
+          "cachedResultName": "appointments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_id": "={{ $json.appointment_payload.event_id}}",
+            "conversation_id": "={{ $json.appointment_payload.conversation_id}}",
+            "start_at": "={{ $json.appointment_payload.start_at}}",
+            "end_at": "={{ $json.appointment_payload.end_at}}",
+            "summary": "={{$json.appointment_payload.summary}}",
+            "description": "={{ $json.appointment_payload.description }}",
+            "status": "={{$json.appointment_payload.status }}",
+            "created_at": "={{ new Date().toISOString() }}",
+            "staff_id": "={{ $json.appointment_payload.staff_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "event_id",
+              "displayName": "event_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_at",
+              "displayName": "start_at",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_at",
+              "displayName": "end_at",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "staff_id",
+              "displayName": "staff_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3380,
+        400
+      ],
+      "id": "insert_pending_payment_appointment",
+      "name": "insert_pending_payment_appointment",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [ $(\"prepago_required_prep\").first().json ];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        400
+      ],
+      "id": "restore_context_for_payment_request",
+      "name": "restore_context_for_payment_request"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT external_channel_id\nFROM public.agent_channels\nWHERE agent_id = $1::uuid AND channel = 'whatsapp' AND is_active = true\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ $json.context_packet?.routing?.agent_id || $json.agent_id || $json.context_packet?.agent?.id || null ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4632,
+        496
+      ],
+      "id": "28a335aa-e77b-4037-8098-55e2a99bd037",
+      "name": "DB_resolve_audit_channel",
+      "credentials": {
+        "postgres": {
+          "id": "a9C9SXdbhsOBvUzF",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $(\"persist_results\").first().json;\nconst row = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    resolved_outbound_phone_number_id: row.external_channel_id || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        496
+      ],
+      "id": "93b27a95-6989-4d09-9fd6-d2f0a3674e4b",
+      "name": "merge_resolved_audit_channel"
     }
   ],
   "connections": {
@@ -3797,7 +4333,7 @@
       "main": [
         [
           {
-            "node": "build_audit_payload",
+            "node": "DB_resolve_audit_channel",
             "type": "main",
             "index": 0
           }
@@ -3837,7 +4373,7 @@
       "main": [
         [
           {
-            "node": "6.26 payment_request",
+            "node": "Call 6.2 check_calendar_slot (hold)",
             "type": "main",
             "index": 0
           }
@@ -3927,6 +4463,112 @@
           }
         ]
       ]
+    },
+    "Call 6.2 check_calendar_slot (hold)": {
+      "main": [
+        [
+          {
+            "node": "IF prepago_slot_available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF prepago_slot_available": {
+      "main": [
+        [
+          {
+            "node": "Call 6.3 create_calendar_booking (hold)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "build_prepago_slot_taken_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_prepago_slot_taken_result": {
+      "main": [
+        [
+          {
+            "node": "IF requires_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 6.3 create_calendar_booking (hold)": {
+      "main": [
+        [
+          {
+            "node": "build_pending_payment_appointment_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_pending_payment_appointment_payload": {
+      "main": [
+        [
+          {
+            "node": "insert_pending_payment_appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert_pending_payment_appointment": {
+      "main": [
+        [
+          {
+            "node": "restore_context_for_payment_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "restore_context_for_payment_request": {
+      "main": [
+        [
+          {
+            "node": "6.26 payment_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB_resolve_audit_channel": {
+      "main": [
+        [
+          {
+            "node": "merge_resolved_audit_channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_resolved_audit_channel": {
+      "main": [
+        [
+          {
+            "node": "build_audit_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -3939,9 +4581,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "07d76e96-eaaf-4d59-8af9-6c4cdb2a8c57",
-  "activeVersionId": "07d76e96-eaaf-4d59-8af9-6c4cdb2a8c57",
-  "versionCounter": 186,
+  "versionId": "f1c188ae-efb3-4900-bd08-dfdb86a5f385",
+  "activeVersionId": "f1c188ae-efb3-4900-bd08-dfdb86a5f385",
+  "versionCounter": 230,
   "triggerCount": 0,
   "shared": [
     {
@@ -3964,9 +4606,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-13T22:15:40.303Z",
-    "createdAt": "2026-07-13T22:15:40.303Z",
-    "versionId": "07d76e96-eaaf-4d59-8af9-6c4cdb2a8c57",
+    "updatedAt": "2026-08-02T12:17:48.629Z",
+    "createdAt": "2026-08-02T12:17:48.629Z",
+    "versionId": "f1c188ae-efb3-4900-bd08-dfdb86a5f385",
     "workflowId": "80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13",
     "nodes": [
       {
@@ -3997,7 +4639,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const globalAllowedActions = [\n  // Flujo base\n  \"ask_missing_data\",\n  \"send_quote\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"offer_available_slots\",\n  \"confirm_booking\",\n  \"schedule_followup\",\n  \"handoff_human\",\n\n  // Prioridad 2 - flujo comercial completo\n  \"cancel_booking\",\n  \"reschedule_booking\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\"\n];\n\nlet action = $json.decision?.action;\nlet contextAllowedActions = $json.context_packet?.allowed_actions;\nconst errors = [];\nfunction normalizeText(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \"string\" && value.trim() === \"\") return false;\n  return true;\n}\n\nfunction asksRecommendation(rawText) {\n  const t = normalizeText(rawText);\n\n  return (\n    t.includes(\"que me recomiendas\") ||\n    t.includes(\"que recomiendas\") ||\n    t.includes(\"cual me recomiendas\") ||\n    t.includes(\"cual me conviene\") ||\n    t.includes(\"no se cual elegir\") ||\n    t.includes(\"no se que servicio\") ||\n    t.includes(\"ayudame a elegir\") ||\n    t.includes(\"recomiendame\")\n  );\n}\n\nconst state = $json.context_packet?.state || {};\n\nconst quoteFailureLock =\n  state.last_bot_action === \"pricing_rule_not_found\" ||\n  state.next_goal === \"manual_pricing_review\";\n\nif (quoteFailureLock && action !== \"handoff_human\") {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_quote_failure_lock\",\n    message:\n      \"No pude calcular la cotización. Te voy a derivar con un asesor para confirmar precio antes de agendar.\",\n    handoff_reason: $json.decision?.handoff_reason || \"quote_pricing_not_available\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"manual_pricing_review\",\n      last_bot_action: \"pricing_rule_not_found\",\n      missing_fields: []\n    }\n  };\n}\n\nconst hasCommercialContext =\n  isFilled(state.service_interest) &&\n  isFilled(state.vehicle_type) &&\n  isFilled(state.district);\n\nconst latestUserMessage = $json.context_packet?.conversation?.latest_user_message || \"\";\nfunction userComplaintIntent(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"reclamo\") ||\n    t.includes(\"reclamar\") ||\n    t.includes(\"muy molesto\") ||\n    t.includes(\"muy molesta\") ||\n    t.includes(\"molesto\") ||\n    t.includes(\"molesta\") ||\n    t.includes(\"pesimo\") ||\n    t.includes(\"pesima\") ||\n    t.includes(\"mal servicio\") ||\n    t.includes(\"mala experiencia\") ||\n    t.includes(\"quiero quejarme\") ||\n    t.includes(\"quiero hacer un reclamo\") ||\n    t.includes(\"quiero poner un reclamo\") ||\n    t.includes(\"necesito soporte\")\n  );\n}\n\nfunction userReturningCustomerIntent(rawText) {\n  const t = normalizeText(rawText);\n  const returningSignals =\n    t.includes(\"hace meses\") ||\n    t.includes(\"ya lave con ustedes\") ||\n    t.includes(\"lave con ustedes\") ||\n    t.includes(\"lavado con ustedes\") ||\n    t.includes(\"fui cliente\") ||\n    t.includes(\"ya fui cliente\") ||\n    t.includes(\"otra vez\") ||\n    t.includes(\"de nuevo\") ||\n    t.includes(\"volver a cotizar\") ||\n    t.includes(\"cotizar de nuevo\") ||\n    t.includes(\"quiero volver\") ||\n    t.includes(\"quiero retomar\");\n\n  const commercialIntent =\n    t.includes(\"cotizar\") ||\n    t.includes(\"precio\") ||\n    t.includes(\"valor\") ||\n    t.includes(\"agendar\") ||\n    t.includes(\"reserva\");\n\n  return returningSignals && commercialIntent;\n}\n\nfunction userExplicitHumanRequest(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"hablar con un humano\") ||\n    t.includes(\"hablar con una persona\") ||\n    t.includes(\"asesor humano\") ||\n    t.includes(\"agente humano\") ||\n    t.includes(\"derivame con un humano\") ||\n    t.includes(\"quiero un humano\") ||\n    t.includes(\"necesito un humano\") ||\n    t.includes(\"atencion humana\")\n  );\n}\n\nif (userComplaintIntent(latestUserMessage) && state.human_handoff !== true) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"answer_question\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"answer_question\",\n    reason: \"action_executor_guard_customer_complaint_handoff\",\n    message:\n      \"Lamento lo ocurrido. Voy a derivarte con una persona del equipo para revisar tu reclamo y ayudarte ahora.\",\n    handoff_reason: $json.decision?.handoff_reason || \"customer_complaint\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      intent_last: \"customer_complaint\",\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n\nif (userExplicitHumanRequest(latestUserMessage)) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_explicit_human_request\",\n    message:\n      $json.decision?.message ||\n      \"Te voy a derivar con una persona para ayudarte mejor.\",\n    handoff_reason: $json.decision?.handoff_reason || \"user_requested_human\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n\n\nfunction userUrgent(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"urgente\") ||\n    t.includes(\"urgencia\") ||\n    t.includes(\"emergencia\")\n  );\n}\n\nif (userUrgent(latestUserMessage) && state.human_handoff !== true) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_urgent_handoff\",\n    message:\n      $json.decision?.message ||\n      \"Te voy a derivar con una persona para ayudarte mejor.\",\n    handoff_reason: $json.decision?.handoff_reason || \"urgent_handoff\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n// Handoff lock guard: si ya hay handoff activo, mantener el lock\nif (state.human_handoff === true && action && action !== \"handoff_human\") {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_handoff_lock\",\n    message:\n      $json.decision?.message ||\n      \"Ya estas siendo atendido por una persona. En breve te responderan.\",\n    handoff_reason: $json.decision?.handoff_reason || \"handoff_lock\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"wait_human_response\",\n      last_bot_action: \"human_handoff_already_active\",\n      missing_fields: []\n    }\n  };\n}\n\nfunction userPostpones(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"despues te aviso\") ||\n    t.includes(\"te aviso despues\") ||\n    t.includes(\"luego te aviso\") ||\n    t.includes(\"mas adelante\") ||\n    t.includes(\"otro dia\") ||\n    t.includes(\"en otro momento\") ||\n    t.includes(\"lo veo y te aviso\")\n  );\n}\n\n\nif (\n  action === \"offer_booking\" &&\n  hasCommercialContext &&\n  state.stage === \"quoted\" &&\n  userPostpones(latestUserMessage)\n) {\n  const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();\nif (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"schedule_followup\")) {\n  contextAllowedActions = [\"schedule_followup\", ...contextAllowedActions];\n  $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n}\n  action = \"schedule_followup\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"schedule_followup\",\n    reason: \"action_executor_guard_postponed_followup_scheduled\",\n    followup_type: $json.decision?.followup_type || \"post_quote_postponed_24h\",\n    scheduled_for: $json.decision?.scheduled_for || scheduledFor,\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"closing\",\n      intent_last: \"followup_scheduled\",\n      next_goal: \"wait_followup\",\n      last_bot_action: \"schedule_followup\",\n    },\n  };\n}\n\n\nif (\n  userReturningCustomerIntent(latestUserMessage) &&\n  action === \"ask_missing_data\" &&\n  !isFilled(state.service_interest) &&\n  (isFilled(state.vehicle_type) || isFilled(state.district))\n) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"answer_question\")) {\n    contextAllowedActions = [\"answer_question\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  const vehicleText = isFilled(state.vehicle_type) ? \" para tu \" + String(state.vehicle_type).toLowerCase() : \"\";\n  const districtText = isFilled(state.district) ? \" en \" + state.district : \"\";\n\n  action = \"answer_question\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"answer_question\",\n    reason: \"action_executor_guard_returning_customer_collect_service\",\n    message:\n      \"Perfecto, retomemos\" + vehicleText + districtText + \". Para cotizar, quieres lavado basico, lavado premium o encerado full?\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"service_discovery\",\n      intent_last: \"returning_customer_reactivated\",\n      next_goal: \"collect_service_interest\",\n      last_bot_action: \"answer_question\",\n      missing_fields: [\"service_interest\"]\n    }\n  };\n}\n\nif (\n  action === \"recommend_service\" &&\n  hasCommercialContext &&\n  !asksRecommendation(latestUserMessage) &&\n  Array.isArray(contextAllowedActions) &&\n  contextAllowedActions.includes(\"send_quote\")\n) {\n  action = \"send_quote\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"send_quote\",\n    reason: \"action_executor_guard_forced_send_quote_because_service_vehicle_district_are_complete\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      service_interest: state.service_interest,\n      vehicle_type: state.vehicle_type,\n      district: state.district,\n      stage: \"qualified\",\n      next_goal: \"send_quote\",\n      last_bot_action: \"send_quote_in_progress\",\n      missing_fields: []\n    }\n  };\n}\n\nif (!action) {\n  errors.push(\"Missing action\");\n}\n\nif (action && !globalAllowedActions.includes(action)) {\n  errors.push(`Unsupported action: ${action}`);\n}\n\nif (!Array.isArray(contextAllowedActions) || contextAllowedActions.length === 0) {\n  errors.push(\"Missing or empty context_packet.allowed_actions\");\n}\n\nif (\n  action &&\n  Array.isArray(contextAllowedActions) &&\n  contextAllowedActions.length > 0 &&\n  !contextAllowedActions.includes(action)\n) {\n  errors.push(\n    `Action not allowed in current state: ${action}. Allowed: ${contextAllowedActions.join(\", \")}`\n  );\n}\n\nif (errors.length > 0) {\n  return [{\n    error: true,\n    errors,\n    original: $json\n  }];\n}\n\nreturn [{\n  ...$json,\n  validation: {\n    global_action_valid: true,\n    context_action_valid: true,\n    allowed_actions_checked: contextAllowedActions\n  }\n}];"
+          "jsCode": "const globalAllowedActions = [\n  // Flujo base\n  \"ask_missing_data\",\n  \"send_quote\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"offer_available_slots\",\n  \"confirm_booking\",\n  \"schedule_followup\",\n  \"handoff_human\",\n\n  // Prioridad 2 - flujo comercial completo\n  \"cancel_booking\",\n  \"reschedule_booking\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\",\n  \"check_payment_status\"\n];\n\nlet action = $json.decision?.action;\nlet contextAllowedActions = $json.context_packet?.allowed_actions;\nconst errors = [];\nfunction normalizeText(value) {\n  return String(value || \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\")\n    .trim();\n}\n\nfunction isFilled(value) {\n  if (value === null || value === undefined) return false;\n  if (typeof value === \"string\" && value.trim() === \"\") return false;\n  return true;\n}\n\nfunction asksRecommendation(rawText) {\n  const t = normalizeText(rawText);\n\n  return (\n    t.includes(\"que me recomiendas\") ||\n    t.includes(\"que recomiendas\") ||\n    t.includes(\"cual me recomiendas\") ||\n    t.includes(\"cual me conviene\") ||\n    t.includes(\"no se cual elegir\") ||\n    t.includes(\"no se que servicio\") ||\n    t.includes(\"ayudame a elegir\") ||\n    t.includes(\"recomiendame\")\n  );\n}\n\nconst state = $json.context_packet?.state || {};\n\nconst quoteFailureLock =\n  state.last_bot_action === \"pricing_rule_not_found\" ||\n  state.next_goal === \"manual_pricing_review\";\n\nif (quoteFailureLock && action !== \"handoff_human\") {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_quote_failure_lock\",\n    message:\n      \"No pude calcular la cotización. Te voy a derivar con un asesor para confirmar precio antes de agendar.\",\n    handoff_reason: $json.decision?.handoff_reason || \"quote_pricing_not_available\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"manual_pricing_review\",\n      last_bot_action: \"pricing_rule_not_found\",\n      missing_fields: []\n    }\n  };\n}\n\nconst hasCommercialContext =\n  isFilled(state.service_interest) &&\n  isFilled(state.vehicle_type) &&\n  isFilled(state.district);\n\nconst latestUserMessage = $json.context_packet?.conversation?.latest_user_message || \"\";\nfunction userComplaintIntent(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"reclamo\") ||\n    t.includes(\"reclamar\") ||\n    t.includes(\"muy molesto\") ||\n    t.includes(\"muy molesta\") ||\n    t.includes(\"molesto\") ||\n    t.includes(\"molesta\") ||\n    t.includes(\"pesimo\") ||\n    t.includes(\"pesima\") ||\n    t.includes(\"mal servicio\") ||\n    t.includes(\"mala experiencia\") ||\n    t.includes(\"quiero quejarme\") ||\n    t.includes(\"quiero hacer un reclamo\") ||\n    t.includes(\"quiero poner un reclamo\") ||\n    t.includes(\"necesito soporte\")\n  );\n}\n\nfunction userReturningCustomerIntent(rawText) {\n  const t = normalizeText(rawText);\n  const returningSignals =\n    t.includes(\"hace meses\") ||\n    t.includes(\"ya lave con ustedes\") ||\n    t.includes(\"lave con ustedes\") ||\n    t.includes(\"lavado con ustedes\") ||\n    t.includes(\"fui cliente\") ||\n    t.includes(\"ya fui cliente\") ||\n    t.includes(\"otra vez\") ||\n    t.includes(\"de nuevo\") ||\n    t.includes(\"volver a cotizar\") ||\n    t.includes(\"cotizar de nuevo\") ||\n    t.includes(\"quiero volver\") ||\n    t.includes(\"quiero retomar\");\n\n  const commercialIntent =\n    t.includes(\"cotizar\") ||\n    t.includes(\"precio\") ||\n    t.includes(\"valor\") ||\n    t.includes(\"agendar\") ||\n    t.includes(\"reserva\");\n\n  return returningSignals && commercialIntent;\n}\n\nfunction userExplicitHumanRequest(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"hablar con un humano\") ||\n    t.includes(\"hablar con una persona\") ||\n    t.includes(\"asesor humano\") ||\n    t.includes(\"agente humano\") ||\n    t.includes(\"derivame con un humano\") ||\n    t.includes(\"quiero un humano\") ||\n    t.includes(\"necesito un humano\") ||\n    t.includes(\"atencion humana\")\n  );\n}\n\nif (userComplaintIntent(latestUserMessage) && state.human_handoff !== true) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"answer_question\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"answer_question\",\n    reason: \"action_executor_guard_customer_complaint_handoff\",\n    message:\n      \"Lamento lo ocurrido. Voy a derivarte con una persona del equipo para revisar tu reclamo y ayudarte ahora.\",\n    handoff_reason: $json.decision?.handoff_reason || \"customer_complaint\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      intent_last: \"customer_complaint\",\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n\nif (userExplicitHumanRequest(latestUserMessage)) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_explicit_human_request\",\n    message:\n      $json.decision?.message ||\n      \"Te voy a derivar con una persona para ayudarte mejor.\",\n    handoff_reason: $json.decision?.handoff_reason || \"user_requested_human\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n\n\nfunction userUrgent(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"urgente\") ||\n    t.includes(\"urgencia\") ||\n    t.includes(\"emergencia\")\n  );\n}\n\nif (userUrgent(latestUserMessage) && state.human_handoff !== true) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_urgent_handoff\",\n    message:\n      $json.decision?.message ||\n      \"Te voy a derivar con una persona para ayudarte mejor.\",\n    handoff_reason: $json.decision?.handoff_reason || \"urgent_handoff\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"human_takeover\",\n      last_bot_action: \"handoff_human\",\n      missing_fields: []\n    }\n  };\n}\n// Handoff lock guard: si ya hay handoff activo, mantener el lock\nif (state.human_handoff === true && action && action !== \"handoff_human\") {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"handoff_human\")) {\n    contextAllowedActions = [\"handoff_human\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  action = \"handoff_human\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"handoff_human\",\n    reason: \"action_executor_guard_handoff_lock\",\n    message:\n      $json.decision?.message ||\n      \"Ya estas siendo atendido por una persona. En breve te responderan.\",\n    handoff_reason: $json.decision?.handoff_reason || \"handoff_lock\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"human_handoff\",\n      human_handoff: true,\n      next_goal: \"wait_human_response\",\n      last_bot_action: \"human_handoff_already_active\",\n      missing_fields: []\n    }\n  };\n}\n\nfunction userPostpones(rawText) {\n  const t = normalizeText(rawText);\n  return (\n    t.includes(\"despues te aviso\") ||\n    t.includes(\"te aviso despues\") ||\n    t.includes(\"luego te aviso\") ||\n    t.includes(\"mas adelante\") ||\n    t.includes(\"otro dia\") ||\n    t.includes(\"en otro momento\") ||\n    t.includes(\"lo veo y te aviso\")\n  );\n}\n\n\nif (\n  action === \"offer_booking\" &&\n  hasCommercialContext &&\n  state.stage === \"quoted\" &&\n  userPostpones(latestUserMessage)\n) {\n  const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();\nif (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"schedule_followup\")) {\n  contextAllowedActions = [\"schedule_followup\", ...contextAllowedActions];\n  $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n}\n  action = \"schedule_followup\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"schedule_followup\",\n    reason: \"action_executor_guard_postponed_followup_scheduled\",\n    followup_type: $json.decision?.followup_type || \"post_quote_postponed_24h\",\n    scheduled_for: $json.decision?.scheduled_for || scheduledFor,\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"closing\",\n      intent_last: \"followup_scheduled\",\n      next_goal: \"wait_followup\",\n      last_bot_action: \"schedule_followup\",\n    },\n  };\n}\n\n\nif (\n  userReturningCustomerIntent(latestUserMessage) &&\n  action === \"ask_missing_data\" &&\n  !isFilled(state.service_interest) &&\n  (isFilled(state.vehicle_type) || isFilled(state.district))\n) {\n  if (Array.isArray(contextAllowedActions) && !contextAllowedActions.includes(\"answer_question\")) {\n    contextAllowedActions = [\"answer_question\", ...contextAllowedActions];\n    $json.context_packet = { ...($json.context_packet || {}), allowed_actions: contextAllowedActions };\n  }\n\n  const vehicleText = isFilled(state.vehicle_type) ? \" para tu \" + String(state.vehicle_type).toLowerCase() : \"\";\n  const districtText = isFilled(state.district) ? \" en \" + state.district : \"\";\n\n  action = \"answer_question\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"answer_question\",\n    reason: \"action_executor_guard_returning_customer_collect_service\",\n    message:\n      \"Perfecto, retomemos\" + vehicleText + districtText + \". Para cotizar, quieres lavado basico, lavado premium o encerado full?\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      stage: \"service_discovery\",\n      intent_last: \"returning_customer_reactivated\",\n      next_goal: \"collect_service_interest\",\n      last_bot_action: \"answer_question\",\n      missing_fields: [\"service_interest\"]\n    }\n  };\n}\n\nif (\n  action === \"recommend_service\" &&\n  hasCommercialContext &&\n  !asksRecommendation(latestUserMessage) &&\n  Array.isArray(contextAllowedActions) &&\n  contextAllowedActions.includes(\"send_quote\")\n) {\n  action = \"send_quote\";\n\n  $json.decision = {\n    ...($json.decision || {}),\n    action: \"send_quote\",\n    reason: \"action_executor_guard_forced_send_quote_because_service_vehicle_district_are_complete\",\n    state_update: {\n      ...($json.decision?.state_update || {}),\n      service_interest: state.service_interest,\n      vehicle_type: state.vehicle_type,\n      district: state.district,\n      stage: \"qualified\",\n      next_goal: \"send_quote\",\n      last_bot_action: \"send_quote_in_progress\",\n      missing_fields: []\n    }\n  };\n}\n\nif (!action) {\n  errors.push(\"Missing action\");\n}\n\nif (action && !globalAllowedActions.includes(action)) {\n  errors.push(`Unsupported action: ${action}`);\n}\n\nif (!Array.isArray(contextAllowedActions) || contextAllowedActions.length === 0) {\n  errors.push(\"Missing or empty context_packet.allowed_actions\");\n}\n\nif (\n  action &&\n  Array.isArray(contextAllowedActions) &&\n  contextAllowedActions.length > 0 &&\n  !contextAllowedActions.includes(action)\n) {\n  errors.push(\n    `Action not allowed in current state: ${action}. Allowed: ${contextAllowedActions.join(\", \")}`\n  );\n}\n\nif (errors.length > 0) {\n  return [{\n    error: true,\n    errors,\n    original: $json\n  }];\n}\n\nreturn [{\n  ...$json,\n  validation: {\n    global_action_valid: true,\n    context_action_valid: true,\n    allowed_actions_checked: contextAllowedActions\n  }\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -4011,8 +4653,8 @@
       {
         "parameters": {
           "mode": "expression",
-          "numberOutputs": 20,
-          "output": "={{\n({\n  ask_missing_data: 0,\n  send_quote: 1,\n  answer_question: 2,\n  answer_objection: 3,\n  offer_booking: 4,\n  confirm_booking: 5,\n  schedule_followup: 6,\n  handoff_human: 7,\n  offer_available_slots: 8,\n\n  cancel_booking: 9,\n  reschedule_booking: 10,\n  collect_address: 11,\n  confirm_address: 12,\n  send_pre_service_instructions: 13,\n  notify_on_the_way: 14,\n  request_review: 15,\n  request_referral: 16,\n  send_service_menu: 17,\n  recommend_service: 18,\n  ask_payment_preference: 19\n})[$json.decision.action]\n}}"
+          "numberOutputs": 21,
+          "output": "={{\n({\n  ask_missing_data: 0,\n  send_quote: 1,\n  answer_question: 2,\n  answer_objection: 3,\n  offer_booking: 4,\n  confirm_booking: 5,\n  schedule_followup: 6,\n  handoff_human: 7,\n  offer_available_slots: 8,\n\n  cancel_booking: 9,\n  reschedule_booking: 10,\n  collect_address: 11,\n  confirm_address: 12,\n  send_pre_service_instructions: 13,\n  notify_on_the_way: 14,\n  request_review: 15,\n  request_referral: 16,\n  send_service_menu: 17,\n  recommend_service: 18,\n  ask_payment_preference: 19,\n  check_payment_status: 20\n})[$json.decision.action]\n}}"
         },
         "type": "n8n-nodes-base.switch",
         "typeVersion": 3.4,
@@ -4025,7 +4667,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\n\nconst paymentMode = ctx.payment_mode ||\n  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||\n  (data.context_packet && data.context_packet.agent_business_config &&\n   data.context_packet.agent_business_config.config &&\n   data.context_packet.agent_business_config.config.payment_mode) ||\n  \"both\";\n\nconst isPrepagoreRequired = paymentMode === \"prepago_required\";\n\nconst bookingData = {\n  lead_id: ctx.lead_id,\n  channel: ctx.channel,\n  service_interest: ctx.service_interest,\n  vehicle_type: ctx.vehicle_type,\n  district: ctx.district,\n  booking_date: ctx.booking_date,\n  booking_time: ctx.booking_time,\n  slot_id: ctx.slot_id,\n  availability_confirmed: ctx.availability_confirmed,\n  duration_minutes: ctx.duration_minutes || 120,\n  calendar_id: ctx.calendar_id || \"primary\",\n  service_address: ctx.service_address || ctx.address || null,\n  address_reference: ctx.address_reference || null,\n  address_confirmed: ctx.address_confirmed === true\n};\n\nif (isPrepagoreRequired) {\n  // Skip GCal booking — send payment link first via 6.26\n  // GCal event will be created by 6.27 when Flow confirms payment\n  const payloadObject = {\n    ...data,\n    db_operations: [\"messages\", \"lead_state\"],\n    skip_calendar_booking: true,\n    pending_booking_data: bookingData,\n    booking_request: bookingData,\n    state_update: {\n      ...(ctx.state_update || {}),\n      last_bot_action: \"payment_link_pending\",\n      payment_mode: \"prepago_required\",\n      payment_preference: \"prepago\",\n      pending_booking_data: bookingData,\n    }\n  };\n  return [{ ...payloadObject, payload: JSON.stringify(payloadObject) }];\n}\n\n// Normal booking flow (prepago_only, postpago_only, both)\nconst payloadObject = {\n  ...data,\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"],\n  booking_request: bookingData,\n  state_update: {\n    ...(ctx.state_update || {}),\n    last_bot_action: \"confirm_booking_in_progress\"\n  }\n};\n\nreturn [{\n  ...payloadObject,\n  payload: JSON.stringify(payloadObject)\n}];"
+          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\n\n// El config global del negocio (agent_business_config) SIEMPRE manda sobre\n// cualquier valor pegado en lead_state de una reserva anterior -- payment_mode\n// es una decision de negocio, no algo que deba quedar fijo por lead para\n// siempre. Antes, un lead que ya habia reservado una vez quedaba atascado\n// usando el payment_mode VIEJO aunque el negocio cambiara su configuracion,\n// incluso para una reserva nueva/distinta (bug real: 2do auto de un cliente\n// use prepago_only heredado en vez de prepago_required, el modo activo real).\nconst paymentMode = (data.context_packet && data.context_packet.agent_business_config &&\n   data.context_packet.agent_business_config.config &&\n   data.context_packet.agent_business_config.config.payment_mode) ||\n  ctx.payment_mode ||\n  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||\n  \"both\";\n\nconst isPrepagoreRequired = paymentMode === \"prepago_required\";\n\nconst bookingData = {\n  lead_id: ctx.lead_id,\n  channel: ctx.channel,\n  service_interest: ctx.service_interest,\n  vehicle_type: ctx.vehicle_type,\n  district: ctx.district,\n  booking_date: ctx.booking_date,\n  booking_time: ctx.booking_time,\n  slot_id: ctx.slot_id,\n  availability_confirmed: ctx.availability_confirmed,\n  duration_minutes: ctx.duration_minutes || 120,\n  calendar_id: ctx.calendar_id || \"primary\",\n  service_address: ctx.service_address || ctx.address || null,\n  address_reference: ctx.address_reference || null,\n  address_confirmed: ctx.address_confirmed === true\n};\n\nif (isPrepagoreRequired) {\n  // Skip GCal booking — send payment link first via 6.26\n  // GCal event will be created by 6.27 when Flow confirms payment\n  const payloadObject = {\n    ...data,\n    db_operations: [\"messages\", \"lead_state\"],\n    skip_calendar_booking: true,\n    pending_booking_data: bookingData,\n    booking_request: bookingData,\n    state_update: {\n      ...(ctx.state_update || {}),\n      last_bot_action: \"payment_link_pending\",\n      payment_mode: \"prepago_required\",\n      payment_preference: \"prepago\",\n      pending_booking_data: bookingData,\n    }\n  };\n  return [{ ...payloadObject, payload: JSON.stringify(payloadObject) }];\n}\n\n// Normal booking flow (prepago_only, postpago_only, both)\nconst payloadObject = {\n  ...data,\n  db_operations: [\"appointments\", \"messages\", \"lead_state\"],\n  booking_request: bookingData,\n  state_update: {\n    ...(ctx.state_update || {}),\n    last_bot_action: \"confirm_booking_in_progress\"\n  }\n};\n\nreturn [{\n  ...payloadObject,\n  payload: JSON.stringify(payloadObject)\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -4207,7 +4849,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const originalInput = $(\"IN LLM_Descision\").first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst decision =\n  $json.decision ||\n  originalInput.decision ||\n  null;\n\nconst executionContext = {\n  ...($json.execution_context || {})\n};\n\nconst toolRegistry = $json.tool_registry || {};\n\nconst messageActions = new Set([\n  \"ask_missing_data\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\"\n]);\n\nconst mappedToolName = Array.isArray(toolRegistry.mapped_tool_names)\n  ? toolRegistry.mapped_tool_names.find(Boolean)\n  : null;\n\nconst preliminaryAction =\n  executionContext.action ||\n  decision?.action ||\n  $json.action ||\n  null;\n\nconst emittedMessage = Boolean(\n  $json.message ||\n  $json.message_to_send ||\n  $json.meta?.bot\n);\n\nconst actionToolDefaults = {\n  send_quote: \"quote.create\",\n  offer_available_slots: \"calendar.availability\",\n  confirm_booking: \"calendar.create_booking\",\n  cancel_booking: \"calendar.cancel_booking\",\n  reschedule_booking: \"calendar.reschedule_booking\",\n  schedule_followup: \"followup.schedule\",\n  request_review: \"review.request\",\n  request_referral: \"referral.request\",\n  handoff_human: \"handoff.create\"\n};\n\nconst toolName =\n  executionContext.tool_name ||\n  toolRegistry.tool_name ||\n  mappedToolName ||\n  actionToolDefaults[preliminaryAction] ||\n  (emittedMessage || messageActions.has(preliminaryAction) ? \"message.send\" : null);\nconst executorRef =\n  executionContext.executor_ref ||\n  toolRegistry.executor_ref ||\n  null;\nconst executorType =\n  executionContext.executor_type ||\n  toolRegistry.executor_type ||\n  null;\nconst agentId =\n  executionContext.agent_id ||\n  toolRegistry.agent_id ||\n  contextPacket.agent?.id ||\n  contextPacket.routing?.agent_id ||\n  null;\nconst organizationId =\n  executionContext.organization_id ||\n  toolRegistry.organization_id ||\n  contextPacket.organization?.id ||\n  contextPacket.routing?.organization_id ||\n  null;\nconst toolResolutionMode =\n  executionContext.tool_resolution_mode ||\n  toolRegistry.mode ||\n  \"legacy\";\n\nconst leadId =\n  executionContext.lead_id ||\n  $json.lead_id ||\n  contextPacket.lead?.id ||\n  contextPacket.state?.lead_id ||\n  contextPacket.event?.lead_id ||\n  originalInput.execution_context?.lead_id ||\n  originalInput.lead_id ||\n  originalInput.context_packet?.lead?.id ||\n  originalInput.context_packet?.state?.lead_id ||\n  null;\n\nconst channel =\n  executionContext.channel ||\n  $json.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nconst action = preliminaryAction;\n\nconst inboundMessageId =\n  executionContext.inbound_message_id ||\n  contextPacket.conversation?.last_message_id ||\n  contextPacket.event?.message_id ||\n  originalInput.event?.message_id ||\n  $json.execution_meta?.execution_id ||\n  originalInput.execution_meta?.execution_id ||\n  Date.now().toString();\n\nconst computedIdempotencyKey =\n  leadId && inboundMessageId && action\n    ? `${leadId}__${inboundMessageId}__${action}`\n    : null;\n\nconst idempotencyKey =\n  computedIdempotencyKey ||\n  executionContext.idempotency_key ||\n  $json.idempotency_key ||\n  (leadId && action ? `${leadId}__${Date.now().toString()}__${action}` : null);\n\nif (!leadId) throw new Error(\"Missing lead_id for audit\");\n\nconst finalDecision =\n  decision && decision.action\n    ? decision\n    : {\n        action: action || executionContext.action || null,\n        reason: \"missing_decision_fallback\",\n        message:\n          $json.message ||\n          $json.message_to_send ||\n          $json.execution_result?.bot ||\n          null,\n        confidence: 0,\n        source: \"action_executor\",\n        state_update: $json.state_update || $json.lead_state_update || {},\n      };\n\nif (!finalDecision.action) throw new Error(\"Missing decision.action for audit\");\nif (!idempotencyKey) throw new Error(\"Missing idempotency_key for audit\");\n\nconst botMessage =\n  $json.message ||\n  $json.message_to_send ||\n  $json.execution_result?.bot ||\n  $json.execution_result?.message ||\n  null;\n\nconst messageSent = $json.message_sent === true;\nconst outboundMessageId =\n  $json.outbound_message_id ||\n  $json.message_id ||\n  $json.message_db_id ||\n  null;\n\nconst providerStatus =\n  $json.provider_status ||\n  ($json.message_sent === true ? \"sent\" : \"failed\");\n\nconst providerMessageId =\n  $json.provider_message_id ||\n  null;\n\nreturn [{\n  ...$json,\n  flow_name: \"action_executor\",\n  lead_id: leadId,\n  inbound_message_id: inboundMessageId,\n  outbound_message_id: outboundMessageId,\n  provider_status: providerStatus,\n  provider_message_id: providerMessageId,\n  channel,\n  stage_before: contextPacket.state?.stage || null,\n  latest_user_message: contextPacket.conversation?.latest_user_message || null,\n  allowed_actions: contextPacket.allowed_actions || [],\n  decision: finalDecision,\n  llm: null,\n  idempotency_key: idempotencyKey,\n  tool_name: toolName,\n  executor_ref: executorRef,\n  agent_id: agentId,\n  organization_id: organizationId,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    action,\n    inbound_message_id: inboundMessageId,\n    idempotency_key: idempotencyKey,\n    tool_name: toolName,\n    executor_ref: executorRef,\n    executor_type: executorType,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_resolution_mode: toolResolutionMode\n  },\n\n  context_packet: contextPacket,\n\n  meta: {\n    execution_meta: $json.execution_meta || null,\n    validation: {\n      ...($json.validation || {}),\n      requirements_ok:\n        typeof $json.validation?.requirements_ok === \"boolean\"\n          ? $json.validation.requirements_ok\n          : true,\n      required_fields: Array.isArray($json.validation?.required_fields)\n        ? $json.validation.required_fields\n        : [],\n      missing_fields: Array.isArray($json.validation?.missing_fields)\n        ? $json.validation.missing_fields\n        : []\n    },\n    tool_name: toolName,\n    executor_ref: executorRef,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_registry: {\n      mode: toolResolutionMode,\n      tool_name: toolName,\n      executor_type: executorType,\n      executor_ref: executorRef,\n      agent_id: agentId,\n      organization_id: organizationId,\n      side_effect_level: toolRegistry.side_effect_level || null,\n      mapped_tool_names: Array.isArray(toolRegistry.mapped_tool_names) && toolRegistry.mapped_tool_names.length > 0\n        ? toolRegistry.mapped_tool_names\n        : (toolName ? [toolName] : []),\n      tool_chain: Array.isArray(toolRegistry.tool_chain)\n        ? toolRegistry.tool_chain\n        : []\n    },\n    action,\n    state: {\n      before: contextPacket.state || null,\n      proposed_update: $json.proposed_state_update || finalDecision.state_update || null,\n      sanitized_update: $json.sanitized_state_update || $json.state_update || null,\n      current: $json.persisted_state_current || $json.state?.current || null,\n    },\n    outcome: $json.outcome || $json.execution_result?.outcome || null,\n    handoff: action === \"handoff_human\" ? {\n      human_handoff: true,\n      handoff_case_id: $json.handoff_case_id || null,\n      assigned_to: $json.assigned_to || null,\n      assigned_team: $json.assigned_team || null,\n      notification_sent: $json.notification_sent === true,\n      notification_channel: $json.notification_channel || null,\n      notification_sent_at: $json.notification_sent_at || null\n    } : null,\n    last_bot_action:\n      $json.state_update?.last_bot_action ||\n      $json.lead_state_update?.last_bot_action ||\n      null,\n    bot: botMessage,\n    message_sent: messageSent,\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    outbound_message_id: outboundMessageId,\n    outbound_message_saved: $json.outbound_message_saved === true,\n    state_updated: $json.state_updated === true,\n    db_records_created: $json.records || $json.db_operations || [],\n    execution_result: $json.execution_result || null,\n    notes: $json.notes || []\n  },\n\n  created_at: new Date().toISOString()\n}];"
+          "jsCode": "const originalInput = $(\"IN LLM_Descision\").first().json;\n\nconst contextPacket =\n  $json.context_packet ||\n  originalInput.context_packet ||\n  {};\n\nconst decision =\n  $json.decision ||\n  originalInput.decision ||\n  null;\n\nconst executionContext = {\n  ...($json.execution_context || {})\n};\n\nconst toolRegistry = $json.tool_registry || {};\n\nconst messageActions = new Set([\n  \"ask_missing_data\",\n  \"answer_question\",\n  \"answer_objection\",\n  \"offer_booking\",\n  \"send_service_menu\",\n  \"recommend_service\",\n  \"ask_payment_preference\",\n  \"collect_address\",\n  \"confirm_address\",\n  \"send_pre_service_instructions\",\n  \"notify_on_the_way\",\n  \"request_review\",\n  \"request_referral\"\n]);\n\nconst mappedToolName = Array.isArray(toolRegistry.mapped_tool_names)\n  ? toolRegistry.mapped_tool_names.find(Boolean)\n  : null;\n\nconst preliminaryAction =\n  executionContext.action ||\n  decision?.action ||\n  $json.action ||\n  null;\n\nconst emittedMessage = Boolean(\n  $json.message ||\n  $json.message_to_send ||\n  $json.meta?.bot\n);\n\nconst actionToolDefaults = {\n  send_quote: \"quote.create\",\n  offer_available_slots: \"calendar.availability\",\n  confirm_booking: \"calendar.create_booking\",\n  cancel_booking: \"calendar.cancel_booking\",\n  reschedule_booking: \"calendar.reschedule_booking\",\n  schedule_followup: \"followup.schedule\",\n  request_review: \"review.request\",\n  request_referral: \"referral.request\",\n  handoff_human: \"handoff.create\"\n};\n\nconst toolName =\n  executionContext.tool_name ||\n  toolRegistry.tool_name ||\n  mappedToolName ||\n  actionToolDefaults[preliminaryAction] ||\n  (emittedMessage || messageActions.has(preliminaryAction) ? \"message.send\" : null);\nconst executorRef =\n  executionContext.executor_ref ||\n  toolRegistry.executor_ref ||\n  null;\nconst executorType =\n  executionContext.executor_type ||\n  toolRegistry.executor_type ||\n  null;\nconst agentId =\n  executionContext.agent_id ||\n  toolRegistry.agent_id ||\n  contextPacket.agent?.id ||\n  contextPacket.routing?.agent_id ||\n  null;\nconst organizationId =\n  executionContext.organization_id ||\n  toolRegistry.organization_id ||\n  contextPacket.organization?.id ||\n  contextPacket.routing?.organization_id ||\n  null;\nconst toolResolutionMode =\n  executionContext.tool_resolution_mode ||\n  toolRegistry.mode ||\n  \"legacy\";\n\nconst leadId =\n  executionContext.lead_id ||\n  $json.lead_id ||\n  contextPacket.lead?.id ||\n  contextPacket.state?.lead_id ||\n  contextPacket.event?.lead_id ||\n  originalInput.execution_context?.lead_id ||\n  originalInput.lead_id ||\n  originalInput.context_packet?.lead?.id ||\n  originalInput.context_packet?.state?.lead_id ||\n  null;\n\nconst channel =\n  executionContext.channel ||\n  $json.channel ||\n  contextPacket.lead?.channel ||\n  \"whatsapp\";\n\nconst action = preliminaryAction;\n\nconst inboundMessageId =\n  executionContext.inbound_message_id ||\n  contextPacket.conversation?.last_message_id ||\n  contextPacket.event?.message_id ||\n  originalInput.event?.message_id ||\n  $json.execution_meta?.execution_id ||\n  originalInput.execution_meta?.execution_id ||\n  Date.now().toString();\n\nconst computedIdempotencyKey =\n  leadId && inboundMessageId && action\n    ? `${leadId}__${inboundMessageId}__${action}`\n    : null;\n\nconst idempotencyKey =\n  computedIdempotencyKey ||\n  executionContext.idempotency_key ||\n  $json.idempotency_key ||\n  (leadId && action ? `${leadId}__${Date.now().toString()}__${action}` : null);\n\nif (!leadId) throw new Error(\"Missing lead_id for audit\");\n\nconst finalDecision =\n  decision && decision.action\n    ? decision\n    : {\n        action: action || executionContext.action || null,\n        reason: \"missing_decision_fallback\",\n        message:\n          $json.message ||\n          $json.message_to_send ||\n          $json.execution_result?.bot ||\n          null,\n        confidence: 0,\n        source: \"action_executor\",\n        state_update: $json.state_update || $json.lead_state_update || {},\n      };\n\nif (!finalDecision.action) throw new Error(\"Missing decision.action for audit\");\nif (!idempotencyKey) throw new Error(\"Missing idempotency_key for audit\");\n\nconst botMessage =\n  $json.message ||\n  $json.message_to_send ||\n  $json.execution_result?.bot ||\n  $json.execution_result?.message ||\n  null;\n\nconst messageSent = $json.message_sent === true;\nconst outboundMessageId =\n  $json.outbound_message_id ||\n  $json.message_id ||\n  $json.message_db_id ||\n  null;\n\nconst providerStatus =\n  $json.provider_status ||\n  ($json.message_sent === true ? \"sent\" : \"failed\");\n\nconst providerMessageId =\n  $json.provider_message_id ||\n  null;\n\nconst outboundPhoneNumberId =\n  $json.resolved_outbound_phone_number_id ||\n  contextPacket.routing?.phone_number_id ||\n  contextPacket.routing?.external_channel_id ||\n  '1024332077436840';\n\nreturn [{\n  ...$json,\n  flow_name: \"action_executor\",\n  lead_id: leadId,\n  inbound_message_id: inboundMessageId,\n  outbound_message_id: outboundMessageId,\n  provider_status: providerStatus,\n  provider_message_id: providerMessageId,\n  channel,\n  stage_before: contextPacket.state?.stage || null,\n  latest_user_message: contextPacket.conversation?.latest_user_message || null,\n  allowed_actions: contextPacket.allowed_actions || [],\n  decision: finalDecision,\n  llm: null,\n  idempotency_key: idempotencyKey,\n  tool_name: toolName,\n  executor_ref: executorRef,\n  agent_id: agentId,\n  organization_id: organizationId,\n\n  execution_context: {\n    ...executionContext,\n    lead_id: leadId,\n    channel,\n    action,\n    inbound_message_id: inboundMessageId,\n    idempotency_key: idempotencyKey,\n    tool_name: toolName,\n    executor_ref: executorRef,\n    executor_type: executorType,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_resolution_mode: toolResolutionMode\n  },\n\n  context_packet: contextPacket,\n\n  meta: {\n    execution_meta: $json.execution_meta || null,\n    validation: {\n      ...($json.validation || {}),\n      requirements_ok:\n        typeof $json.validation?.requirements_ok === \"boolean\"\n          ? $json.validation.requirements_ok\n          : true,\n      required_fields: Array.isArray($json.validation?.required_fields)\n        ? $json.validation.required_fields\n        : [],\n      missing_fields: Array.isArray($json.validation?.missing_fields)\n        ? $json.validation.missing_fields\n        : []\n    },\n    tool_name: toolName,\n    executor_ref: executorRef,\n    agent_id: agentId,\n    organization_id: organizationId,\n    tool_registry: {\n      mode: toolResolutionMode,\n      tool_name: toolName,\n      executor_type: executorType,\n      executor_ref: executorRef,\n      agent_id: agentId,\n      organization_id: organizationId,\n      side_effect_level: toolRegistry.side_effect_level || null,\n      mapped_tool_names: Array.isArray(toolRegistry.mapped_tool_names) && toolRegistry.mapped_tool_names.length > 0\n        ? toolRegistry.mapped_tool_names\n        : (toolName ? [toolName] : []),\n      tool_chain: Array.isArray(toolRegistry.tool_chain)\n        ? toolRegistry.tool_chain\n        : []\n    },\n    action,\n    state: {\n      before: contextPacket.state || null,\n      proposed_update: $json.proposed_state_update || finalDecision.state_update || null,\n      sanitized_update: $json.sanitized_state_update || $json.state_update || null,\n      current: $json.persisted_state_current || $json.state?.current || null,\n    },\n    outcome: $json.outcome || $json.execution_result?.outcome || null,\n    handoff: action === \"handoff_human\" ? {\n      human_handoff: true,\n      handoff_case_id: $json.handoff_case_id || null,\n      assigned_to: $json.assigned_to || null,\n      assigned_team: $json.assigned_team || null,\n      notification_sent: $json.notification_sent === true,\n      notification_channel: $json.notification_channel || null,\n      notification_sent_at: $json.notification_sent_at || null\n    } : null,\n    last_bot_action:\n      $json.state_update?.last_bot_action ||\n      $json.lead_state_update?.last_bot_action ||\n      null,\n    bot: botMessage,\n    message_sent: messageSent,\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    outbound_message_id: outboundMessageId,\n    outbound_phone_number_id: outboundPhoneNumberId,\n    outbound_message_saved: $json.outbound_message_saved === true,\n    state_updated: $json.state_updated === true,\n    db_records_created: $json.records || $json.db_operations || [],\n    execution_result: $json.execution_result || null,\n    notes: $json.notes || []\n  },\n\n  created_at: new Date().toISOString()\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -4505,7 +5147,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const data = $json;\nconst ctx = data.context_packet || {};\nconst state = ctx.state || {};\nconst conversation = ctx.conversation || {};\nconst lead = ctx.lead || {};\nconst event = data.event || {};\nconst ruleContext = ctx.rule_context || {};\nconst stateUpdate = data.decision?.state_update || {};\n\nconst action = data.decision?.action || \"unknown_action\";\nconst message =\n  data.decision?.message ||\n  data.rule_result?.message ||\n  data.context_packet?.rule_result?.message ||\n  data.context_packet?.decision?.message ||\n  \"\";\n\nconst leadId =\n  lead.id ||\n  state.lead_id ||\n  data.lead?.id ||\n  null;\n\nconst phone =\n  lead.phone ||\n  data.lead?.phone ||\n  event.phone ||\n  null;\n\nconst channel =\n  lead.channel ||\n  data.lead?.channel ||\n  event.channel ||\n  \"whatsapp\";\n\nconst inboundMessageId =\n  conversation.last_message_id ||\n  event.message_id ||\n  data.message_id ||\n  data.context_packet?.event?.message_id ||\n  data.execution_meta?.execution_id ||\n  \"no_message_id\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in execution context\");\n}\n\nif (!action) {\n  throw new Error(\"Missing action in execution context\");\n}\n\nif (!inboundMessageId || inboundMessageId === \"no_message_id\") {\n  throw new Error(\"Missing inbound message id for idempotency\");\n}\n\nconst idempotency_key = `${leadId}__${inboundMessageId}__${action}`;\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && value !== \"\") return value;\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction normalizeTool(tool) {\n  if (!tool || typeof tool !== \"object\") return null;\n\n  return {\n    tool_name: tool.tool_name || tool.name || null,\n    executor_type: tool.executor_type || null,\n    executor_ref: tool.executor_ref || null,\n    required_fields: asArray(tool.required_fields),\n    config: tool.config && typeof tool.config === \"object\" ? tool.config : {},\n    side_effect_level: tool.side_effect_level || null,\n    is_active: tool.is_active !== false,\n    agent_id: tool.agent_id || ctx.agent?.id || ctx.routing?.agent_id || null,\n    organization_id: tool.organization_id || ctx.organization?.id || ctx.routing?.organization_id || null,\n  };\n}\n\nconst actionToTools = {\n  ask_missing_data: [\"message.send\"],\n  answer_question: [\"message.send\"],\n  answer_objection: [\"message.send\"],\n  offer_booking: [\"message.send\"],\n  send_service_menu: [\"message.send\"],\n  recommend_service: [\"message.send\"],\n  ask_payment_preference: [\"message.send\", \"lead_state.update\"],\n  collect_address: [\"message.send\", \"lead_state.update\"],\n  confirm_address: [\"message.send\", \"lead_state.update\"],\n  send_pre_service_instructions: [\"message.send\"],\n  notify_on_the_way: [\"message.send\"],\n  request_review: [\"review.request\"],\n  request_referral: [\"referral.request\"],\n  send_quote: [\"quote.create\", \"message.send\"],\n  offer_available_slots: [\"calendar.availability\"],\n  confirm_booking: [\"calendar.create_booking\"],\n  cancel_booking: [\"calendar.cancel_booking\"],\n  reschedule_booking: [\"calendar.reschedule_booking\"],\n  schedule_followup: [\"followup.schedule\"],\n  handoff_human: [\"handoff.create\"],\n};\n\nconst configuredTools = [\n  ...asArray(ctx.agent_tools),\n  ...asArray(ctx.tools),\n]\n  .map(normalizeTool)\n  .filter((tool) => tool && tool.tool_name && tool.is_active);\n\nconst toolNamesForAction = actionToTools[action] || [];\nconst resolvedTools = toolNamesForAction\n  .map((toolName) => configuredTools.find((tool) => tool.tool_name === toolName) || null)\n  .filter(Boolean);\nconst primaryTool = resolvedTools[0] || null;\nconst primaryMappedToolName = primaryTool?.tool_name || toolNamesForAction[0] || null;\nconst toolResolutionMode = primaryTool ? \"tools\" : (primaryMappedToolName ? \"mapped_legacy\" : \"legacy\");\nconst organizationId =\n  primaryTool?.organization_id ||\n  ctx.organization?.id ||\n  ctx.routing?.organization_id ||\n  lead.organization_id ||\n  state.organization_id ||\n  null;\nconst agentId =\n  primaryTool?.agent_id ||\n  ctx.agent?.id ||\n  ctx.routing?.agent_id ||\n  lead.agent_id ||\n  state.agent_id ||\n  null;\n\nconst bookingDate = firstValue(\n  stateUpdate.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  stateUpdate.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  stateUpdate.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate && bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nreturn [\n  {\n    ...data,\n    tool_registry: {\n      mode: toolResolutionMode,\n      action,\n      mapped_tool_names: toolNamesForAction,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      required_fields: primaryTool?.required_fields || [],\n      side_effect_level: primaryTool?.side_effect_level || null,\n      agent_id: agentId,\n      organization_id: organizationId,\n      tool_chain: resolvedTools.map((tool) => ({\n        tool_name: tool.tool_name,\n        executor_type: tool.executor_type,\n        executor_ref: tool.executor_ref,\n        side_effect_level: tool.side_effect_level,\n      })),\n    },\n    execution_context: {\n      lead_id: leadId,\n      phone,\n      channel,\n      action,\n      message,\n      state_update: stateUpdate,\n      inbound_message_id: inboundMessageId,\n      idempotency_key,\n      organization_id: organizationId,\n      agent_id: agentId,\n      tool_resolution_mode: toolResolutionMode,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      tool_chain: resolvedTools.map((tool) => tool.tool_name),\n      chat_session_id:\n        data.context_packet?.conversation?.chat_session_id ||\n        data.context_packet?.lead?.chat_session_id ||\n        data.context_packet?.source_metadata?.chat_session_id ||\n        data.context_packet?.event?.source_metadata?.chat_session_id ||\n        null,\n      address: firstValue(\n        stateUpdate.address,\n        stateUpdate.service_address,\n        state.service_address,\n        ruleContext.address_candidate?.address,\n        ctx.conversation?.latest_user_message\n      ),\n      \n      address_reference: firstValue(\n        stateUpdate.address_reference,\n        state.address_reference,\n        ruleContext.address_candidate?.address_reference\n      ),\n      service_interest: firstValue(\n        stateUpdate.service_interest,\n        state.service_interest\n      ),\n\n      service_scope: firstValue(\n        stateUpdate.service_scope,\n        state.service_scope\n      ),\n\n      vehicle_type: firstValue(\n        stateUpdate.vehicle_type,\n        state.vehicle_type\n      ),\n\n      district: firstValue(\n        stateUpdate.district,\n        state.district\n      ),\n\n      staff_id: firstValue(\n        stateUpdate.staff_id,\n        state.staff_id\n      ),\n\n      staff_name: firstValue(\n        stateUpdate.staff_name,\n        state.staff_name\n      ),\n\n      // Efimero: solo viaja en esta misma ejecucion (no tiene columna\n      // propia en lead_state). Se resuelve de nuevo cada turno en rules_engine.\n      schedule: Array.isArray(stateUpdate.schedule) ? stateUpdate.schedule : null,\n      availability_window: firstValue(\n        stateUpdate.availability_window,\n        state.availability_window\n      ),\n      \n      availability_label: firstValue(\n        stateUpdate.availability_label,\n        state.availability_label\n      ),\n      \n      days_ahead: firstValue(\n        stateUpdate.days_ahead,\n        state.days_ahead\n      ),\n      \n      start_offset_days: firstValue(\n        stateUpdate.start_offset_days,\n        state.start_offset_days\n      ),\n      \n      max_slots: firstValue(\n        stateUpdate.max_slots,\n        state.max_slots\n      ),\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed:\n        stateUpdate.availability_confirmed ??\n        state.availability_confirmed ??\n        ruleContext.booking_candidate?.availability_confirmed ??\n        (action === \"confirm_booking\" ? true : null),\n\n      duration_minutes:\n        stateUpdate.duration_minutes ||\n        state.duration_minutes ||\n        120,\n\n      // Cada agente (numero) puede tener su propio Google Calendar via\n      // agent_business_config.config.calendar_id. El hardcode queda solo\n      // como ultimo fallback para no romper agentes sin calendario propio.\n      calendar_id:\n        state.calendar_id ||\n        ctx.agent_business_config?.config?.calendar_id ||\n        \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n\n      auto_offer_slots_after_cancel: stateUpdate.auto_offer_slots_after_cancel === true,\n\n      followup_type:\n        data.decision?.followup_type ||\n        stateUpdate.followup_type ||\n        state.followup_type ||\n        null,\n\n      scheduled_for:\n        data.decision?.scheduled_for ||\n        stateUpdate.scheduled_for ||\n        state.scheduled_for ||\n        null,\n      cancellation_reason: firstValue(\n        data.decision?.cancellation_reason,\n        stateUpdate.cancellation_reason,\n        ruleContext.cancellation_reason\n      ),\n            reschedule_reason: firstValue(\n        data.decision?.reschedule_reason,\n        stateUpdate.reschedule_reason,\n        ruleContext.reschedule_reason\n      ),\n      payment_preference: firstValue(\n        stateUpdate.payment_preference,\n        state.payment_preference\n      ),\n      payment_mode: firstValue(\n        stateUpdate.payment_mode,\n        state.payment_mode,\n        ctx.agent_business_config?.config?.payment_mode\n      ) || \"both\",\n      handoff_reason: data.decision?.reason || null,\n      handoff_summary:\n        ctx.conversation?.short_summary ||\n        ctx.conversation?.latest_user_message ||\n        null,\n    },\n  },\n];"
+          "jsCode": "const data = $json;\nconst ctx = data.context_packet || {};\nconst state = ctx.state || {};\nconst conversation = ctx.conversation || {};\nconst lead = ctx.lead || {};\nconst event = data.event || {};\nconst ruleContext = ctx.rule_context || {};\nconst stateUpdate = data.decision?.state_update || {};\n\nconst action = data.decision?.action || \"unknown_action\";\nconst message =\n  data.decision?.message ||\n  data.rule_result?.message ||\n  data.context_packet?.rule_result?.message ||\n  data.context_packet?.decision?.message ||\n  \"\";\n\nconst leadId =\n  lead.id ||\n  state.lead_id ||\n  data.lead?.id ||\n  null;\n\nconst phone =\n  lead.phone ||\n  data.lead?.phone ||\n  event.phone ||\n  null;\n\nconst channel =\n  lead.channel ||\n  data.lead?.channel ||\n  event.channel ||\n  \"whatsapp\";\n\nconst inboundMessageId =\n  conversation.last_message_id ||\n  event.message_id ||\n  data.message_id ||\n  data.context_packet?.event?.message_id ||\n  data.execution_meta?.execution_id ||\n  \"no_message_id\";\n\nif (!leadId) {\n  throw new Error(\"Missing lead_id in execution context\");\n}\n\nif (!action) {\n  throw new Error(\"Missing action in execution context\");\n}\n\nif (!inboundMessageId || inboundMessageId === \"no_message_id\") {\n  throw new Error(\"Missing inbound message id for idempotency\");\n}\n\nconst idempotency_key = `${leadId}__${inboundMessageId}__${action}`;\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && value !== \"\") return value;\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction normalizeTool(tool) {\n  if (!tool || typeof tool !== \"object\") return null;\n\n  return {\n    tool_name: tool.tool_name || tool.name || null,\n    executor_type: tool.executor_type || null,\n    executor_ref: tool.executor_ref || null,\n    required_fields: asArray(tool.required_fields),\n    config: tool.config && typeof tool.config === \"object\" ? tool.config : {},\n    side_effect_level: tool.side_effect_level || null,\n    is_active: tool.is_active !== false,\n    agent_id: tool.agent_id || ctx.agent?.id || ctx.routing?.agent_id || null,\n    organization_id: tool.organization_id || ctx.organization?.id || ctx.routing?.organization_id || null,\n  };\n}\n\nconst actionToTools = {\n  ask_missing_data: [\"message.send\"],\n  answer_question: [\"message.send\"],\n  answer_objection: [\"message.send\"],\n  offer_booking: [\"message.send\"],\n  send_service_menu: [\"message.send\"],\n  recommend_service: [\"message.send\"],\n  ask_payment_preference: [\"message.send\", \"lead_state.update\"],\n  collect_address: [\"message.send\", \"lead_state.update\"],\n  confirm_address: [\"message.send\", \"lead_state.update\"],\n  send_pre_service_instructions: [\"message.send\"],\n  notify_on_the_way: [\"message.send\"],\n  request_review: [\"review.request\"],\n  request_referral: [\"referral.request\"],\n  send_quote: [\"quote.create\", \"message.send\"],\n  offer_available_slots: [\"calendar.availability\"],\n  confirm_booking: [\"calendar.create_booking\"],\n  cancel_booking: [\"calendar.cancel_booking\"],\n  reschedule_booking: [\"calendar.reschedule_booking\"],\n  schedule_followup: [\"followup.schedule\"],\n  handoff_human: [\"handoff.create\"],\n};\n\nconst configuredTools = [\n  ...asArray(ctx.agent_tools),\n  ...asArray(ctx.tools),\n]\n  .map(normalizeTool)\n  .filter((tool) => tool && tool.tool_name && tool.is_active);\n\nconst toolNamesForAction = actionToTools[action] || [];\nconst resolvedTools = toolNamesForAction\n  .map((toolName) => configuredTools.find((tool) => tool.tool_name === toolName) || null)\n  .filter(Boolean);\nconst primaryTool = resolvedTools[0] || null;\nconst primaryMappedToolName = primaryTool?.tool_name || toolNamesForAction[0] || null;\nconst toolResolutionMode = primaryTool ? \"tools\" : (primaryMappedToolName ? \"mapped_legacy\" : \"legacy\");\nconst organizationId =\n  primaryTool?.organization_id ||\n  ctx.organization?.id ||\n  ctx.routing?.organization_id ||\n  lead.organization_id ||\n  state.organization_id ||\n  null;\nconst agentId =\n  primaryTool?.agent_id ||\n  ctx.agent?.id ||\n  ctx.routing?.agent_id ||\n  lead.agent_id ||\n  state.agent_id ||\n  null;\n\nconst bookingDate = firstValue(\n  stateUpdate.booking_date,\n  state.booking_date,\n  ruleContext.booking_candidate?.booking_date\n);\n\nconst bookingTime = firstValue(\n  stateUpdate.booking_time,\n  state.booking_time,\n  ruleContext.booking_candidate?.booking_time\n);\n\nconst slotId = firstValue(\n  stateUpdate.slot_id,\n  state.slot_id,\n  ruleContext.booking_candidate?.slot_id,\n  bookingDate && bookingTime ? `${bookingDate}_${bookingTime}` : null\n);\n\nreturn [\n  {\n    ...data,\n    tool_registry: {\n      mode: toolResolutionMode,\n      action,\n      mapped_tool_names: toolNamesForAction,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      required_fields: primaryTool?.required_fields || [],\n      side_effect_level: primaryTool?.side_effect_level || null,\n      agent_id: agentId,\n      organization_id: organizationId,\n      tool_chain: resolvedTools.map((tool) => ({\n        tool_name: tool.tool_name,\n        executor_type: tool.executor_type,\n        executor_ref: tool.executor_ref,\n        side_effect_level: tool.side_effect_level,\n      })),\n    },\n    execution_context: {\n      lead_id: leadId,\n      phone,\n      channel,\n      action,\n      message,\n      state_update: stateUpdate,\n      inbound_message_id: inboundMessageId,\n      idempotency_key,\n      organization_id: organizationId,\n      agent_id: agentId,\n      tool_resolution_mode: toolResolutionMode,\n      tool_name: primaryMappedToolName,\n      executor_type: primaryTool?.executor_type || null,\n      executor_ref: primaryTool?.executor_ref || null,\n      tool_chain: resolvedTools.map((tool) => tool.tool_name),\n      chat_session_id:\n        data.context_packet?.conversation?.chat_session_id ||\n        data.context_packet?.lead?.chat_session_id ||\n        data.context_packet?.source_metadata?.chat_session_id ||\n        data.context_packet?.event?.source_metadata?.chat_session_id ||\n        null,\n      address: firstValue(\n        stateUpdate.address,\n        stateUpdate.service_address,\n        state.service_address,\n        ruleContext.address_candidate?.address,\n        ctx.conversation?.latest_user_message\n      ),\n      \n      address_reference: firstValue(\n        stateUpdate.address_reference,\n        state.address_reference,\n        ruleContext.address_candidate?.address_reference\n      ),\n      service_interest: firstValue(\n        stateUpdate.service_interest,\n        state.service_interest\n      ),\n\n      service_scope: firstValue(\n        stateUpdate.service_scope,\n        state.service_scope\n      ),\n\n      vehicle_type: firstValue(\n        stateUpdate.vehicle_type,\n        state.vehicle_type\n      ),\n\n      district: firstValue(\n        stateUpdate.district,\n        state.district\n      ),\n\n      staff_id: firstValue(\n        stateUpdate.staff_id,\n        state.staff_id\n      ),\n\n      staff_name: firstValue(\n        stateUpdate.staff_name,\n        state.staff_name\n      ),\n\n      // Efimero: solo viaja en esta misma ejecucion (no tiene columna\n      // propia en lead_state). Se resuelve de nuevo cada turno en rules_engine.\n      schedule: Array.isArray(stateUpdate.schedule) ? stateUpdate.schedule : null,\n      availability_window: firstValue(\n        stateUpdate.availability_window,\n        state.availability_window\n      ),\n      \n      availability_label: firstValue(\n        stateUpdate.availability_label,\n        state.availability_label\n      ),\n      \n      days_ahead: firstValue(\n        stateUpdate.days_ahead,\n        state.days_ahead\n      ),\n      \n      start_offset_days: firstValue(\n        stateUpdate.start_offset_days,\n        state.start_offset_days\n      ),\n      \n      max_slots: firstValue(\n        stateUpdate.max_slots,\n        state.max_slots\n      ),\n\n      booking_date: bookingDate,\n      booking_time: bookingTime,\n      slot_id: slotId,\n\n      availability_confirmed:\n        stateUpdate.availability_confirmed ??\n        state.availability_confirmed ??\n        ruleContext.booking_candidate?.availability_confirmed ??\n        (action === \"confirm_booking\" ? true : null),\n\n      duration_minutes:\n        stateUpdate.duration_minutes ||\n        state.duration_minutes ||\n        120,\n\n      // Cada agente (numero) puede tener su propio Google Calendar via\n      // agent_business_config.config.calendar_id. El hardcode queda solo\n      // como ultimo fallback para no romper agentes sin calendario propio.\n      // Sin fallback hardcodeado a proposito: si no hay calendario propio,\n      // queda null y 6.2/6.3/6.4 cortan el flujo. Antes esto apuntaba al\n      // calendario real de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md\n      calendar_id:\n        state.calendar_id ||\n        ctx.agent_business_config?.config?.calendar_id ||\n        null,\n\n      auto_offer_slots_after_cancel: stateUpdate.auto_offer_slots_after_cancel === true,\n\n      followup_type:\n        data.decision?.followup_type ||\n        stateUpdate.followup_type ||\n        state.followup_type ||\n        null,\n\n      scheduled_for:\n        data.decision?.scheduled_for ||\n        stateUpdate.scheduled_for ||\n        state.scheduled_for ||\n        null,\n      cancellation_reason: firstValue(\n        data.decision?.cancellation_reason,\n        stateUpdate.cancellation_reason,\n        ruleContext.cancellation_reason\n      ),\n            reschedule_reason: firstValue(\n        data.decision?.reschedule_reason,\n        stateUpdate.reschedule_reason,\n        ruleContext.reschedule_reason\n      ),\n      payment_preference: firstValue(\n        stateUpdate.payment_preference,\n        state.payment_preference\n      ),\n      payment_mode: firstValue(\n        stateUpdate.payment_mode,\n        state.payment_mode,\n        ctx.agent_business_config?.config?.payment_mode\n      ) || \"both\",\n      handoff_reason: data.decision?.reason || null,\n      handoff_summary:\n        ctx.conversation?.short_summary ||\n        ctx.conversation?.latest_user_message ||\n        null,\n    },\n  },\n];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -4589,7 +5231,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const data = $json;\n\nreturn [{\n  lead_id: data.execution_context?.lead_id,\n  channel: data.execution_context?.channel || \"whatsapp\",\n  phone: data.execution_context?.phone || data.context_packet?.lead?.phone || null,\n  calendar_id: data.execution_context?.calendar_id || null,\n\n  cancellation_reason:\n    data.execution_context?.cancellation_reason ||\n    data.decision?.cancellation_reason ||\n    data.decision?.reason ||\n    \"cancelled_by_client\",\n\n  execution_context: data.execution_context || {},\n  context_packet: data.context_packet || {},\n  decision: data.decision || {},\n  state_update: data.state_update || {},\n  execution_meta: data.execution_meta || {},\n\n  notes: [\n    ...(data.notes || []),\n    \"cancel_booking_parent_payload_prepared\"\n  ]\n}];"
+          "jsCode": "const data = $json;\n\n// Forzar limpieza de los campos de reserva sin importar si la decision vino\n// de una regla determinista (que ya declara fields_to_clear) o del LLM (que\n// no conoce esa convencion y puede reusar valores viejos de booking_date/\n// booking_time del contexto). Sin esto, COALESCE en 6.24 persist_and_audit\n// preserva el valor viejo en la columna y el bot sigue \"recordando\" una\n// reserva ya cancelada.\nconst incomingStateUpdate = data.state_update || {};\nconst forcedClearFields = [\"booking_date\", \"booking_time\", \"slot_id\", \"booking_options\", \"availability_confirmed\"];\nconst existingFieldsToClear = Array.isArray(incomingStateUpdate.fields_to_clear) ? incomingStateUpdate.fields_to_clear : [];\nconst mergedFieldsToClear = Array.from(new Set([...existingFieldsToClear, ...forcedClearFields]));\n\nconst stateUpdate = {\n  ...incomingStateUpdate,\n  booking_date: null,\n  booking_time: null,\n  slot_id: null,\n  availability_confirmed: false,\n  booking_options: [],\n  fields_to_clear: mergedFieldsToClear\n};\n\nconst targetAppointmentId =\n  data.decision?.state_update?.target_appointment_id ||\n  data.execution_context?.state_update?.target_appointment_id ||\n  incomingStateUpdate.target_appointment_id ||\n  data.execution_context?.target_appointment_id ||\n  null;\n\nreturn [{\n  lead_id: data.execution_context?.lead_id,\n  channel: data.execution_context?.channel || \"whatsapp\",\n  phone: data.execution_context?.phone || data.context_packet?.lead?.phone || null,\n  calendar_id: data.execution_context?.calendar_id || null,\n  target_appointment_id: targetAppointmentId,\n\n  cancellation_reason:\n    data.execution_context?.cancellation_reason ||\n    data.decision?.cancellation_reason ||\n    data.decision?.reason ||\n    \"cancelled_by_client\",\n\n  execution_context: {\n    ...(data.execution_context || {}),\n    target_appointment_id: targetAppointmentId\n  },\n  context_packet: data.context_packet || {},\n  decision: data.decision || {},\n  state_update: stateUpdate,\n  execution_meta: data.execution_meta || {},\n\n  notes: [\n    ...(data.notes || []),\n    \"cancel_booking_parent_payload_prepared\"\n  ]\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -6264,7 +6906,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = data.business || contextPacket.business || rawBusinessConfig || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
+          "jsCode": "const data = $json;\nconst ctx = data.execution_context || {};\nconst contextPacket = data.context_packet || {};\nconst state = contextPacket.state || data.lead_state || {};\nconst rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;\nconst business = rawBusinessConfig || data.business || contextPacket.business || {};\n\nfunction firstValue(...values) {\n  for (const value of values) {\n    if (value !== undefined && value !== null && String(value).trim() !== \"\") {\n      return value;\n    }\n  }\n  return null;\n}\n\nfunction asArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction cleanText(value) {\n  return String(value || \"\").replace(/\\s+/g, \" \").trim();\n}\n\nconst defaultAhumadaServices = [\n  {\n    key: \"lavado_basico\",\n    name: \"Lavado basico\",\n    description: \"Mantencion rapida para dejarlo limpio por dentro y fuera. Buena opcion si buscas algo practico.\"\n  },\n  {\n    key: \"lavado_premium\",\n    name: \"Lavado premium\",\n    description: \"Limpieza mas completa y detallada. Recomendado si el auto viene bien sucio o quieres un resultado mas pro.\"\n  },\n  {\n    key: \"encerado_full\",\n    name: \"Encerado full\",\n    description: \"Proteccion y brillo para la pintura. Ideal si quieres mejorar la terminacion exterior y cuidar el auto.\"\n  }\n];\n\nconst leadId = firstValue(ctx.lead_id, contextPacket.lead?.id, data.lead?.id, data.lead_id);\nconst phone = firstValue(ctx.phone, contextPacket.lead?.phone, data.lead?.phone, data.phone);\nconst channel = firstValue(ctx.channel, contextPacket.lead?.channel, data.lead?.channel, data.channel, \"whatsapp\");\n\nconst businessName = cleanText(\n  business.business_name ||\n  data.organization?.name ||\n  contextPacket.organization?.name ||\n  data.agent?.name ||\n  contextPacket.agent?.name ||\n  \"Ahumada Detailing\"\n);\n\nconst services = asArray(business.services)\n  .map((service) => ({\n    key: cleanText(service.key),\n    name: cleanText(service.name || service.label || service.key),\n    description: cleanText(service.description || service.summary || \"\")\n  }))\n  .filter((service) => service.name);\n\nconst menuServices = services.length > 0\n  ? services\n  : defaultAhumadaServices;\n\nconst lines = [\"Gracias por escribir a \" + businessName + \". Te ayudo a elegir el servicio ideal.\", \"\", \"Estas son las opciones principales:\", \"\"];\n\nmenuServices.forEach((service, index) => {\n  lines.push(String(index + 1) + \". \" + service.name);\n  if (service.description) lines.push(service.description);\n  lines.push(\"\");\n});\n\nconst requiresPricingContext = business.pricing_policy?.requires_service_vehicle_district !== false;\nif (requiresPricingContext) {\n  lines.push(\"Para darte el valor exacto, dime que tipo de vehiculo tienes y en que comuna seria el servicio. Si no estas seguro, cuentame como esta tu auto y te recomiendo una opcion.\");\n} else {\n  lines.push(\"Dime cual te interesa. Si no estas seguro, cuentame que necesitas y te recomiendo una opcion.\");\n}\n\nconst message = lines.join(\"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\nconst vehicleType = firstValue(ctx.vehicle_type, state.vehicle_type);\nconst district = firstValue(ctx.district, state.district);\nconst missingFields = [];\nif (requiresPricingContext && !vehicleType) missingFields.push(\"vehicle_type\");\nif (requiresPricingContext && !district) missingFields.push(\"district\");\n\nconst stateUpdate = {\n  ...(ctx.state_update || data.state_update || {}),\n  stage: \"service_discovery\",\n  intent_last: \"service_menu_request\",\n  next_goal: requiresPricingContext ? \"collect_vehicle_and_district\" : \"collect_service_interest\",\n  last_bot_action: \"send_service_menu\",\n  missing_fields: missingFields\n};\n\nreturn [{\n  ...data,\n  lead_id: leadId,\n  phone,\n  channel,\n  message_to_send: message,\n  message,\n  db_operations: [\"messages\", \"lead_state\"],\n  state_update: stateUpdate,\n  execution_context: {\n    ...ctx,\n    lead_id: leadId,\n    phone,\n    channel,\n    action: \"send_service_menu\",\n    message,\n    state_update: stateUpdate,\n    service_interest: firstValue(ctx.service_interest, state.service_interest),\n    vehicle_type: vehicleType,\n    district\n  },\n  execution_result: {\n    success: true,\n    action: \"send_service_menu\",\n    message_sent: false,\n    state_updated: true,\n    db_records_created: [\"messages\", \"lead_state\"],\n    notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n  },\n  notes: [\"service_menu_sent\", \"service_menu_from_agent_business_config\"]\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -6927,7 +7569,7 @@
           432
         ],
         "parameters": {
-          "jsCode": "// 6.5 returns items from parallel terminal nodes (booking result + DB followup records).\n// Find the item with execution_result (the actual booking confirmation result).\nconst allItems = $input.all();\nif (!allItems || allItems.length === 0) {\n  return [{ json: { payment_preference_direct: '' } }];\n}\n\nconst bookingResult = allItems.find(i => i.json && i.json.execution_result != null) || allItems[0];\n\n// Collect payment_preference from all items\nlet paymentPref = '';\nfor (const item of allItems) {\n  if (!item.json) continue;\n  const j = item.json;\n  const pref =\n    j.payment_preference_direct ||\n    (j.context_packet && j.context_packet.state && j.context_packet.state.payment_preference) ||\n    (j.execution_context && j.execution_context.payment_preference) ||\n    (j.state_update && j.state_update.payment_preference) ||\n    '';\n  if (pref) { paymentPref = pref; break; }\n}\n\n// Also check bookingResult specifically (redundant but explicit)\nif (!paymentPref && bookingResult && bookingResult.json) {\n  const j = bookingResult.json;\n  paymentPref =\n    j.payment_preference_direct ||\n    (j.context_packet && j.context_packet.state && j.context_packet.state.payment_preference) ||\n    (j.execution_context && j.execution_context.payment_preference) ||\n    '';\n}\n\nconst resultJson = bookingResult && bookingResult.json ? bookingResult.json : {};\nreturn [{ json: { ...resultJson, payment_preference_direct: paymentPref } }];",
+          "jsCode": "// 6.5 returns items from parallel terminal nodes (booking result + DB followup records).\n// Find the item with execution_result (the actual booking confirmation result).\nconst allItems = $input.all();\nif (!allItems || allItems.length === 0) {\n  return [{ json: { payment_preference_direct: '' } }];\n}\n\nconst bookingResult = allItems.find(i => i.json && i.json.execution_result != null) || allItems[0];\n\n// Collect payment_preference from all items\nlet paymentPref = '';\nfor (const item of allItems) {\n  if (!item.json) continue;\n  const j = item.json;\n  const pref =\n    j.payment_preference_direct ||\n    (j.context_packet && j.context_packet.state && j.context_packet.state.payment_preference) ||\n    (j.execution_context && j.execution_context.payment_preference) ||\n    (j.state_update && j.state_update.payment_preference) ||\n    '';\n  if (pref) { paymentPref = pref; break; }\n}\n\n// Also check bookingResult specifically (redundant but explicit)\nif (!paymentPref && bookingResult && bookingResult.json) {\n  const j = bookingResult.json;\n  paymentPref =\n    j.payment_preference_direct ||\n    (j.context_packet && j.context_packet.state && j.context_packet.state.payment_preference) ||\n    (j.execution_context && j.execution_context.payment_preference) ||\n    '';\n}\n\n// Fallback: if no explicit payment_preference was ever captured upstream,\n// derive it from payment_mode so auto-select business configs (prepago_only,\n// prepago_required, postpago_only) still trigger the right downstream branch.\nif (!paymentPref) {\n  let paymentMode = '';\n  for (const item of allItems) {\n    if (!item.json) continue;\n    const j = item.json;\n    const mode =\n      (j.context_packet && j.context_packet.state && j.context_packet.state.payment_mode) ||\n      (j.context_packet && j.context_packet.agent_business_config && j.context_packet.agent_business_config.config && j.context_packet.agent_business_config.config.payment_mode) ||\n      (j.execution_context && j.execution_context.payment_mode) ||\n      '';\n    if (mode) { paymentMode = mode; break; }\n  }\n  if (paymentMode === 'prepago_only' || paymentMode === 'prepago_required') {\n    paymentPref = 'prepago';\n  } else if (paymentMode === 'postpago_only') {\n    paymentPref = 'postpago';\n  }\n  // paymentMode === 'both' (or unknown): leave paymentPref empty, an explicit\n  // choice is genuinely required in that mode.\n}\n\nconst resultJson = bookingResult && bookingResult.json ? bookingResult.json : {};\nreturn [{ json: { ...resultJson, payment_preference_direct: paymentPref } }];",
           "mode": "runOnceForAllItems"
         }
       },
@@ -6943,6 +7585,585 @@
         "parameters": {
           "jsCode": "// message_to_send is lost after inser_quote (Postgres INSERT returns only DB row).\n// Recover full context from Call '6.8 send_quote' output.\n// 6.8 output includes message_to_send and a partial state_update (quoted_price, etc.)\n// but NOT the full state_update from rules_engine (which has stage=qualified, last_bot_action).\n// Merge both state_updates to preserve all fields.\nconst quoteCtx = $(\"Call '6.8 send_quote'\").first()?.json || {};\nconst rulesStateUpdate = quoteCtx.decision?.state_update || {};\nconst quoteStateUpdate = quoteCtx.state_update || {};\nreturn [{\n  json: {\n    ...quoteCtx,\n    state_update: {\n      ...rulesStateUpdate,\n      ...quoteStateUpdate\n    },\n    offers_or_quotes_id: $json.id || null\n  }\n}];"
         }
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "bRPFQVB8uOwaTUyp",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/bRPFQVB8uOwaTUyp",
+            "cachedResultName": "6.28 check_payment_status"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "payload": "={{ JSON.stringify($json) }}"
+            },
+            "matchingColumns": [
+              "payload"
+            ],
+            "schema": [
+              {
+                "id": "payload",
+                "displayName": "payload",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          2192,
+          200
+        ],
+        "id": "qa-call-628-check-payment-status",
+        "name": "Call 6.28 check_payment_status"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "9b16489e-ce39-4213-ab5d-270d035fa1e0",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/9b16489e-ce39-4213-ab5d-270d035fa1e0",
+            "cachedResultName": "6.2 check_calendar_slot"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{$json.execution_context.lead_id}}",
+              "slot_id": "={{$json.execution_context.slot_id}}",
+              "booking_date": "={{$json.execution_context.booking_date}}",
+              "booking_time": "={{$json.execution_context.booking_time}}",
+              "duration_minutes": "={{ String($json.execution_context.duration_minutes || 120) }}",
+              "calendar_id": "={{$json.execution_context.calendar_id || 'primary'}}",
+              "agent_id": "={{$json.execution_context.agent_id}}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "booking_date",
+                "displayName": "booking_date",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "booking_time",
+                "displayName": "booking_time",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "slot_id",
+                "displayName": "slot_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "duration_minutes",
+                "displayName": "duration_minutes",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "calendar_id",
+                "displayName": "calendar_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "agent_id",
+                "displayName": "agent_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          2500,
+          550
+        ],
+        "id": "call_62_prepago_hold",
+        "name": "Call 6.2 check_calendar_slot (hold)"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "prepago_slot_available_check",
+                "leftValue": "={{ !!$json.slot_available }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2720,
+          550
+        ],
+        "id": "if_prepago_slot_available",
+        "name": "IF prepago_slot_available"
+      },
+      {
+        "parameters": {
+          "jsCode": "const prepPayload = $(\"prepago_required_prep\").first().json;\nconst ctx = prepPayload.execution_context || {};\n\nconst msg = \"Justo en este momento ese horario se reservo para otro cliente. Si quieres, te muestro los horarios disponibles de nuevo.\";\n\nreturn [{\n  ...prepPayload,\n  channel: ctx.channel || \"whatsapp\",\n  phone: ctx.phone || \"\",\n  message_to_send: msg,\n  message: msg,\n  db_operations: [\"messages\", \"lead_state\"],\n  execution_context: {\n    ...ctx,\n    action: \"answer_question\",\n    message: msg,\n    state_update: {\n      ...(ctx.state_update || {}),\n      stage: \"booking_selection\",\n      intent_last: \"selected_slot_unavailable\",\n      next_goal: \"collect_selected_slot\",\n      last_bot_action: \"answer_question\",\n      availability_confirmed: false,\n      booking_date: null,\n      booking_time: null,\n      slot_id: null,\n      pending_booking_data: null,\n      fields_to_clear: [\"booking_date\", \"booking_time\", \"slot_id\", \"pending_booking_data\"],\n      missing_fields: []\n    }\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2940,
+          700
+        ],
+        "id": "build_prepago_slot_taken_result",
+        "name": "build_prepago_slot_taken_result"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "a3ec1c2d-0a59-46b1-a404-7a990234f3dc",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/a3ec1c2d-0a59-46b1-a404-7a990234f3dc",
+            "cachedResultName": "6.3 create_calendar_booking"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "lead_id": "={{ $(\"prepago_required_prep\").first().json.execution_context.lead_id }}",
+              "slot_id": "={{ $json.slot_id }}",
+              "slot_start_at": "={{ $json.slot_start_at }}",
+              "slot_end_at": "={{ $json.slot_end_at }}",
+              "service_interest": "={{ $(\"prepago_required_prep\").first().json.execution_context.service_interest }}",
+              "vehicle_type": "={{ $(\"prepago_required_prep\").first().json.execution_context.vehicle_type }}",
+              "district": "={{ $(\"prepago_required_prep\").first().json.execution_context.district }}",
+              "customer_name": "={{ $(\"prepago_required_prep\").first().json.context_packet?.lead?.name || 'Cliente' }}",
+              "phone": "={{ $(\"prepago_required_prep\").first().json.context_packet?.lead?.phone || null }}",
+              "calendar_id": "={{ $json.calendar_id || 'primary' }}",
+              "service_address": "={{ $(\"prepago_required_prep\").first().json.execution_context.service_address || null }}",
+              "address_reference": "={{ $(\"prepago_required_prep\").first().json.execution_context.address_reference || null }}",
+              "agent_id": "={{ $(\"prepago_required_prep\").first().json.execution_context.agent_id }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "lead_id",
+                "displayName": "lead_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "slot_id",
+                "displayName": "slot_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "slot_start_at",
+                "displayName": "slot_start_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "slot_end_at",
+                "displayName": "slot_end_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "service_interest",
+                "displayName": "service_interest",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "vehicle_type",
+                "displayName": "vehicle_type",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "district",
+                "displayName": "district",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "customer_name",
+                "displayName": "customer_name",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "phone",
+                "displayName": "phone",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "calendar_id",
+                "displayName": "calendar_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "service_address",
+                "displayName": "service_address",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "address_reference",
+                "displayName": "address_reference",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              },
+              {
+                "id": "agent_id",
+                "displayName": "agent_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string",
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          2940,
+          400
+        ],
+        "id": "call_63_prepago_hold",
+        "name": "Call 6.3 create_calendar_booking (hold)"
+      },
+      {
+        "parameters": {
+          "jsCode": "const event = $json.calendar_event || $json;\nconst prepPayload = $(\"prepago_required_prep\").first().json;\nconst slotCheck = $(\"Call 6.2 check_calendar_slot (hold)\").first().json;\nconst ctx = prepPayload.execution_context || {};\nconst lead = prepPayload.context_packet?.lead || {};\n\nif (!event?.id) {\n  throw new Error(\"Missing real calendar event id (prepago hold)\");\n}\n\nconst startAt = event.start?.dateTime || slotCheck.slot_start_at;\nconst endAt = event.end?.dateTime || slotCheck.slot_end_at;\n\nreturn [{\n  ...prepPayload,\n  appointment_payload: {\n    event_id: event.id,\n    conversation_id: ctx.lead_id,\n    start_at: startAt,\n    end_at: endAt,\n    summary: event.summary || `${ctx.service_interest || \"Servicio\"} - ${lead.name || \"Cliente\"}`,\n    description: event.description || \"\",\n    status: \"pending_payment\",\n    staff_id: ctx.staff_id || null\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3160,
+          400
+        ],
+        "id": "build_pending_payment_appointment_payload",
+        "name": "build_pending_payment_appointment_payload"
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "appointments",
+            "mode": "list",
+            "cachedResultName": "appointments"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "event_id": "={{ $json.appointment_payload.event_id}}",
+              "conversation_id": "={{ $json.appointment_payload.conversation_id}}",
+              "start_at": "={{ $json.appointment_payload.start_at}}",
+              "end_at": "={{ $json.appointment_payload.end_at}}",
+              "summary": "={{$json.appointment_payload.summary}}",
+              "description": "={{ $json.appointment_payload.description }}",
+              "status": "={{$json.appointment_payload.status }}",
+              "created_at": "={{ new Date().toISOString() }}",
+              "staff_id": "={{ $json.appointment_payload.staff_id }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": true
+              },
+              {
+                "id": "event_id",
+                "displayName": "event_id",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "conversation_id",
+                "displayName": "conversation_id",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "start_at",
+                "displayName": "start_at",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "end_at",
+                "displayName": "end_at",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "summary",
+                "displayName": "summary",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "description",
+                "displayName": "description",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "status",
+                "displayName": "status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "staff_id",
+                "displayName": "staff_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          3380,
+          400
+        ],
+        "id": "insert_pending_payment_appointment",
+        "name": "insert_pending_payment_appointment",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "return [ $(\"prepago_required_prep\").first().json ];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3600,
+          400
+        ],
+        "id": "restore_context_for_payment_request",
+        "name": "restore_context_for_payment_request"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT external_channel_id\nFROM public.agent_channels\nWHERE agent_id = $1::uuid AND channel = 'whatsapp' AND is_active = true\nLIMIT 1;",
+          "options": {
+            "queryReplacement": "={{ [ $json.context_packet?.routing?.agent_id || $json.agent_id || $json.context_packet?.agent?.id || null ] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          4632,
+          496
+        ],
+        "id": "28a335aa-e77b-4037-8098-55e2a99bd037",
+        "name": "DB_resolve_audit_channel",
+        "credentials": {
+          "postgres": {
+            "id": "a9C9SXdbhsOBvUzF",
+            "name": "Postgres account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const original = $(\"persist_results\").first().json;\nconst row = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    resolved_outbound_phone_number_id: row.external_channel_id || null\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4680,
+          496
+        ],
+        "id": "93b27a95-6989-4d09-9fd6-d2f0a3674e4b",
+        "name": "merge_resolved_audit_channel"
       }
     ],
     "connections": {
@@ -7119,6 +8340,13 @@
               "node": "ask_payment_preference_prep",
               "index": 0,
               "type": "main"
+            }
+          ],
+          [
+            {
+              "node": "Call 6.28 check_payment_status",
+              "type": "main",
+              "index": 0
             }
           ]
         ]
@@ -7709,7 +8937,7 @@
         "main": [
           [
             {
-              "node": "build_audit_payload",
+              "node": "DB_resolve_audit_channel",
               "type": "main",
               "index": 0
             }
@@ -7749,7 +8977,7 @@
         "main": [
           [
             {
-              "node": "6.26 payment_request",
+              "node": "Call 6.2 check_calendar_slot (hold)",
               "type": "main",
               "index": 0
             }
@@ -7828,6 +9056,123 @@
             }
           ]
         ]
+      },
+      "Call 6.28 check_payment_status": {
+        "main": [
+          [
+            {
+              "node": "IF requires_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.2 check_calendar_slot (hold)": {
+        "main": [
+          [
+            {
+              "node": "IF prepago_slot_available",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF prepago_slot_available": {
+        "main": [
+          [
+            {
+              "node": "Call 6.3 create_calendar_booking (hold)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "build_prepago_slot_taken_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_prepago_slot_taken_result": {
+        "main": [
+          [
+            {
+              "node": "IF requires_message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call 6.3 create_calendar_booking (hold)": {
+        "main": [
+          [
+            {
+              "node": "build_pending_payment_appointment_payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "build_pending_payment_appointment_payload": {
+        "main": [
+          [
+            {
+              "node": "insert_pending_payment_appointment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "insert_pending_payment_appointment": {
+        "main": [
+          [
+            {
+              "node": "restore_context_for_payment_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "restore_context_for_payment_request": {
+        "main": [
+          [
+            {
+              "node": "6.26 payment_request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB_resolve_audit_channel": {
+        "main": [
+          [
+            {
+              "node": "merge_resolved_audit_channel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_resolved_audit_channel": {
+        "main": [
+          [
+            {
+              "node": "build_audit_payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -7836,18 +9181,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-13T22:15:40.818Z",
-        "id": 2006,
+        "createdAt": "2026-08-02T12:17:49.043Z",
+        "id": 2265,
         "workflowId": "80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13",
-        "versionId": "07d76e96-eaaf-4d59-8af9-6c4cdb2a8c57",
+        "versionId": "f1c188ae-efb3-4900-bd08-dfdb86a5f385",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-07-13T22:15:40.702Z",
-        "id": 2005,
+        "createdAt": "2026-08-02T12:17:48.977Z",
+        "id": 2264,
         "workflowId": "80e7685e-2690-4d1e-a5e7-5ccb7d0e8a13",
-        "versionId": "07d76e96-eaaf-4d59-8af9-6c4cdb2a8c57",
+        "versionId": "f1c188ae-efb3-4900-bd08-dfdb86a5f385",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

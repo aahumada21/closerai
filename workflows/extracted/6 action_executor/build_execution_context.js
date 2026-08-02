@@ -293,10 +293,13 @@ return [
       // Cada agente (numero) puede tener su propio Google Calendar via
       // agent_business_config.config.calendar_id. El hardcode queda solo
       // como ultimo fallback para no romper agentes sin calendario propio.
+      // Sin fallback hardcodeado a proposito: si no hay calendario propio,
+      // queda null y 6.2/6.3/6.4 cortan el flujo. Antes esto apuntaba al
+      // calendario real de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md
       calendar_id:
         state.calendar_id ||
         ctx.agent_business_config?.config?.calendar_id ||
-        "0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com",
+        null,
 
       auto_offer_slots_after_cancel: stateUpdate.auto_offer_slots_after_cancel === true,
 

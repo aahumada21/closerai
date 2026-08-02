@@ -183,6 +183,12 @@ const providerMessageId =
   $json.provider_message_id ||
   null;
 
+const outboundPhoneNumberId =
+  $json.resolved_outbound_phone_number_id ||
+  contextPacket.routing?.phone_number_id ||
+  contextPacket.routing?.external_channel_id ||
+  '1024332077436840';
+
 return [{
   ...$json,
   flow_name: "action_executor",
@@ -280,6 +286,7 @@ return [{
     provider_message_id: providerMessageId,
     provider_status: providerStatus,
     outbound_message_id: outboundMessageId,
+    outbound_phone_number_id: outboundPhoneNumberId,
     outbound_message_saved: $json.outbound_message_saved === true,
     state_updated: $json.state_updated === true,
     db_records_created: $json.records || $json.db_operations || [],

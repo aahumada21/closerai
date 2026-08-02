@@ -17,8 +17,9 @@ SELECT
   status,
   created_at
 FROM public.appointments
-WHERE conversation_id = $1
+WHERE conversation_id = '{{ $json.execution_context.lead_id }}'::uuid
   AND status IN ('confirmed', 'pending')
   AND start_at >= NOW()
+  AND start_at = ('{{ $json.execution_context.booking_date }} {{ $json.execution_context.booking_time }}'::timestamp AT TIME ZONE 'America/Santiago')
 ORDER BY start_at ASC
 LIMIT 1;

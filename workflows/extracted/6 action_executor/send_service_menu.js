@@ -12,7 +12,7 @@ const ctx = data.execution_context || {};
 const contextPacket = data.context_packet || {};
 const state = contextPacket.state || data.lead_state || {};
 const rawBusinessConfig = data.agent_business_config?.config || data.agent_business_config || contextPacket.agent_business_config?.config || contextPacket.agent_business_config || null;
-const business = data.business || contextPacket.business || rawBusinessConfig || {};
+const business = rawBusinessConfig || data.business || contextPacket.business || {};
 
 function firstValue(...values) {
   for (const value of values) {

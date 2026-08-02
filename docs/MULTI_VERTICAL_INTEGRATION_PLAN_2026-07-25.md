@@ -292,6 +292,14 @@ falta ninguna tabla nueva para eso.
   Google Calendar (el agente de prueba tiene `calendar_id: ""` a propósito, para no
   arriesgar el calendario real de Ahumada Detailing durante las pruebas).
 
+  > ⚠️ **Esa precaución no alcanzaba (comprobado 2026-08-02).** Dejar
+  > `calendar_id: ""` no evitaba el riesgo: activaba el fallback hardcodeado, que
+  > apuntaba justamente al calendario de Ahumada. `Salon Bella (Test)` terminó
+  > creando 25 citas ahí, 20 todavía activas. El fallback ya se corrigió —hoy ese
+  > caso corta el flujo en vez de agendar— pero los eventos ya creados siguen
+  > pendientes de limpieza. Ver
+  > [`docs/arquitectura/AISLAMIENTO_CALENDARIO.md`](arquitectura/AISLAMIENTO_CALENDARIO.md).
+
 ### Fase 2 — Mensajería y flujo pre/post-servicio — ✅ COMPLETA (2026-07-26)
 - ✅ **Bug raíz del gap conocido de Fase 1, encontrado y arreglado**: en el nodo
   compartido `send_service_menu` (inline dentro de `6 action_executor`), el

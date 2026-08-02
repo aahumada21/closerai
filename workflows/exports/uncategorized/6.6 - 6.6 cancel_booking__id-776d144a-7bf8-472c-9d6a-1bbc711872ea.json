@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-30T19:56:04.334Z",
+  "updatedAt": "2026-08-02T12:20:12.202Z",
   "createdAt": "2026-05-22T22:29:40.709Z",
   "id": "776d144a-7bf8-472c-9d6a-1bbc711872ea",
   "name": "6.6 cancel_booking",
@@ -10,7 +10,7 @@
     {
       "parameters": {
         "inputSource": "jsonExample",
-        "jsonExample": "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56949186386\",\n    \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustin\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
+        "jsonExample": "{\n  \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56900000000\",\n  \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56900000000\",\n    \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"00000000-0000-0000-0000-000000000000\",\n      \"phone\": \"56900000000\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustin\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
       },
       "id": "c055762a-8fe7-4141-a639-df2372f30060",
       "typeVersion": 1.1,
@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
+        "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nconst target_appointment_id =\n  $json.target_appointment_id ||\n  execution_context.target_appointment_id ||\n  state_update.target_appointment_id ||\n  null;\n\nconst agent_id =\n  $json.agent_id ||\n  execution_context.agent_id ||\n  context_packet?.routing?.agent_id ||\n  context_packet?.agent?.id ||\n  null;\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n      target_appointment_id,\n      agent_id,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        target_appointment_id,\n        agent_id,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -37,9 +37,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH sleep_if_needed AS (\n  SELECT pg_sleep(\n    CASE WHEN stage = 'booked_pending' THEN 8 ELSE 0 END\n  )\n  FROM public.lead_state\n  WHERE lead_id = $1::uuid\n  LIMIT 1\n)\nSELECT\n  a.id,\n  a.event_id,\n  a.conversation_id,\n  a.start_at,\n  a.end_at,\n  a.summary,\n  a.description,\n  a.status\nFROM public.appointments a\nCROSS JOIN sleep_if_needed\nWHERE a.conversation_id = $1\n  AND a.status IN ('confirmed', 'pending')\n  AND a.start_at >= NOW()\nORDER BY a.start_at ASC\nLIMIT 1;",
+        "query": "WITH sleep_if_needed AS (\n  SELECT pg_sleep(\n    CASE WHEN stage = 'booked_pending' THEN 8 ELSE 0 END\n  )\n  FROM public.lead_state\n  WHERE lead_id = $1::uuid\n  LIMIT 1\n)\nSELECT\n  a.id,\n  a.event_id,\n  a.conversation_id,\n  a.start_at,\n  a.end_at,\n  a.summary,\n  a.description,\n  a.status\nFROM public.appointments a\nCROSS JOIN sleep_if_needed\nWHERE a.conversation_id = $1\n  AND a.status IN ('confirmed', 'pending')\n  AND a.start_at >= NOW()\n  AND ($2::int IS NULL OR a.id = $2::int)\nORDER BY a.start_at ASC\nLIMIT 1;",
         "options": {
-          "queryReplacement": "={{ $json.lead_id }}"
+          "queryReplacement": "={{ [$json.lead_id, $json.target_appointment_id || null] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -353,6 +353,104 @@
       ],
       "id": "691c3e59-159a-4636-b868-03c8d68aa34a",
       "name": "build_cancel_and_offer_slots_message"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bP1pWj4IkF5wbjMN",
+          "mode": "list",
+          "cachedResultName": "get_valid_calendar_token",
+          "cachedResultUrl": "/workflow/bP1pWj4IkF5wbjMN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "agent_id": "={{ $json.agent_id }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1104,
+        180
+      ],
+      "id": "67fd9289-44a9-4721-8a84-d3edf07f5a2d",
+      "name": "resolve_calendar_auth"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $(\"merge_cancel_context_with_appointment\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        180
+      ],
+      "id": "ad137b31-92b4-4687-a0b7-116ab870b4af",
+      "name": "merge_calendar_auth_result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "n66-cond-oauth",
+              "leftValue": "={{ $json.oauth_connected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        180
+      ],
+      "id": "263f4d58-30c6-4f5e-a64a-d8e3851c05a1",
+      "name": "IF oauth_connected"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ encodeURIComponent($json.oauth_calendar_id) }}/events/{{ encodeURIComponent($json.event_id) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.oauth_access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        60
+      ],
+      "id": "b9cc90ce-cab1-456c-88f7-257fc2bec36c",
+      "name": "delete_event_oauth"
     }
   ],
   "connections": {
@@ -409,7 +507,7 @@
       "main": [
         [
           {
-            "node": "Delete an event",
+            "node": "resolve_calendar_auth",
             "type": "main",
             "index": 0
           },
@@ -565,6 +663,57 @@
           }
         ]
       ]
+    },
+    "resolve_calendar_auth": {
+      "main": [
+        [
+          {
+            "node": "merge_calendar_auth_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_calendar_auth_result": {
+      "main": [
+        [
+          {
+            "node": "IF oauth_connected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF oauth_connected": {
+      "main": [
+        [
+          {
+            "node": "delete_event_oauth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_event_oauth": {
+      "main": [
+        [
+          {
+            "node": "Merge Context Delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -576,9 +725,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "87d56afb-1eea-4144-8f8d-b910a9b024b9",
-  "activeVersionId": "87d56afb-1eea-4144-8f8d-b910a9b024b9",
-  "versionCounter": 58,
+  "versionId": "f3178f64-9c21-442f-bd13-97b1f4c6b533",
+  "activeVersionId": "f3178f64-9c21-442f-bd13-97b1f4c6b533",
+  "versionCounter": 72,
   "triggerCount": 0,
   "shared": [
     {
@@ -601,15 +750,15 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-06-30T19:56:04.337Z",
-    "createdAt": "2026-06-30T19:56:04.337Z",
-    "versionId": "87d56afb-1eea-4144-8f8d-b910a9b024b9",
+    "updatedAt": "2026-08-02T12:20:12.204Z",
+    "createdAt": "2026-08-02T12:20:12.204Z",
+    "versionId": "f3178f64-9c21-442f-bd13-97b1f4c6b533",
     "workflowId": "776d144a-7bf8-472c-9d6a-1bbc711872ea",
     "nodes": [
       {
         "parameters": {
           "inputSource": "jsonExample",
-          "jsonExample": "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56949186386\",\n    \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustin\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
+          "jsonExample": "{\n  \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56900000000\",\n  \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n  \"cancellation_reason\": \"client_requested_cancel\",\n  \"execution_context\": {\n    \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"channel\": \"whatsapp\",\n    \"phone\": \"56900000000\",\n    \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n    \"cancellation_reason\": \"client_requested_cancel\",\n    \"action\": \"cancel_booking\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"00000000-0000-0000-0000-000000000000\",\n      \"phone\": \"56900000000\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustin\"\n    },\n    \"state\": {\n      \"stage\": \"booked\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\"\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_cancel_booking_001\",\n      \"latest_user_message\": \"quiero cancelar la reserva\"\n    },\n    \"allowed_actions\": [\n      \"cancel_booking\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"cancel_booking\",\n    \"reason\": \"user_requested_cancellation\",\n    \"cancellation_reason\": \"client_requested_cancel\"\n  },\n  \"state_update\": {},\n  \"execution_meta\": {\n    \"execution_id\": \"test_cancel_booking_001\",\n    \"timestamp\": \"2026-04-29T14:00:00.000Z\"\n  }\n}"
         },
         "id": "c055762a-8fe7-4141-a639-df2372f30060",
         "typeVersion": 1.1,
@@ -622,7 +771,7 @@
       },
       {
         "parameters": {
-          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
+          "jsCode": "function parseMaybeJson(value, fallback = {}) {\n  if (value && typeof value === \"object\") return value;\n  if (typeof value !== \"string\") return fallback;\n\n  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }\n}\n\nconst execution_context = parseMaybeJson($json.execution_context, {});\nconst context_packet = parseMaybeJson($json.context_packet, {});\nconst decision = parseMaybeJson($json.decision, {});\nconst state_update = parseMaybeJson($json.state_update, {});\nconst execution_meta = parseMaybeJson($json.execution_meta, {});\n\nconst lead_id =\n  $json.lead_id ||\n  execution_context.lead_id ||\n  context_packet?.lead?.id ||\n  null;\n\nconst channel =\n  $json.channel ||\n  execution_context.channel ||\n  context_packet?.lead?.channel ||\n  \"whatsapp\";\n\nconst phone =\n  $json.phone ||\n  execution_context.phone ||\n  context_packet?.lead?.phone ||\n  null;\n\nconst calendar_id =\n  $json.calendar_id ||\n  execution_context.calendar_id ||\n  null;\n\nconst cancellation_reason =\n  $json.cancellation_reason ||\n  execution_context.cancellation_reason ||\n  decision.cancellation_reason ||\n  decision.reason ||\n  \"cancelled_by_client\";\n\nconst target_appointment_id =\n  $json.target_appointment_id ||\n  execution_context.target_appointment_id ||\n  state_update.target_appointment_id ||\n  null;\n\nconst agent_id =\n  $json.agent_id ||\n  execution_context.agent_id ||\n  context_packet?.routing?.agent_id ||\n  context_packet?.agent?.id ||\n  null;\n\nif (!lead_id) {\n  throw new Error(\"Missing lead_id in cancel_booking\");\n}\n\nreturn [\n  {\n    json: {\n      lead_id,\n      channel,\n      phone,\n      calendar_id,\n      cancellation_reason,\n      target_appointment_id,\n      agent_id,\n\n      execution_context: {\n        ...execution_context,\n        lead_id,\n        channel,\n        phone,\n        calendar_id,\n        cancellation_reason,\n        target_appointment_id,\n        agent_id,\n        action: \"cancel_booking\"\n      },\n\n      context_packet,\n      decision,\n      state_update,\n      execution_meta,\n\n      notes: [\"cancel_booking_input_normalized\"]\n    }\n  }\n];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -636,9 +785,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "WITH sleep_if_needed AS (\n  SELECT pg_sleep(\n    CASE WHEN stage = 'booked_pending' THEN 8 ELSE 0 END\n  )\n  FROM public.lead_state\n  WHERE lead_id = $1::uuid\n  LIMIT 1\n)\nSELECT\n  a.id,\n  a.event_id,\n  a.conversation_id,\n  a.start_at,\n  a.end_at,\n  a.summary,\n  a.description,\n  a.status\nFROM public.appointments a\nCROSS JOIN sleep_if_needed\nWHERE a.conversation_id = $1\n  AND a.status IN ('confirmed', 'pending')\n  AND a.start_at >= NOW()\nORDER BY a.start_at ASC\nLIMIT 1;",
+          "query": "WITH sleep_if_needed AS (\n  SELECT pg_sleep(\n    CASE WHEN stage = 'booked_pending' THEN 8 ELSE 0 END\n  )\n  FROM public.lead_state\n  WHERE lead_id = $1::uuid\n  LIMIT 1\n)\nSELECT\n  a.id,\n  a.event_id,\n  a.conversation_id,\n  a.start_at,\n  a.end_at,\n  a.summary,\n  a.description,\n  a.status\nFROM public.appointments a\nCROSS JOIN sleep_if_needed\nWHERE a.conversation_id = $1\n  AND a.status IN ('confirmed', 'pending')\n  AND a.start_at >= NOW()\n  AND ($2::int IS NULL OR a.id = $2::int)\nORDER BY a.start_at ASC\nLIMIT 1;",
           "options": {
-            "queryReplacement": "={{ $json.lead_id }}"
+            "queryReplacement": "={{ [$json.lead_id, $json.target_appointment_id || null] }}"
           }
         },
         "type": "n8n-nodes-base.postgres",
@@ -952,6 +1101,104 @@
         ],
         "id": "691c3e59-159a-4636-b868-03c8d68aa34a",
         "name": "build_cancel_and_offer_slots_message"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "bP1pWj4IkF5wbjMN",
+            "mode": "list",
+            "cachedResultName": "get_valid_calendar_token",
+            "cachedResultUrl": "/workflow/bP1pWj4IkF5wbjMN"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "agent_id": "={{ $json.agent_id }}"
+            },
+            "matchingColumns": [],
+            "schema": []
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.2,
+        "position": [
+          1104,
+          180
+        ],
+        "id": "67fd9289-44a9-4721-8a84-d3edf07f5a2d",
+        "name": "resolve_calendar_auth"
+      },
+      {
+        "parameters": {
+          "jsCode": "const original = $(\"merge_cancel_context_with_appointment\").first().json;\nconst auth = $json || {};\n\nreturn [{\n  json: {\n    ...original,\n    oauth_connected: auth.connected === true,\n    oauth_access_token: auth.access_token || null,\n    oauth_calendar_id: auth.calendar_id || null\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1232,
+          180
+        ],
+        "id": "ad137b31-92b4-4687-a0b7-116ab870b4af",
+        "name": "merge_calendar_auth_result"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "n66-cond-oauth",
+                "leftValue": "={{ $json.oauth_connected }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1360,
+          180
+        ],
+        "id": "263f4d58-30c6-4f5e-a64a-d8e3851c05a1",
+        "name": "IF oauth_connected"
+      },
+      {
+        "parameters": {
+          "method": "DELETE",
+          "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ encodeURIComponent($json.oauth_calendar_id) }}/events/{{ encodeURIComponent($json.event_id) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $json.oauth_access_token }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1360,
+          60
+        ],
+        "id": "b9cc90ce-cab1-456c-88f7-257fc2bec36c",
+        "name": "delete_event_oauth"
       }
     ],
     "connections": {
@@ -1008,7 +1255,7 @@
         "main": [
           [
             {
-              "node": "Delete an event",
+              "node": "resolve_calendar_auth",
               "type": "main",
               "index": 0
             },
@@ -1164,6 +1411,57 @@
             }
           ]
         ]
+      },
+      "resolve_calendar_auth": {
+        "main": [
+          [
+            {
+              "node": "merge_calendar_auth_result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "merge_calendar_auth_result": {
+        "main": [
+          [
+            {
+              "node": "IF oauth_connected",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF oauth_connected": {
+        "main": [
+          [
+            {
+              "node": "delete_event_oauth",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Delete an event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "delete_event_oauth": {
+        "main": [
+          [
+            {
+              "node": "Merge Context Delete",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Agustín Ahumada",
@@ -1172,18 +1470,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-06-30T19:56:04.967Z",
-        "id": 1636,
+        "createdAt": "2026-08-02T12:20:12.451Z",
+        "id": 2277,
         "workflowId": "776d144a-7bf8-472c-9d6a-1bbc711872ea",
-        "versionId": "87d56afb-1eea-4144-8f8d-b910a9b024b9",
+        "versionId": "f3178f64-9c21-442f-bd13-97b1f4c6b533",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-06-30T19:56:04.882Z",
-        "id": 1635,
+        "createdAt": "2026-08-02T12:20:12.349Z",
+        "id": 2276,
         "workflowId": "776d144a-7bf8-472c-9d6a-1bbc711872ea",
-        "versionId": "87d56afb-1eea-4144-8f8d-b910a9b024b9",
+        "versionId": "f3178f64-9c21-442f-bd13-97b1f4c6b533",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

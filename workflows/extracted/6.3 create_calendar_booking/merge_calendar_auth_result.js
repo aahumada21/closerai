@@ -20,6 +20,24 @@ const staffCalendarId =
     ? original.calendar_id
     : null;
 
+
+// --- Guard de aislamiento multi-tenant ---
+// Si no hay calendario propio (config/staff) NI conexion OAuth del agente, no
+// se agenda. Antes se caia a "primary", el calendario de la credencial
+// compartida de n8n, que es de otro tenant. Fallar aca es deliberado: es
+// preferible cortar y derivar a un humano antes que escribir o leer el
+// calendario de otro cliente. Ver docs/arquitectura/AISLAMIENTO_CALENDARIO.md
+const resolvedCalendarId =
+  staffCalendarId || (auth.connected === true ? auth.calendar_id : null) || null;
+
+if (!resolvedCalendarId) {
+  throw new Error(
+    'calendar_not_configured: el agente no tiene calendario propio ni conexion ' +
+    'de Google Calendar. No se agenda para no usar el calendario de otro cliente. ' +
+    'Configurar agent_business_config.config.calendar_id o conectar OAuth.'
+  );
+}
+
 return [{
   json: {
     ...original,

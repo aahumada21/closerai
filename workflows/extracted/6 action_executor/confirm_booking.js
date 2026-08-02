@@ -10,11 +10,18 @@
 const data = $json;
 const ctx = data.execution_context || {};
 
-const paymentMode = ctx.payment_mode ||
-  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||
-  (data.context_packet && data.context_packet.agent_business_config &&
+// El config global del negocio (agent_business_config) SIEMPRE manda sobre
+// cualquier valor pegado en lead_state de una reserva anterior -- payment_mode
+// es una decision de negocio, no algo que deba quedar fijo por lead para
+// siempre. Antes, un lead que ya habia reservado una vez quedaba atascado
+// usando el payment_mode VIEJO aunque el negocio cambiara su configuracion,
+// incluso para una reserva nueva/distinta (bug real: 2do auto de un cliente
+// use prepago_only heredado en vez de prepago_required, el modo activo real).
+const paymentMode = (data.context_packet && data.context_packet.agent_business_config &&
    data.context_packet.agent_business_config.config &&
    data.context_packet.agent_business_config.config.payment_mode) ||
+  ctx.payment_mode ||
+  (data.context_packet && data.context_packet.state && data.context_packet.state.payment_mode) ||
   "both";
 
 const isPrepagoreRequired = paymentMode === "prepago_required";

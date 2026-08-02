@@ -41,6 +41,8 @@ graph LR
   n362061637469 --> n362e31382072
   n362e31392061["6.19 answer_objection"]
   n362061637469 --> n362e31392061
+  n362e32206368["6.2 check_calendar_slot"]
+  n362061637469 --> n362e32206368
   n362e3230206f["6.20 offer_booking"]
   n362061637469 --> n362e3230206f
   n362e32312073["6.21 schedule_followup"]
@@ -57,6 +59,8 @@ graph LR
   n362061637469 --> n362e32362070
   n362e32382063["6.28 check_payment_status"]
   n362061637469 --> n362e32382063
+  n362e33206372["6.3 create_calendar_booking"]
+  n362061637469 --> n362e33206372
   n362e3520636f["6.5 confirm_booking_executor"]
   n362061637469 --> n362e3520636f
   n362e36206361["6.6 cancel_booking"]
@@ -67,11 +71,11 @@ graph LR
   n362061637469 --> n362e38207365
   n362e3920616e["6.9 answer_question"]
   n362061637469 --> n362e3920616e
-  n362e32206368["6.2 check_calendar_slot"]
   n362e31302072 --> n362e32206368
   n362e34206c69["6.4 list_available_slots"]
   n362e31302072 --> n362e34206c69
   n6765745f7661["get_valid_calendar_token"]
+  n362e31302072 --> n6765745f7661
   n362e32206368 --> n6765745f7661
   n382e30206875["8.0 human_handof"]
   n362e32322068 --> n382e30206875
@@ -85,13 +89,13 @@ graph LR
   n362e32372070 --> n362e3520636f
   n362e32392072["6.29 release_expired_payment_holds"]
   n362e32392072 -->|2| n362e31207365
-  n362e33206372["6.3 create_calendar_booking"]
   n362e33206372 --> n6765745f7661
   n362e34206c69 --> n6765745f7661
   n362e3520636f --> n362e31332073
   n362e3520636f --> n362e32206368
   n362e3520636f --> n362e33206372
   n362e36206361 --> n362e3233206f
+  n362e36206361 --> n6765745f7661
   n362e30207265["6.0 resolve_pricing_from_db"]
   n362e38207365 --> n362e30207265
   n3720666f6c6c["7 followup_scheduler"]
@@ -115,7 +119,7 @@ graph LR
 ## Resumen
 
 - Workflows totales: **73**
-- Llamadas `executeWorkflow`: **64** (56 pares distintos)
+- Llamadas `executeWorkflow`: **68** (60 pares distintos)
 - Con destino dinamico (expresion, no resoluble estaticamente): **0**
 - Workflows aislados (ni llaman ni son llamados): **23**
 

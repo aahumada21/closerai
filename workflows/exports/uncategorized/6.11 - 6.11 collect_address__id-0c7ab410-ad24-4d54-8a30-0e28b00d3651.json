@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-10T18:00:05.662Z",
+  "updatedAt": "2026-08-02T12:20:11.349Z",
   "createdAt": "2026-05-22T22:29:40.717Z",
   "id": "0c7ab410-ad24-4d54-8a30-0e28b00d3651",
   "name": "6.11 collect_address",
@@ -10,7 +10,7 @@
     {
       "parameters": {
         "inputSource": "jsonExample",
-        "jsonExample": "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"phone\": \"56949186386\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"76329124-66ae-497b-a2a0-e45250ae56cf__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
+        "jsonExample": "{\n  \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56900000000\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"phone\": \"56900000000\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"00000000-0000-0000-0000-000000000000__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"00000000-0000-0000-0000-000000000000\",\n      \"phone\": \"56900000000\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
       },
       "id": "c055762a-8fe7-4141-a639-df2372f30060",
       "typeVersion": 1.1,
@@ -56,9 +56,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "0f2723ae-fc85-4e34-8ee2-0e9999b1dd8f",
-  "activeVersionId": "0f2723ae-fc85-4e34-8ee2-0e9999b1dd8f",
-  "versionCounter": 40,
+  "versionId": "a64e335e-391d-4112-9a32-44d9fa5c43ba",
+  "activeVersionId": "a64e335e-391d-4112-9a32-44d9fa5c43ba",
+  "versionCounter": 48,
   "triggerCount": 0,
   "shared": [
     {
@@ -81,15 +81,15 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-06-10T18:00:05.665Z",
-    "createdAt": "2026-06-10T18:00:05.665Z",
-    "versionId": "0f2723ae-fc85-4e34-8ee2-0e9999b1dd8f",
+    "updatedAt": "2026-08-02T12:20:11.353Z",
+    "createdAt": "2026-08-02T12:20:11.353Z",
+    "versionId": "a64e335e-391d-4112-9a32-44d9fa5c43ba",
     "workflowId": "0c7ab410-ad24-4d54-8a30-0e28b00d3651",
     "nodes": [
       {
         "parameters": {
           "inputSource": "jsonExample",
-          "jsonExample": "{\n  \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56949186386\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n    \"phone\": \"56949186386\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"76329124-66ae-497b-a2a0-e45250ae56cf__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"76329124-66ae-497b-a2a0-e45250ae56cf\",\n      \"phone\": \"56949186386\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"0806113eec0244bd64e4ef9658d05e6238f5e9e90c33621efb2fbb52150ee3eb@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
+          "jsonExample": "{\n  \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"channel\": \"whatsapp\",\n  \"phone\": \"56900000000\",\n  \"service_interest\": \"lavado_premium\",\n  \"vehicle_type\": \"SUV\",\n  \"district\": \"Huechuraba\",\n  \"execution_context\": {\n    \"lead_id\": \"00000000-0000-0000-0000-000000000000\",\n    \"phone\": \"56900000000\",\n    \"channel\": \"whatsapp\",\n    \"action\": \"collect_address\",\n    \"message\": \"\",\n    \"service_interest\": \"lavado_premium\",\n    \"vehicle_type\": \"SUV\",\n    \"district\": \"Huechuraba\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    },\n    \"idempotency_key\": \"00000000-0000-0000-0000-000000000000__test_collect_address_001__collect_address\"\n  },\n  \"context_packet\": {\n    \"lead\": {\n      \"id\": \"00000000-0000-0000-0000-000000000000\",\n      \"phone\": \"56900000000\",\n      \"channel\": \"whatsapp\",\n      \"name\": \"Agustín\"\n    },\n    \"state\": {\n      \"stage\": \"closing\",\n      \"human_handoff\": false,\n      \"service_interest\": \"lavado_premium\",\n      \"vehicle_type\": \"SUV\",\n      \"district\": \"Huechuraba\",\n      \"calendar_id\": \"calendario-del-agente@group.calendar.google.com\",\n      \"duration_minutes\": 120,\n      \"missing_fields\": []\n    },\n    \"conversation\": {\n      \"last_message_id\": \"test_collect_address_001\",\n      \"latest_user_message\": \"si, quiero agendar\"\n    },\n    \"allowed_actions\": [\n      \"collect_address\",\n      \"confirm_address\",\n      \"answer_question\",\n      \"handoff_human\"\n    ]\n  },\n  \"decision\": {\n    \"action\": \"collect_address\",\n    \"reason\": \"Necesitamos pedir la dirección exacta antes de confirmar el servicio a domicilio.\",\n    \"message\": \"\",\n    \"state_update\": {\n      \"stage\": \"collecting_address\",\n      \"next_goal\": \"collect_address\"\n    }\n  },\n  \"state_update\": {\n    \"stage\": \"collecting_address\",\n    \"next_goal\": \"collect_address\"\n  },\n  \"execution_meta\": {\n    \"execution_id\": \"test_6_11_collect_address\",\n    \"timestamp\": \"2026-04-30T12:00:00.000Z\"\n  }\n}"
         },
         "id": "c055762a-8fe7-4141-a639-df2372f30060",
         "typeVersion": 1.1,
@@ -133,18 +133,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-06-10T18:00:06.297Z",
-        "id": 1165,
+        "createdAt": "2026-08-02T12:20:11.546Z",
+        "id": 2275,
         "workflowId": "0c7ab410-ad24-4d54-8a30-0e28b00d3651",
-        "versionId": "0f2723ae-fc85-4e34-8ee2-0e9999b1dd8f",
+        "versionId": "a64e335e-391d-4112-9a32-44d9fa5c43ba",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-06-10T18:00:06.035Z",
-        "id": 1164,
+        "createdAt": "2026-08-02T12:20:11.466Z",
+        "id": 2274,
         "workflowId": "0c7ab410-ad24-4d54-8a30-0e28b00d3651",
-        "versionId": "0f2723ae-fc85-4e34-8ee2-0e9999b1dd8f",
+        "versionId": "a64e335e-391d-4112-9a32-44d9fa5c43ba",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }
