@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T12:40:56.703Z",
+  "updatedAt": "2026-07-21T14:57:04.173Z",
   "createdAt": "2026-05-22T22:29:40.761Z",
   "id": "34092303-cb4a-4fd2-800e-ac16f650fc52",
   "name": "9.1.1 qa_run_single_conversation",
@@ -190,7 +190,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH existing_lead AS (\n  -- Buscar-y-si-no-existe-insertar en vez de ON CONFLICT: el unico indice\n  -- unico de leads es (channel, external_id, agent_id) y los leads de QA\n  -- tienen agent_id NULL, asi que ningun ON CONFLICT puede funcionar aca\n  -- (los NULL son distintos entre si). Ver el comentario del script\n  -- scripts/ que aplico este cambio.\n  SELECT id\n  FROM public.leads\n  WHERE channel = 'whatsapp'\n    AND external_id = '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}'\n  ORDER BY created_at ASC\n  LIMIT 1\n),\ninserted_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  SELECT\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM existing_lead)\n  RETURNING id\n),\ntouched_lead AS (\n  UPDATE public.leads\n  SET name = 'Cliente QA', updated_at = NOW()\n  WHERE id IN (SELECT id FROM existing_lead)\n  RETURNING id\n),\nupsert_lead AS (\n  SELECT id FROM existing_lead\n  UNION ALL\n  SELECT id FROM inserted_lead\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+        "query": "WITH upsert_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  VALUES (\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  )\n  ON CONFLICT (channel, external_id)\n  DO UPDATE SET\n    phone = EXCLUDED.phone,\n    name = EXCLUDED.name,\n    updated_at = NOW()\n  RETURNING id\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -332,8 +332,7 @@
     },
     {
       "parameters": {
-        "amount": 12,
-        "unit": "seconds"
+        "amount": 120
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -381,8 +380,7 @@
     },
     {
       "parameters": {
-        "amount": 25,
-        "unit": "seconds"
+        "amount": 150
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -418,8 +416,7 @@
     },
     {
       "parameters": {
-        "amount": 8,
-        "unit": "seconds"
+        "amount": 120
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -1000,9 +997,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
-  "activeVersionId": "8d7353a6-e446-4128-8c76-f861e0612761",
-  "versionCounter": 168,
+  "versionId": "46973e53-cbdd-4f0c-860f-4fa8d8728021",
+  "activeVersionId": "46973e53-cbdd-4f0c-860f-4fa8d8728021",
+  "versionCounter": 162,
   "triggerCount": 0,
   "shared": [
     {
@@ -1025,9 +1022,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-08-02T12:40:56.707Z",
-    "createdAt": "2026-08-02T12:40:56.707Z",
-    "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+    "updatedAt": "2026-07-21T14:57:04.178Z",
+    "createdAt": "2026-07-21T14:57:04.178Z",
+    "versionId": "46973e53-cbdd-4f0c-860f-4fa8d8728021",
     "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
     "nodes": [
       {
@@ -1213,7 +1210,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "WITH existing_lead AS (\n  -- Buscar-y-si-no-existe-insertar en vez de ON CONFLICT: el unico indice\n  -- unico de leads es (channel, external_id, agent_id) y los leads de QA\n  -- tienen agent_id NULL, asi que ningun ON CONFLICT puede funcionar aca\n  -- (los NULL son distintos entre si). Ver el comentario del script\n  -- scripts/ que aplico este cambio.\n  SELECT id\n  FROM public.leads\n  WHERE channel = 'whatsapp'\n    AND external_id = '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}'\n  ORDER BY created_at ASC\n  LIMIT 1\n),\ninserted_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  SELECT\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  WHERE NOT EXISTS (SELECT 1 FROM existing_lead)\n  RETURNING id\n),\ntouched_lead AS (\n  UPDATE public.leads\n  SET name = 'Cliente QA', updated_at = NOW()\n  WHERE id IN (SELECT id FROM existing_lead)\n  RETURNING id\n),\nupsert_lead AS (\n  SELECT id FROM existing_lead\n  UNION ALL\n  SELECT id FROM inserted_lead\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
+          "query": "WITH upsert_lead AS (\n  INSERT INTO public.leads (\n    channel, external_id, phone, name, created_at, updated_at\n  )\n  VALUES (\n    'whatsapp',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}',\n    'Cliente QA',\n    NOW(),\n    NOW()\n  )\n  ON CONFLICT (channel, external_id)\n  DO UPDATE SET\n    phone = EXCLUDED.phone,\n    name = EXCLUDED.name,\n    updated_at = NOW()\n  RETURNING id\n),\ncleanup AS (\n  DELETE FROM public.messages\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_state AS (\n  DELETE FROM public.lead_state\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_audit AS (\n  DELETE FROM public.audit_logs\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_quotes AS (\n  DELETE FROM public.offers_or_quotes\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_followups AS (\n  DELETE FROM public.followups\n  WHERE lead_id::text = (SELECT id::text FROM upsert_lead)\n),\ncleanup_appts AS (\n  DELETE FROM public.appointments\n  WHERE conversation_id::text = (SELECT id::text FROM upsert_lead)\n),\nnew_state AS (\n  INSERT INTO public.lead_state (\n    lead_id, stage, intent_last, interest_score, service_interest, vehicle_type, district,\n    missing_fields, last_bot_action, next_goal, human_handoff, updated_at\n  )\n  SELECT\n    id, 'new_lead', NULL, 0, NULL, NULL, NULL, '[]'::jsonb, NULL, 'qualify_lead', false, NOW()\n  FROM upsert_lead\n  ON CONFLICT (lead_id) DO UPDATE SET\n    stage='new_lead',\n    intent_last=NULL,\n    interest_score=0,\n    service_interest=NULL,\n    vehicle_type=NULL,\n    district=NULL,\n    missing_fields='[]'::jsonb,\n    last_bot_action=NULL,\n    next_goal='qualify_lead',\n    human_handoff=false,\n    booking_date=NULL,\n    booking_time=NULL,\n    slot_id=NULL,\n    booking_options='[]'::jsonb,\n    service_address=NULL,\n    address_reference=NULL,\n    address_confirmed=false,\n    address_confirmed_at=NULL,\n    availability_confirmed=false,\npayment_preference=NULL,\npayment_mode=NULL,\npayment_status=NULL,\nflow_order_id=NULL,\nflow_payment_url=NULL,\nquoted_price=0,\npending_booking_data=NULL,\nupdated_at=NOW()\n  RETURNING lead_id\n)\nSELECT\n  '{{ ($json.id || \"\").replace(/'/g, \"''\") }}' AS id,\n  '{{ ($json.name || \"\").replace(/'/g, \"''\") }}' AS name,\n  '{{ ($json.phone || \"\").replace(/'/g, \"''\") }}' AS phone,\n  '{{ ($json.run_id || \"\").replace(/'/g, \"''\") }}' AS run_id,\n  '{{ JSON.stringify($json.steps || []).replace(/'/g, \"''\") }}'::jsonb AS steps,\n  (SELECT lead_id FROM new_state LIMIT 1) AS qa_lead_id;",
           "options": {}
         },
         "type": "n8n-nodes-base.postgres",
@@ -1355,8 +1352,7 @@
       },
       {
         "parameters": {
-          "amount": 12,
-          "unit": "seconds"
+          "amount": 120
         },
         "type": "n8n-nodes-base.wait",
         "typeVersion": 1.1,
@@ -1404,8 +1400,7 @@
       },
       {
         "parameters": {
-          "amount": 25,
-          "unit": "seconds"
+          "amount": 150
         },
         "type": "n8n-nodes-base.wait",
         "typeVersion": 1.1,
@@ -1441,8 +1436,7 @@
       },
       {
         "parameters": {
-          "amount": 8,
-          "unit": "seconds"
+          "amount": 120
         },
         "type": "n8n-nodes-base.wait",
         "typeVersion": 1.1,
@@ -2020,18 +2014,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T12:40:56.862Z",
-        "id": 2283,
+        "createdAt": "2026-07-21T14:57:04.471Z",
+        "id": 2045,
         "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
-        "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+        "versionId": "46973e53-cbdd-4f0c-860f-4fa8d8728021",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-08-02T12:40:56.811Z",
-        "id": 2282,
+        "createdAt": "2026-07-21T14:57:04.370Z",
+        "id": 2044,
         "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
-        "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+        "versionId": "46973e53-cbdd-4f0c-860f-4fa8d8728021",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

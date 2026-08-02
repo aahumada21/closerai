@@ -89,15 +89,75 @@ que falla igual consume sus 150 s**, y si el bot tarda más de lo esperado el pa
 se da por bueno con la respuesta anterior. Con sondeo, "no respondió en 30 s" pasa
 a ser un fallo explícito en vez de un falso positivo silencioso.
 
-## 5. Por qué no se implementó todavía
+## 5. Implementado 2026-08-02 — y no hizo falta reescribir el grafo
 
-El cambio no es de una línea: hay que agregar nodos y una arista de retorno (bucle)
-en un workflow de 31 nodos, y equivocarse ahí vuelve el QA poco confiable — lo que
-contamina todo lo que se valide con él después. Además, verificarlo requiere correr
-un ciclo real de QA, que hoy tarda ~8 min por escenario justamente por el problema
-que se quiere arreglar.
+Al mapear `9.1.1` apareció algo que este diagnóstico no había visto: **la estructura
+ya era un sondeo condicional de 3 intentos**, no una espera ciega.
 
-**Requiere aprobación antes de tocar `9.1.1`.**
+```
+send_to_bot_webhook → Wait1 → check → (no) → Wait2 → check → (no) → Wait3 → check
+```
+
+El problema nunca fue la forma, fue el reloj: esperaba **120 s antes de mirar por
+primera vez**. Así que no se agregó ningún bucle — solo se ajustaron los tres
+tiempos a la latencia real:
+
+| | Antes | Ahora |
+|---|---:|---:|
+| `Wait 1` | 120 s | **8 s** (cubre ~p90) |
+| `Wait 2` | 120 s | **12 s** (acumulado 20 s, > p99) |
+| `Wait 3` | 150 s | **25 s** (acumulado 45 s, margen para carga) |
+| **Peor caso** | **390 s** | **45 s** |
+
+Cero cambios de topología: se verificó que los 31 nodos y todas las conexiones
+quedaron idénticos, y que solo cambiaron los parámetros de esos 3 nodos. Eso
+elimina el riesgo que hacía dudar de este cambio — romper el runner habría
+contaminado todo lo que se valida con él.
+
+**Medido en vivo** con el escenario `569900050` (4 pasos): los turnos avanzaron a
+las 12:41:10, :20, :30 y :39 — **~10 s por paso contra los ~120 s de antes (~12×)**,
+y 42 s la ejecución completa contra un mínimo teórico de 480 s.
+
+## 5.1. El QA estaba roto: dos fallas pre-existentes encontradas al verificar
+
+La verificación en vivo destapó que **el runner no podía correr ni un escenario**,
+por dos motivos ajenos a este cambio. Coincide con que el último resultado en
+`qa_test_results` era del 2026-07-10.
+
+**(1) `prepare_qa_lead` — corregido.** Hacía `ON CONFLICT (channel, external_id)`,
+pero el único índice único de `leads` es `(channel, external_id, agent_id)` — tres
+columnas. Postgres exige que la especificación coincida con un índice existente, así
+que abortaba en el primer nodo. Agregar `agent_id` al `ON CONFLICT` tampoco servía:
+los leads de QA tienen `agent_id NULL` y en Postgres los NULL son distintos entre
+sí, así que nunca matchearía y cada corrida crearía un lead nuevo (de hecho ya hay
+pares duplicados por eso). Se reemplazó por buscar-y-si-no-existe-insertar con CTEs,
+sin depender de la semántica del índice. Validado contra la base dentro de una
+transacción con `ROLLBACK` antes de desplegarlo.
+
+**(2) Los teléfonos de los escenarios no tienen canal — PENDIENTE.** Los escenarios
+usan teléfonos numéricos (`569900050`…) pero `agent_channels` solo tiene registrados
+pseudo-canales (`qa-phone-agent-lavado`, `qa-phone-agent-salon`, …). Sin fila de
+canal, `2.1 channel_config_resolver` no resuelve agente y **el pipeline se detiene en
+el router**: en la corrida de prueba, `audit_logs` solo registró
+`qa_whatsapp_normalized_router` y nada más. Los 4 pasos fallaron con
+`"bot is null or empty"` — correctamente, porque el bot efectivamente nunca
+respondió. Ninguna espera, por larga que fuera, habría cambiado eso.
+
+Resolverlo requiere decidir **a qué agente pertenecen los teléfonos de escenario**, y
+esa decisión interactúa con el fix de aislamiento de calendario: si se apuntan a un
+agente de prueba sin `calendar_id`, los escenarios de booking van a fallar por diseño
+(ver [`AISLAMIENTO_CALENDARIO.md`](AISLAMIENTO_CALENDARIO.md)).
+
+## 5.2. Por qué no se hizo un bucle de sondeo con intervalos de 2 s
+
+Era el plan original, y se descartó al ver la estructura real. Un bucle con sondeo
+cada 2 s resolvería un paso en ~5 s en vez de ~10 s: la mitad, pero a costa de
+agregar nodos y una arista de retorno en un workflow de 31 nodos que es la
+herramienta con la que se valida todo lo demás. Ajustar tres números da la mayor
+parte del beneficio (~12×) con riesgo estructural cero.
+
+Si en el futuro los ~8 s por paso llegan a molestar, ahí sí conviene el bucle — pero
+recién cuando el ahorro justifique el riesgo.
 
 ## 6. Lo que este diagnóstico NO resuelve
 

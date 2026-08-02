@@ -6,24 +6,43 @@
 -- Regenerar con: node scripts/extract_workflow_code.js
 -- =====================================
 
-WITH upsert_lead AS (
+WITH existing_lead AS (
+  -- Buscar-y-si-no-existe-insertar en vez de ON CONFLICT: el unico indice
+  -- unico de leads es (channel, external_id, agent_id) y los leads de QA
+  -- tienen agent_id NULL, asi que ningun ON CONFLICT puede funcionar aca
+  -- (los NULL son distintos entre si). Ver el comentario del script
+  -- scripts/ que aplico este cambio.
+  SELECT id
+  FROM public.leads
+  WHERE channel = 'whatsapp'
+    AND external_id = '{{ ($json.phone || "").replace(/'/g, "''") }}'
+  ORDER BY created_at ASC
+  LIMIT 1
+),
+inserted_lead AS (
   INSERT INTO public.leads (
     channel, external_id, phone, name, created_at, updated_at
   )
-  VALUES (
+  SELECT
     'whatsapp',
     '{{ ($json.phone || "").replace(/'/g, "''") }}',
     '{{ ($json.phone || "").replace(/'/g, "''") }}',
     'Cliente QA',
     NOW(),
     NOW()
-  )
-  ON CONFLICT (channel, external_id)
-  DO UPDATE SET
-    phone = EXCLUDED.phone,
-    name = EXCLUDED.name,
-    updated_at = NOW()
+  WHERE NOT EXISTS (SELECT 1 FROM existing_lead)
   RETURNING id
+),
+touched_lead AS (
+  UPDATE public.leads
+  SET name = 'Cliente QA', updated_at = NOW()
+  WHERE id IN (SELECT id FROM existing_lead)
+  RETURNING id
+),
+upsert_lead AS (
+  SELECT id FROM existing_lead
+  UNION ALL
+  SELECT id FROM inserted_lead
 ),
 cleanup AS (
   DELETE FROM public.messages
