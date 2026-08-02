@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T12:40:56.703Z",
+  "updatedAt": "2026-08-02T17:47:44.673Z",
   "createdAt": "2026-05-22T22:29:40.761Z",
   "id": "34092303-cb4a-4fd2-800e-ac16f650fc52",
   "name": "9.1.1 qa_run_single_conversation",
@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
+        "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    // Canal QA por defecto -> agente \"Detailing 01-test\". Es lo que hace que\n    // 9.0 pueda resolver el agente; sin phone_number_id el router corta y el\n    // bot no responde nunca. Un escenario puede sobreescribirlo poniendo su\n    // propio source_metadata.phone_number_id (el spread de sourceMetadata va\n    // despues de este default a proposito).\n    phone_number_id: \"qa-phone-agent-detailing-01\",\n    provider: \"meta_whatsapp_cloud_api\",\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1000,9 +1000,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
-  "activeVersionId": "8d7353a6-e446-4128-8c76-f861e0612761",
-  "versionCounter": 168,
+  "versionId": "d7d68298-1cd3-4a47-b279-f68088cefc63",
+  "activeVersionId": "d7d68298-1cd3-4a47-b279-f68088cefc63",
+  "versionCounter": 171,
   "triggerCount": 0,
   "shared": [
     {
@@ -1025,9 +1025,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-08-02T12:40:56.707Z",
-    "createdAt": "2026-08-02T12:40:56.707Z",
-    "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+    "updatedAt": "2026-08-02T17:47:44.685Z",
+    "createdAt": "2026-08-02T17:47:44.685Z",
+    "versionId": "d7d68298-1cd3-4a47-b279-f68088cefc63",
     "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
     "nodes": [
       {
@@ -1071,7 +1071,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
+          "jsCode": "const now = new Date().toISOString();\nconst generatedMessageId = `qa_${$json.scenario_id}_${$json.step_index}_${Date.now()}`;\nconst qaMessageId = String($json.message_id || \"\").trim() || generatedMessageId;\n\nconst sourceMetadata = $json.source_metadata || {};\nconst routing = $json.routing || null;\nconst organization = $json.organization || null;\nconst agent = $json.agent || null;\nconst channelConfig = $json.channel_config || null;\nconst whatsappNumber = $json.whatsapp_number || null;\nconst messageType = String($json.message_type || \"text\").trim() || \"text\";\nconst attachments = Array.isArray($json.attachments) ? $json.attachments : [];\nconst leadInput = $json.lead || {};\n\nconst payload = {\n  channel: \"whatsapp\",\n  message_id: qaMessageId,\n  timestamp: now,\n  text: $json.text,\n  message_type: messageType,\n  attachments,\n  source_metadata: {\n    // Canal QA por defecto -> agente \"Detailing 01-test\". Es lo que hace que\n    // 9.0 pueda resolver el agente; sin phone_number_id el router corta y el\n    // bot no responde nunca. Un escenario puede sobreescribirlo poniendo su\n    // propio source_metadata.phone_number_id (el spread de sourceMetadata va\n    // despues de este default a proposito).\n    phone_number_id: \"qa-phone-agent-detailing-01\",\n    provider: \"meta_whatsapp_cloud_api\",\n    ...sourceMetadata,\n    test_mode: true,\n    qa_run_id: $json.run_id,\n    scenario_id: $json.scenario_id,\n    step_index: $json.step_index\n  },\n  routing,\n  organization,\n  agent,\n  channel_config: channelConfig,\n  whatsapp_number: whatsappNumber,\n  lead: {\n    name: leadInput.name || \"Cliente QA\",\n    phone: leadInput.phone || $json.phone,\n    external_id: leadInput.external_id || $json.phone,\n    channel: leadInput.channel || \"whatsapp\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      qa_message_id: qaMessageId,\n      sent_at: now,\n      inbound_payload: payload\n    }\n  }\n];\n"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -2020,18 +2020,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T12:40:56.862Z",
-        "id": 2283,
+        "createdAt": "2026-08-02T17:47:44.903Z",
+        "id": 2285,
         "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
-        "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+        "versionId": "d7d68298-1cd3-4a47-b279-f68088cefc63",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-08-02T12:40:56.811Z",
-        "id": 2282,
+        "createdAt": "2026-08-02T17:47:44.853Z",
+        "id": 2284,
         "workflowId": "34092303-cb4a-4fd2-800e-ac16f650fc52",
-        "versionId": "8d7353a6-e446-4128-8c76-f861e0612761",
+        "versionId": "d7d68298-1cd3-4a47-b279-f68088cefc63",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

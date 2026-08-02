@@ -134,19 +134,41 @@ pares duplicados por eso). Se reemplazó por buscar-y-si-no-existe-insertar con 
 sin depender de la semántica del índice. Validado contra la base dentro de una
 transacción con `ROLLBACK` antes de desplegarlo.
 
-**(2) Los teléfonos de los escenarios no tienen canal — PENDIENTE.** Los escenarios
-usan teléfonos numéricos (`569900050`…) pero `agent_channels` solo tiene registrados
-pseudo-canales (`qa-phone-agent-lavado`, `qa-phone-agent-salon`, …). Sin fila de
-canal, `2.1 channel_config_resolver` no resuelve agente y **el pipeline se detiene en
-el router**: en la corrida de prueba, `audit_logs` solo registró
-`qa_whatsapp_normalized_router` y nada más. Los 4 pasos fallaron con
-`"bot is null or empty"` — correctamente, porque el bot efectivamente nunca
-respondió. Ninguna espera, por larga que fuera, habría cambiado eso.
+**(2) Ningún escenario definía `phone_number_id` — corregido.** `9.0
+qa_whatsapp_normalized_router` resuelve el agente por
+`source_metadata.phone_number_id` contra `agent_channels` — **no** por el teléfono
+del lead. Ninguno de los 10 escenarios definía ese campo, así que el resolver recibía
+`NULL`, devolvía `should_process = false` con `error_code =
+missing_phone_number_id`, y **el pipeline se detenía en el router**: en la primera
+corrida de prueba `audit_logs` solo registró `qa_whatsapp_normalized_router` y nada
+más, y los 4 pasos fallaron con `"bot is null or empty"` — correctamente, porque el
+bot nunca respondió. Ninguna espera, por larga que fuera, habría cambiado eso.
 
-Resolverlo requiere decidir **a qué agente pertenecen los teléfonos de escenario**, y
-esa decisión interactúa con el fix de aislamiento de calendario: si se apuntan a un
-agente de prueba sin `calendar_id`, los escenarios de booking van a fallar por diseño
-(ver [`AISLAMIENTO_CALENDARIO.md`](AISLAMIENTO_CALENDARIO.md)).
+Como la resolución es por canal y no por teléfono, **no hacía falta una fila por cada
+teléfono de escenario**: alcanzó con un canal y un default. Se registró
+`qa-phone-agent-detailing-01` → agente **`Detailing 01-test`** (vía
+`onboarding-add-channel`, siguiendo la convención de los `qa-phone-agent-*` que ya
+existían) y se puso ese `phone_number_id` como default en `build_inbound_payload`. Un
+escenario puede apuntar a otro agente definiendo su propio
+`source_metadata.phone_number_id`: el default va antes del spread, así que lo del
+escenario gana.
+
+> ⚠️ `Detailing 01-test` **no tiene `calendar_id` ni OAuth**, así que tras el fix de
+> [`AISLAMIENTO_CALENDARIO.md`](AISLAMIENTO_CALENDARIO.md) los escenarios que agenden
+> van a fallar por diseño (`calendar_not_configured`). Los de cotización, FAQ,
+> objeción y handoff funcionan. Para habilitar booking en QA hay que darle un
+> `calendar_id` propio a ese agente.
+
+### Resultado verificado
+
+Corrida real del escenario `569900050` (4 pasos) después de los dos fixes:
+
+| | Antes | Ahora |
+|---|---|---|
+| ¿Corría? | **no**, abortaba en el primer nodo | sí |
+| Avance por paso | ~120 s | **~7,4 s** (~16×) |
+| Escenario completo | ≥480 s solo de esperas | **80 s** (incluye el juez LLM) |
+| Resultado | 4/4 FAIL (`bot is null or empty`) | **4/4 PASS** con cotizaciones reales |
 
 ## 5.2. Por qué no se hizo un bucle de sondeo con intervalos de 2 s
 

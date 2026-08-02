@@ -29,6 +29,13 @@ const payload = {
   message_type: messageType,
   attachments,
   source_metadata: {
+    // Canal QA por defecto -> agente "Detailing 01-test". Es lo que hace que
+    // 9.0 pueda resolver el agente; sin phone_number_id el router corta y el
+    // bot no responde nunca. Un escenario puede sobreescribirlo poniendo su
+    // propio source_metadata.phone_number_id (el spread de sourceMetadata va
+    // despues de este default a proposito).
+    phone_number_id: "qa-phone-agent-detailing-01",
+    provider: "meta_whatsapp_cloud_api",
     ...sourceMetadata,
     test_mode: true,
     qa_run_id: $json.run_id,
