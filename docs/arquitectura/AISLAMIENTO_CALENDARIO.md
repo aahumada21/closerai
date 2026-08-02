@@ -104,10 +104,18 @@ nota de `GOOGLE_CALENDAR_OAUTH_2026-06-22.md` que decía que no tenía fila en
 
 ## Consecuencia a tener en cuenta
 
-Los 10 agentes sin calendario propio (todos menos Ahumada) **ya no pueden agendar**.
-Es el comportamiento correcto, pero es un cambio visible: antes "funcionaba"
-escribiendo en el calendario equivocado. Para que `Salon Bella (Test)` y
-`Detailing 01-test` vuelvan a agendar hay que darles un `calendar_id` propio:
+Los agentes sin calendario propio **ya no pueden agendar**. Es el comportamiento
+correcto, pero es un cambio visible: antes "funcionaba" escribiendo en el calendario
+equivocado.
+
+> **Actualizado 2026-08-02 12:41**: `Detailing 01-test` ya tiene calendario propio
+> (`d2f5e77c…`, versión 8 de su config, distinto al de Ahumada), así que **sí puede
+> agendar** — verificado ejecutando el código desplegado de `6.2`/`6.3`/`6.4` con ese
+> valor y con el escenario de QA `569900055` (5/5 PASS). Quedan **9** agentes sin
+> calendario, todos de prueba o inactivos.
+
+Para que un agente sin calendario vuelva a agendar hay que darle un `calendar_id`
+propio:
 
 ```sql
 -- reemplazar por un calendario real dedicado a ese agente

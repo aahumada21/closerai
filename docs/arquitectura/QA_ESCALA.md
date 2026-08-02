@@ -153,11 +153,16 @@ escenario puede apuntar a otro agente definiendo su propio
 `source_metadata.phone_number_id`: el default va antes del spread, así que lo del
 escenario gana.
 
-> ⚠️ `Detailing 01-test` **no tiene `calendar_id` ni OAuth**, así que tras el fix de
-> [`AISLAMIENTO_CALENDARIO.md`](AISLAMIENTO_CALENDARIO.md) los escenarios que agenden
-> van a fallar por diseño (`calendar_not_configured`). Los de cotización, FAQ,
-> objeción y handoff funcionan. Para habilitar booking en QA hay que darle un
-> `calendar_id` propio a ese agente.
+> **Los escenarios de booking también funcionan.** Durante esta misma sesión (hoy
+> 12:41) `Detailing 01-test` recibió un `calendar_id` **propio** —
+> `d2f5e77c…@group.calendar.google.com`, distinto al de Ahumada— en la versión 8 de
+> su `agent_business_config`. Verificado ejecutando el código desplegado de
+> `6.2`/`6.3`/`6.4` con ese valor: los tres resuelven a *su* calendario y ninguno
+> corta con `calendar_not_configured`. Y comprobado end-to-end con el escenario
+> `569900055` (5 pasos, incluye "Agendar"): **5/5 PASS**.
+>
+> Los otros 9 agentes siguen sin calendario y sí fallarían por diseño si se les
+> apuntaran escenarios de booking.
 
 ### Resultado verificado
 
