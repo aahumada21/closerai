@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-04T17:03:42.402Z",
+  "updatedAt": "2026-07-24T18:25:00.021Z",
   "createdAt": "2026-07-24T17:58:10.578Z",
   "id": "j4DjI0eQ0eOYpAnJ",
   "name": "6.29 release_expired_payment_holds",
@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT a.id AS appointment_id, a.event_id, a.conversation_id AS lead_id,\n       a.start_at, a.end_at, l.phone, l.channel,\n       abc.config->>'calendar_id' AS calendar_id\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nJOIN public.agent_business_config abc\n  ON abc.agent_id = ls.agent_id AND abc.is_active = true\nWHERE a.cancelled_at IS NULL\n  AND a.start_at > NOW()\n  AND a.created_at < NOW() - INTERVAL '30 minutes'\n  -- sin calendario propio no se toca nada: antes se borraba de \"primary\",\n  -- que es el calendario de otro tenant\n  AND COALESCE(abc.config->>'calendar_id', '') <> ''\n  AND (\n    -- (a) diseno original: el hold se creo como pending_payment\n    a.status = 'pending_payment'\n    -- (b) como pasa en la realidad: la cita queda confirmed y el vencimiento\n    --     lo marca 6.30 en lead_state\n    OR (\n      a.status = 'confirmed'\n      AND ls.stage = 'booked_pending'\n      AND ls.payment_status = 'expired'\n    )\n  );",
+        "query": "SELECT a.id AS appointment_id, a.event_id, a.conversation_id AS lead_id,\n       a.start_at, a.end_at, l.phone, l.channel\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nWHERE a.status = 'pending_payment'\n  AND a.created_at < NOW() - INTERVAL '30 minutes';",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -53,8 +53,9 @@
         "operation": "delete",
         "calendar": {
           "__rl": true,
-          "value": "={{ $json.calendar_id }}",
-          "mode": "id"
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "primary"
         },
         "eventId": "={{ $json.event_id }}",
         "options": {}
@@ -177,7 +178,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT a.id AS appointment_id, a.conversation_id AS lead_id, l.phone, l.channel, ls.flow_payment_url\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nWHERE a.cancelled_at IS NULL\n  AND a.payment_hold_reminder_sent_at IS NULL\n  AND a.created_at < NOW() - INTERVAL '15 minutes'\n  AND a.created_at >= NOW() - INTERVAL '25 minutes'\n  AND (\n    a.status = 'pending_payment'\n    -- mismo criterio dual que find_expired_holds, pero el pago sigue pending\n    OR (\n      a.status = 'confirmed'\n      AND ls.stage = 'booked_pending'\n      AND ls.payment_status = 'pending'\n    )\n  );",
+        "query": "SELECT a.id AS appointment_id, a.conversation_id AS lead_id, l.phone, l.channel, ls.flow_payment_url\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nWHERE a.status = 'pending_payment'\n  AND a.payment_hold_reminder_sent_at IS NULL\n  AND a.created_at < NOW() - INTERVAL '15 minutes'\n  AND a.created_at >= NOW() - INTERVAL '25 minutes';",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -410,9 +411,9 @@
   },
   "meta": null,
   "pinData": null,
-  "versionId": "8ea7b72d-97c1-4c78-be15-772796d42e88",
-  "activeVersionId": "8ea7b72d-97c1-4c78-be15-772796d42e88",
-  "versionCounter": 17,
+  "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
+  "activeVersionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
+  "versionCounter": 11,
   "triggerCount": 1,
   "shared": [
     {
@@ -435,9 +436,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-08-04T17:03:42.404Z",
-    "createdAt": "2026-08-04T17:03:42.404Z",
-    "versionId": "8ea7b72d-97c1-4c78-be15-772796d42e88",
+    "updatedAt": "2026-07-24T18:11:09.322Z",
+    "createdAt": "2026-07-24T18:11:09.322Z",
+    "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
     "workflowId": "j4DjI0eQ0eOYpAnJ",
     "nodes": [
       {
@@ -463,7 +464,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT a.id AS appointment_id, a.event_id, a.conversation_id AS lead_id,\n       a.start_at, a.end_at, l.phone, l.channel,\n       abc.config->>'calendar_id' AS calendar_id\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nJOIN public.agent_business_config abc\n  ON abc.agent_id = ls.agent_id AND abc.is_active = true\nWHERE a.cancelled_at IS NULL\n  AND a.start_at > NOW()\n  AND a.created_at < NOW() - INTERVAL '30 minutes'\n  -- sin calendario propio no se toca nada: antes se borraba de \"primary\",\n  -- que es el calendario de otro tenant\n  AND COALESCE(abc.config->>'calendar_id', '') <> ''\n  AND (\n    -- (a) diseno original: el hold se creo como pending_payment\n    a.status = 'pending_payment'\n    -- (b) como pasa en la realidad: la cita queda confirmed y el vencimiento\n    --     lo marca 6.30 en lead_state\n    OR (\n      a.status = 'confirmed'\n      AND ls.stage = 'booked_pending'\n      AND ls.payment_status = 'expired'\n    )\n  );",
+          "query": "SELECT a.id AS appointment_id, a.event_id, a.conversation_id AS lead_id,\n       a.start_at, a.end_at, l.phone, l.channel\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nWHERE a.status = 'pending_payment'\n  AND a.created_at < NOW() - INTERVAL '30 minutes';",
           "options": {}
         },
         "type": "n8n-nodes-base.postgres",
@@ -486,8 +487,9 @@
           "operation": "delete",
           "calendar": {
             "__rl": true,
-            "value": "={{ $json.calendar_id }}",
-            "mode": "id"
+            "value": "primary",
+            "mode": "list",
+            "cachedResultName": "primary"
           },
           "eventId": "={{ $json.event_id }}",
           "options": {}
@@ -610,7 +612,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT a.id AS appointment_id, a.conversation_id AS lead_id, l.phone, l.channel, ls.flow_payment_url\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nWHERE a.cancelled_at IS NULL\n  AND a.payment_hold_reminder_sent_at IS NULL\n  AND a.created_at < NOW() - INTERVAL '15 minutes'\n  AND a.created_at >= NOW() - INTERVAL '25 minutes'\n  AND (\n    a.status = 'pending_payment'\n    -- mismo criterio dual que find_expired_holds, pero el pago sigue pending\n    OR (\n      a.status = 'confirmed'\n      AND ls.stage = 'booked_pending'\n      AND ls.payment_status = 'pending'\n    )\n  );",
+          "query": "SELECT a.id AS appointment_id, a.conversation_id AS lead_id, l.phone, l.channel, ls.flow_payment_url\nFROM public.appointments a\nJOIN public.leads l ON l.id = a.conversation_id\nJOIN public.lead_state ls ON ls.lead_id = a.conversation_id\nWHERE a.status = 'pending_payment'\n  AND a.payment_hold_reminder_sent_at IS NULL\n  AND a.created_at < NOW() - INTERVAL '15 minutes'\n  AND a.created_at >= NOW() - INTERVAL '25 minutes';",
           "options": {}
         },
         "type": "n8n-nodes-base.postgres",
@@ -838,18 +840,34 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-04T17:03:42.926Z",
-        "id": 2289,
+        "createdAt": "2026-07-24T18:11:09.577Z",
+        "id": 2098,
         "workflowId": "j4DjI0eQ0eOYpAnJ",
-        "versionId": "8ea7b72d-97c1-4c78-be15-772796d42e88",
+        "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
         "event": "activated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       },
       {
-        "createdAt": "2026-08-04T17:03:42.830Z",
-        "id": 2288,
+        "createdAt": "2026-07-24T18:25:00.194Z",
+        "id": 2101,
         "workflowId": "j4DjI0eQ0eOYpAnJ",
-        "versionId": "8ea7b72d-97c1-4c78-be15-772796d42e88",
+        "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
+        "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-24T18:11:09.461Z",
+        "id": 2097,
+        "workflowId": "j4DjI0eQ0eOYpAnJ",
+        "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
+        "event": "deactivated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-07-24T18:25:00.121Z",
+        "id": 2100,
+        "workflowId": "j4DjI0eQ0eOYpAnJ",
+        "versionId": "c6c5af24-ecf2-498f-bafd-328498d79b18",
         "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }

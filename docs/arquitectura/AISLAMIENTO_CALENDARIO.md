@@ -127,15 +127,23 @@ WHERE agent_id = '<agent_id>' AND is_active = true;
 (Conviene hacerlo con el versionado habitual —desactivar la fila y crear la
 siguiente— en vez de mutar en el lugar, igual que hace `onboarding_manage_service`.)
 
-## Pendiente: remediar los 31 eventos ya creados
+## Remediado 2026-08-04: los 31 eventos ya creados
 
-El fix detiene la contaminación nueva, **no limpia la existente**. Siguen en el
-calendario de Ahumada 31 eventos activos que pertenecen a otros agentes. Decidir:
+Se borraron los 31 del calendario de Ahumada (31 eliminados en Google, 0 fallos) y
+sus filas quedaron marcadas como canceladas en `appointments` con
+`cancel_reason = 'limpieza aislamiento multi-tenant 2026-08-02'` — no se borró
+ninguna fila, queda el rastro de que existieron.
 
-- borrarlos del calendario de Ahumada (¿avisando a esos clientes?),
-- o moverlos al calendario correcto una vez que esos agentes tengan el suyo.
+Antes de borrar se revisó uno por uno: **los 31 eran datos sintéticos de prueba**
+(`Cliente QA`, `Cliente Manual QA`, `Test Confirm Fix`, `E2E ...` con teléfonos
+malformados tipo `56d…`/`56s…`). El único con teléfono real era "Agustin", con 2
+eventos ya pasados. Ningún cliente real iba a presentarse a una cita que
+desaparecía. El script incluía además un guard que abortaba si aparecía algún
+teléfono fuera de los patrones de prueba.
 
-Las citas afectadas se identifican así:
+Verificado después: **0 citas activas de otros agentes** en el calendario de Ahumada.
+
+## Cómo detectar si vuelve a pasar
 
 ```sql
 SELECT ag.name AS agente, ap.event_id, ap.start_at, ap.status
@@ -147,8 +155,27 @@ WHERE ag.name <> 'Ahumada Detailing Closer'
 ORDER BY ap.start_at;
 ```
 
-No se ejecutó ninguna limpieza: borrar eventos de un calendario de producción es
-irreversible y es una decisión del negocio.
+Debe devolver 0 filas mientras cada agente tenga su propio calendario. Si aparece
+algo, revisar primero qué agente lo creó y con qué `calendar_id`.
+
+## Hallazgo lateral: Ahumada tiene dos calendarios
+
+Al remediar esto apareció una discrepancia que **no se tocó** y conviene decidir:
+
+| Origen | Calendar ID | Nombre real | Último evento |
+|---|---|---|---|
+| `agent_business_config.config.calendar_id` | `0806113eec…` | **"Ahumada Detailing"** | 21/07 |
+| `google_calendar_connections.calendar_id` | `a855a9b4…` | "AI Closer - Agenda" | 05/07 |
+
+Los dos tienen cientos de eventos. El de la conexión OAuth quedó congelado el 05/07
+—coincide con que `google_calendar_connections.updated_at` no se actualiza desde el
+04/07— y desde entonces todo cae en el de la config, que es el que lleva el nombre
+del negocio.
+
+Importa porque el guard de `merge_calendar_auth_result` da prioridad al de la config
+por sobre el de la conexión OAuth. Hoy eso coincide con lo que venía pasando en la
+práctica y apunta al calendario correcto, pero si algún día se re-conecta el OAuth,
+conviene confirmar cuál de los dos debe mandar en vez de descubrirlo por accidente.
 
 ## Nota sobre los workflows inactivos
 

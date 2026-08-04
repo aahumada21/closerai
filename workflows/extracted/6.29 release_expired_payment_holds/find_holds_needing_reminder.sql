@@ -10,7 +10,16 @@ SELECT a.id AS appointment_id, a.conversation_id AS lead_id, l.phone, l.channel,
 FROM public.appointments a
 JOIN public.leads l ON l.id = a.conversation_id
 JOIN public.lead_state ls ON ls.lead_id = a.conversation_id
-WHERE a.status = 'pending_payment'
+WHERE a.cancelled_at IS NULL
   AND a.payment_hold_reminder_sent_at IS NULL
   AND a.created_at < NOW() - INTERVAL '15 minutes'
-  AND a.created_at >= NOW() - INTERVAL '25 minutes';
+  AND a.created_at >= NOW() - INTERVAL '25 minutes'
+  AND (
+    a.status = 'pending_payment'
+    -- mismo criterio dual que find_expired_holds, pero el pago sigue pending
+    OR (
+      a.status = 'confirmed'
+      AND ls.stage = 'booked_pending'
+      AND ls.payment_status = 'pending'
+    )
+  );
