@@ -1,3 +1,16 @@
+## ⚠️ Este repositorio es PÚBLICO
+
+`github.com/aahumada21/closerai` es público. Ningún secreto puede vivir en un archivo
+versionado: van en el entorno del servidor (`docker-compose.yml` de n8n) y en el del
+panel. En la documentación va el **nombre** de la variable, nunca el valor.
+
+El 2026-08-05 se encontraron 4 credenciales reales publicadas (tokens de
+Meta/WhatsApp, el de onboarding, y dos de Google Calendar) — ver
+`docs/SECRETOS_EXPUESTOS_2026-08-05.md` para el estado de la rotación.
+
+`node scripts/scan_secrets.js` escanea los archivos trackeados buscando credenciales.
+Correrlo antes de pushear si se tocaron docs o exports de workflows.
+
 ## Reglas del repo (leer antes de tocar workflows)
 
 - `RULE.md` (raíz) tiene las reglas no negociables de este repo: DB como fuente de

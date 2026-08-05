@@ -34,7 +34,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+        "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'TOKEN_PURGADO_REPO_PUBLICO_2026-08-05';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
       }
     },
     {
@@ -512,7 +512,7 @@
           300
         ],
         "parameters": {
-          "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+          "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'TOKEN_PURGADO_REPO_PUBLICO_2026-08-05';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
         }
       },
       {

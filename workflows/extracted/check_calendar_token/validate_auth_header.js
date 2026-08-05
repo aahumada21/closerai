@@ -8,7 +8,9 @@
 // =====================================
 
 const token = $input.first().json.headers?.['x-check-token'] || '';
-const expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';
+// Sin hardcodear: el valor vive en el entorno del servidor. Si la variable no
+// esta seteada, expected queda vacio y no matchea nada -> falla cerrado.
+const expected = $env.CHECK_CALENDAR_TOKEN || '';
 if (token !== expected) throw new Error('unauthorized');
 const body = $input.first().json.body || {};
 return [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];

@@ -186,7 +186,7 @@ POST https://n8n.aahumada.com/webhook/disconnect-google-calendar
 Headers:
 ```
 Content-Type: application/json
-X-Disconnect-Token: d6c5fad0125e05c1f422308715e35b2a972f1d69f38fef4910f65c3546a0d435
+X-Disconnect-Token: <secreto, NO ponerlo en este archivo>
 ```
 
 Body:
@@ -228,8 +228,13 @@ de desplegar.
 Token configurado en el entorno de n8n (mismo lugar que los demas, en el
 `docker-compose.yml` del servidor):
 ```
-DISCONNECT_GOOGLE_CALENDAR_TOKEN=d6c5fad0125e05c1f422308715e35b2a972f1d69f38fef4910f65c3546a0d435
+DISCONNECT_GOOGLE_CALENDAR_TOKEN=<secreto, NO ponerlo en este archivo>
 ```
+
+> ⚠️ **Este repositorio es público.** El valor real de este token estuvo escrito acá
+> hasta el 2026-08-05, así que hay que darlo por comprometido y **rotarlo**. Generar
+> uno nuevo con `openssl rand -hex 32` y actualizarlo en el `docker-compose.yml` del
+> servidor y en el backend del panel. El valor no vuelve a este archivo.
 
 Igual que con el resto de estos tokens: la llamada a este webhook debe
 hacerse desde el servidor del panel (API route / server action), nunca desde

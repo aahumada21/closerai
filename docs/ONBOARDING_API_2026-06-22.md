@@ -116,8 +116,14 @@ que setearlo a mano en el entorno de la instancia de n8n, igual que se hizo para
 `WEBCHAT_WIDGET_TOKEN`:
 
 ```
-ONBOARDING_API_TOKEN=0816a369f8a2a8fccd915f65737f15d176b8a7a0a7d88d6963521d9106081e6b
+ONBOARDING_API_TOKEN=<secreto, NO ponerlo en este archivo>
 ```
+
+> ⚠️ **Este repositorio es público.** El valor real de este token estuvo escrito acá
+> hasta el 2026-08-05, o sea que hay que darlo por comprometido y **rotarlo**
+> (generar uno nuevo, actualizarlo en el entorno de n8n y en el backend del panel).
+> Generar uno con `openssl rand -hex 32`. El valor vive solo en el entorno del
+> servidor y en el del panel — nunca en el repo.
 
 Hasta que esa variable no este seteada en el servidor de n8n, el endpoint rechaza
 **todas** las llamadas con `{"ok": false, "error": "missing_onboarding_token_config"}`

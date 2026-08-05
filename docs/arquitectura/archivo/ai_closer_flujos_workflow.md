@@ -1,5 +1,14 @@
 # AI Closer en n8n — Definición de flujos del workflow
 
+> ⚠️ **Documento archivado, y con secretos comprometidos.** Contenía **5 access
+> tokens de Meta/WhatsApp en texto plano**, en un repositorio **público**. Se
+> reemplazaron por placeholders el 2026-08-05, pero estuvieron expuestos, así que
+> **hay que revocarlos en Meta Business Suite** (quitarlos del historial de git no
+> alcanza: ya son públicos). Un token de esos permite enviar mensajes de WhatsApp
+> en nombre del negocio.
+>
+> Nunca poner credenciales en archivos del repo: van en el entorno del servidor.
+
 ## Objetivo general
 
 Este documento define qué debe hacer cada flujo principal dentro de la arquitectura del AI Closer en n8n, siguiendo una estructura modular, mantenible y escalable.
@@ -571,11 +580,11 @@ Después de este archivo, el siguiente paso ideal es crear:
 5. `llm_output_schema.md`
 6. `n8n_node_map.md`
 
-TOKEN PERMAMNTENTE : EAASP3nLrIZAEBRAUI5yjB51Heq3ci7qHVmzCdgmT18bbITAXufR98A0iSJQ699SJMxWVuz8xx6X7uF05cGCMBeBGpd2oyl8O1br1tptJ4DqgmARMnYGua4Rt90ruz6FCf02e9ClYqfF7sfyATfqxo7DHFOw802abZCmdRQwcStoOT2Wc2NcE8t6zHFegZDZD
-: EAASP3nLrIZAEBRF8RzNRRRWGJpmKygrOTcZBb2bZCTomMonZBvLKTZBtqcnKSHBqRyzo73dpfVZAyUo7gu9RT56E3vJ9UkeTSC03v0btwIcUZAwAjuvPFIDzksemZBgQIFA7OBxf4hdSXha0kPHP2ZAwZCeUfDjJ2CagWz6ZBoXZApU1bPJzb7JRT6Xd12Rm5oWZCfQZDZD
+TOKEN PERMAMNTENTE : <TOKEN_META_REVOCADO_VER_NOTA_ARRIBA>
+: <TOKEN_META_REVOCADO_VER_NOTA_ARRIBA>
 
 curl -X POST "https://graph.facebook.com/v23.0/1024332077436840/messages" \
-  -H "Authorization: Bearer EAASP3nLrIZAEBRKDNah10diLaZBGRln6XfSaNMB5RZCN3FXPvzpwGJWT14hDH3YR9hfvcDg59G4cZBBLeZAZBPYi5HXjvoM5IaoMIwoYphnlQ0dzJpnlZAGBHG3ST16SVd6dGtsZBTfy3LgRkMQBDiJMieL0MJHgKg1No5V0QyTNULNkqDOZCC3iIAs7uEz38wwZDZD" \
+  -H "Authorization: Bearer <TOKEN_META_REVOCADO_VER_NOTA_ARRIBA>" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",
@@ -588,12 +597,12 @@ curl -X POST "https://graph.facebook.com/v23.0/1024332077436840/messages" \
 
 
     curl -X GET "https://graph.facebook.com/v23.0/1024332077436840" \
-    -H "Authorization: Bearer EAASP3nLrIZAEBRKDNah10diLaZBGRln6XfSaNMB5RZCN3FXPvzpwGJWT14hDH3YR9hfvcDg59G4cZBBLeZAZBPYi5HXjvoM5IaoMIwoYphnlQ0dzJpnlZAGBHG3ST16SVd6dGtsZBTfy3LgRkMQBDiJMieL0MJHgKg1No5V0QyTNULNkqDOZCC3iIAs7uEz38wwZDZD"
+    -H "Authorization: Bearer <TOKEN_META_REVOCADO_VER_NOTA_ARRIBA>"
 
 
   curl -i -X POST `
   https://graph.facebook.com/v25.0/1024332077436840/messages ` 
-  -H 'Authorization: Bearer EAASP3nLrIZAEBRKDNah10diLaZBGRln6XfSaNMB5RZCN3FXPvzpwGJWT14hDH3YR9hfvcDg59G4cZBBLeZAZBPYi5HXjvoM5IaoMIwoYphnlQ0dzJpnlZAGBHG3ST16SVd6dGtsZBTfy3LgRkMQBDiJMieL0MJHgKg1No5V0QyTNULNkqDOZCC3iIAs7uEz38wwZDZD' `
+  -H 'Authorization: Bearer <TOKEN_META_REVOCADO_VER_NOTA_ARRIBA>' `
   -H 'Content-Type: application/json' `
   -d '{ \"messaging_product\": \"whatsapp\", \"to\": \"\", \"type\": \"template\", \"template\": { \"name\": \"hello_world\", \"language\": { \"code\": \"en_US\" } } }'
 

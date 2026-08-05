@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-05T15:04:31.746Z",
+  "updatedAt": "2026-08-05T16:19:37.026Z",
   "createdAt": "2026-07-05T15:04:31.746Z",
   "id": "lqVjuXxseowt8UKo",
   "name": "check_calendar_token",
@@ -34,7 +34,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+        "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\n// Sin hardcodear: el valor vive en el entorno del servidor. Si la variable no\n// esta seteada, expected queda vacio y no matchea nada -> falla cerrado.\nconst expected = $env.CHECK_CALENDAR_TOKEN || '';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
       }
     },
     {
@@ -455,14 +455,14 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
-  "activeVersionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
-  "versionCounter": 4,
+  "versionId": "78796f07-f2eb-4c25-b1b8-dfe624246a39",
+  "activeVersionId": "78796f07-f2eb-4c25-b1b8-dfe624246a39",
+  "versionCounter": 12,
   "triggerCount": 1,
   "shared": [
     {
-      "updatedAt": "2026-07-05T15:04:31.77Z",
-      "createdAt": "2026-07-05T15:04:31.77Z",
+      "updatedAt": "2026-07-05T15:04:31.770Z",
+      "createdAt": "2026-07-05T15:04:31.770Z",
       "role": "workflow:owner",
       "workflowId": "lqVjuXxseowt8UKo",
       "projectId": "J8CtSM5GdhbsP4gj",
@@ -480,9 +480,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-07-05T15:04:31.784Z",
-    "createdAt": "2026-07-05T15:04:31.784Z",
-    "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+    "updatedAt": "2026-08-05T16:19:37.032Z",
+    "createdAt": "2026-08-05T16:19:37.032Z",
+    "versionId": "78796f07-f2eb-4c25-b1b8-dfe624246a39",
     "workflowId": "lqVjuXxseowt8UKo",
     "nodes": [
       {
@@ -512,7 +512,7 @@
           300
         ],
         "parameters": {
-          "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\nconst expected = 'e56650a74a76c1bf53626385b93acfa1a1af6f924904dae65848716bccb94f5e';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
+          "jsCode": "const token = $input.first().json.headers?.['x-check-token'] || '';\n// Sin hardcodear: el valor vive en el entorno del servidor. Si la variable no\n// esta seteada, expected queda vacio y no matchea nada -> falla cerrado.\nconst expected = $env.CHECK_CALENDAR_TOKEN || '';\nif (token !== expected) throw new Error('unauthorized');\nconst body = $input.first().json.body || {};\nreturn [{ json: { agent_id: body.agent_id, organization_id: body.organization_id } }];"
         }
       },
       {
@@ -933,11 +933,19 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-07-05T15:04:34.167Z",
-        "id": 1744,
+        "createdAt": "2026-08-05T16:19:37.233Z",
+        "id": 2291,
         "workflowId": "lqVjuXxseowt8UKo",
-        "versionId": "6e8d050c-0001-411e-b875-99262ea24b7b",
+        "versionId": "78796f07-f2eb-4c25-b1b8-dfe624246a39",
         "event": "activated",
+        "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
+      },
+      {
+        "createdAt": "2026-08-05T16:19:37.181Z",
+        "id": 2290,
+        "workflowId": "lqVjuXxseowt8UKo",
+        "versionId": "78796f07-f2eb-4c25-b1b8-dfe624246a39",
+        "event": "deactivated",
         "userId": "5e4a8938-15d2-4152-a7fd-d60e37aeddd6"
       }
     ]
