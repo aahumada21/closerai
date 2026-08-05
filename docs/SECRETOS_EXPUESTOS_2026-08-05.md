@@ -1,6 +1,7 @@
 # Secretos expuestos en el repositorio público — qué rotar
 
-Fecha: 2026-08-05 · Estado: **archivos limpiados; rotación pendiente (requiere acción manual)**
+Fecha: 2026-08-05 · Estado: **archivos limpiados y 3 de 4 tokens rotados. Falta:
+revocar los de Meta (requiere Meta Business Suite) y cargar los nuevos en el panel.**
 
 ## Qué pasó
 
@@ -44,41 +45,65 @@ Por qué esa gravedad:
   no rompe nada en uso.
 - También se purgó del backup versionado que lo contenía.
 
-## Lo que falta — rotación (no lo puedo hacer yo)
+## Rotación ejecutada (2026-08-05 17:53 UTC)
 
-> **Quitar el secreto del archivo no lo des-publica.** Cualquiera pudo haberlo copiado
-> mientras estuvo online, y sigue en el historial de git. **El único arreglo real es
-> rotar.**
+Se rotaron **3 de los 4** en el entorno de n8n (`/root/n8n-docker/docker-compose.yml`,
+con backup previo `docker-compose.yml.bak-pre-rotacion-secretos-*`) y se recreó el
+contenedor:
 
-### 1. Tokens de Meta/WhatsApp — hacer primero
+| Token | Estado |
+|---|---|
+| `ONBOARDING_API_TOKEN` | ✅ rotado |
+| `DISCONNECT_GOOGLE_CALENDAR_TOKEN` | ✅ rotado |
+| `CHECK_CALENDAR_TOKEN` | ✅ creado (no existía) |
+| `META_ACCESS_TOKEN` | ⛔ **no se puede rotar desde acá** — ver abajo |
 
-En Meta Business Suite → System Users → **revocar** los tokens comprometidos y generar
-uno nuevo. Actualizar `META_ACCESS_TOKEN` en el entorno de n8n (`docker-compose.yml`
-del servidor) y reiniciar.
+**Verificado después del reinicio**, no asumido:
 
-Mientras no se revoquen, un tercero puede mandar WhatsApps como el negocio.
+- el token viejo (el que estuvo público) ahora devuelve `invalid_onboarding_token`;
+- sin token, lo mismo;
+- el token nuevo **sí autentica** — pasa el chequeo y falla recién en la validación
+  de negocio (`agent_not_found` con un `agent_id` inventado), que es exactamente lo
+  esperado;
+- el bot sigue vivo: escenario de QA `569900050` corrido después del reinicio, 4/4
+  pasos OK.
 
-### 2. `ONBOARDING_API_TOKEN`
+La rotación no interrumpió nada en uso: las únicas ejecuciones que tenían esos
+webhooks eran pruebas propias, el panel todavía no los consume en producción.
 
-```bash
-openssl rand -hex 32
-```
+### Buena noticia sobre Meta
 
-Actualizar en el entorno de n8n **y** en el backend del panel (las dos puntas tienen
-que coincidir o el onboarding deja de funcionar). Los 3 webhooks de onboarding fallan
-cerrado con `missing_onboarding_token_config` si la variable falta, así que no hay
-riesgo de quedar abierto por accidente.
+El `META_ACCESS_TOKEN` **vivo en producción no es ninguno de los 3 filtrados**
+(comparado por hash SHA-256, sin exponer valores: el vivo da `c3213662…`, los
+filtrados `15890769…`, `c00d6ff8…`, `d62c36da…`). Comparten el prefijo
+`EAASP3nLrIZ`, o sea que son de la misma app de Meta, pero son tokens más viejos.
 
-### 3. `CHECK_CALENDAR_TOKEN`
+Eso baja la urgencia, **pero no la elimina**: si esos tokens siguen siendo válidos
+(son de tipo system user, que no expiran solos), cualquiera puede usarlos. Hay que
+revocarlos igual.
 
-Generar uno nuevo igual y setear `CHECK_CALENDAR_TOKEN` en el entorno de n8n. Hasta
-entonces ese endpoint rechaza todo — que es lo correcto mientras el viejo siga siendo
-público. Como no lo usa nadie, también es válido simplemente **desactivar el
-workflow**.
+### Pendiente para el panel
 
-### 4. `DISCONNECT_GOOGLE_CALENDAR_TOKEN`
+Los valores nuevos de `ONBOARDING_API_TOKEN` y `DISCONNECT_GOOGLE_CALENDAR_TOKEN`
+quedaron en `C:\Dev\shared-claude\TOKENS_ROTADOS_2026-08-05.md` para cargarlos en el
+backend del panel. Mientras no se carguen, el panel no puede llamar a esos webhooks
+(hoy no los llama, así que no hay nada roto).
 
-Generar uno nuevo y actualizarlo en el entorno de n8n y en el panel.
+## Lo único que falta y NO puedo hacer yo
+
+### Revocar los tokens de Meta/WhatsApp
+
+Requiere Meta Business Suite (login con la cuenta de Facebook del negocio), a lo que
+no tengo acceso.
+
+**Meta Business Suite → Configuración del negocio → Usuarios del sistema →** revocar
+los tokens comprometidos. Si alguno de los 3 filtrados sigue activo, cualquiera que
+los haya copiado puede enviar WhatsApps en nombre del negocio.
+
+El token que usa producción hoy es distinto (ver arriba), así que revocar los viejos
+**no interrumpe el bot**. Si igual se quiere rotar el de producción, generar uno nuevo
+ahí mismo y reemplazar `META_ACCESS_TOKEN` en
+`/root/n8n-docker/docker-compose.yml`, después `docker compose up -d`.
 
 ## Sobre el historial de git
 
